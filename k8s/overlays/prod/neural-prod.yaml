@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ultron-neural
+  namespace: ultron
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: neural-engine
+          resources:
+            requests:
+              cpu: "4000m"
+              memory: "16Gi"
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "8000m"
+              memory: "32Gi"
+              nvidia.com/gpu: 1
+      nodeSelector:
+        gpu: "true"
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"

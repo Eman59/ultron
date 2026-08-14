@@ -1,0 +1,21 @@
+[package]
+name = "ultron-security-daemon"
+version = "0.1.0"
+edition = "2021"
+description = "Self-defense and integrity protection for the Ultron AI system"
+authors = ["Ultron AI Research Team"]
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4"] }
+ring = "0.17"          # Cryptography
+aes-gcm = "0.10"       # AES-GCM encryption
+sha2 = "0.10"          # SHA-256/512
+rand = "0.8"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+thiserror = "1.0"
+dashmap = "5.5"

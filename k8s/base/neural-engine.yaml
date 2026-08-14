@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ultron-neural
+  namespace: ultron
+  labels:
+    app: ultron
+    component: neural-engine
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ultron
+      component: neural-engine
+  template:
+    metadata:
+      labels:
+        app: ultron
+        component: neural-engine
+    spec:
+      containers:
+        - name: neural-engine
+          image: ultron/neural-engine:latest
+          ports:
+            - containerPort: 50052
+              name: grpc
+          env:
+            - name: ULTRON_GRPC_PORT
+              value: "50052"
+            - name: ULTRON_REDIS_ADDR
+              value: "ultron-redis:6379"
+            - name: ULTRON_CORE_AGENT_ADDR
+              value: "ultron-core-agent:50051"
+            - name: RUST_LOG
+              value: "info"
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "4000m"
+              memory: "8Gi"
+              # For GPU nodes, uncomment:
+              # nvidia.com/gpu: 1
+          livenessProbe:
+            tcpSocket:
+              port: 50052
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      # For GPU scheduling:
+      # nodeSelector:
+      #   gpu: "true"
+      # tolerations:
+      #   - key: "nvidia.com/gpu"
+      #     operator: "Exists"
+      #     effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ultron-neural
+  namespace: ultron
+spec:
+  selector:
+    app: ultron
+    component: neural-engine
+  ports:
+    - name: grpc
+      port: 50052
+      targetPort: 50052
+  type: ClusterIP

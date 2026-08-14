@@ -1,0 +1,21 @@
+# Ultron Security Daemon — Rust
+FROM rust:1.75-alpine AS builder
+
+WORKDIR /app
+RUN apk add --no-cache musl-dev
+
+COPY rust/Cargo.toml ./Cargo.toml
+COPY rust/dynamic_neural/ ./dynamic_neural/
+COPY rust/real_time_data/ ./real_time_data/
+COPY rust/security_daemon/ ./security_daemon/
+COPY rust/neuromorphic/ ./neuromorphic/
+
+RUN cargo build --release --package ultron-security-daemon
+
+# Runtime
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /app/target/release/ultron-security-daemon /usr/local/bin/ultron-security
+
+EXPOSE 50055
+ENTRYPOINT ["/usr/local/bin/ultron-security"]

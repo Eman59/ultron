@@ -1,0 +1,29 @@
+name = "emotional_modeling"
+uuid = "12345678-1234-1234-1234-123456789012"
+authors = ["AI Research Team"]
+version = "0.1.0"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+MLJ = "add582a8-e3ab-11e8-2d5e-e98b27df1bc7"
+PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+WebSockets = "104b5d7c-a370-577a-8038-80a2059c5097"
+
+[compat]
+julia = "1.9"
+Flux = "0.13"
+Zygote = "0.6"
+MLJ = "0.19"
+PyCall = "1.96"
+HTTP = "1.9"
+WebSockets = "1.5"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

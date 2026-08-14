@@ -1,0 +1,36 @@
+# Persistent Volume Claims for stateful services
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ultron-redis-pvc
+  namespace: ultron
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ultron-neo4j-pvc
+  namespace: ultron
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ultron-qdrant-pvc
+  namespace: ultron
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

@@ -1,0 +1,15 @@
+# Ultron Meta-Learning Engine — Python
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY python/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir grpcio grpcio-tools
+
+COPY python/ ./python/
+
+ENV PYTHONPATH=/app
+EXPOSE 50053
+
+CMD ["python", "-m", "python.meta_learning.meta_controller"]

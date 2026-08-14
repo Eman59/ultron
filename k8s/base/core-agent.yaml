@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ultron-core-agent
+  namespace: ultron
+  labels:
+    app: ultron
+    component: core-agent
+spec:
+  replicas: 3  # HA: 3 replicas with leader election
+  selector:
+    matchLabels:
+      app: ultron
+      component: core-agent
+  template:
+    metadata:
+      labels:
+        app: ultron
+        component: core-agent
+    spec:
+      containers:
+        - name: core-agent
+          image: ultron/core-agent:latest
+          ports:
+            - containerPort: 50051
+              name: grpc
+            - containerPort: 8080
+              name: metrics
+          env:
+            - name: ULTRON_REDIS_ADDR
+              value: "ultron-redis:6379"
+            - name: ULTRON_NEO4J_URI
+              value: "bolt://ultron-neo4j:7687"
+            - name: ULTRON_QDRANT_HOST
+              value: "ultron-qdrant"
+            - name: ULTRON_QDRANT_PORT
+              value: "6334"
+            - name: ULTRON_MQTT_BROKER
+              value: "tcp://ultron-mqtt:1883"
+            - name: ULTRON_TICK_RATE_MS
+              value: "50"
+            - name: ULTRON_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 3
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ultron-core-agent
+  namespace: ultron
+spec:
+  selector:
+    app: ultron
+    component: core-agent
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP

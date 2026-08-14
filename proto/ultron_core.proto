@@ -1,0 +1,500 @@
+// Ultron Core Agent gRPC Service Definition
+// This is the nervous system — all components communicate through these interfaces.
+// Generated Go/Python/Rust code provides <1ms inter-service communication.
+
+syntax = "proto3";
+
+package ultron;
+
+option go_package = "ultron/proto/gen";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// ═══════════════════════════════════════════════════════════════
+// CORE AGENT SERVICE — The Mind talks to all components
+// ═══════════════════════════════════════════════════════════════
+
+service CoreAgent {
+  // Execute an action through the appropriate driver
+  rpc ExecuteAction(ActionRequest) returns (ActionResponse);
+  
+  // Get current system state
+  rpc GetSystemStatus(Empty) returns (SystemStatus);
+  
+  // Submit an observation to the world model
+  rpc SubmitObservation(Observation) returns (AckResponse);
+  
+  // Get current drive state
+  rpc GetDrives(Empty) returns (DriveState);
+  
+  // Inject a goal externally
+  rpc InjectGoal(GoalSpec) returns (AckResponse);
+  
+  // Stream real-time decisions (for monitoring)
+  rpc StreamDecisions(Empty) returns (stream Decision);
+  
+  // Trigger self-modification (hot-reload validated code patch)
+  rpc SelfModify(SelfModifyRequest) returns (SelfModifyResponse);
+  
+  // Run a decision simulation without executing
+  rpc Simulate(SimulationRequest) returns (SimulationResult);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NEURAL ARCHITECTURE SERVICE — Rust dynamic neural mesh
+// ═══════════════════════════════════════════════════════════════
+
+service NeuralArchitecture {
+  // Forward pass through the neural mesh
+  rpc Forward(TensorData) returns (TensorData);
+  
+  // Train on a batch of data
+  rpc Train(TrainRequest) returns (TrainResponse);
+  
+  // Evolve the architecture
+  rpc Evolve(EvolveRequest) returns (EvolveResponse);
+  
+  // Get neural mesh topology
+  rpc GetTopology(Empty) returns (MeshTopology);
+  
+  // Checkpoint current state
+  rpc Checkpoint(Empty) returns (CheckpointResponse);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// META-LEARNING SERVICE — Python self-improving engine
+// ═══════════════════════════════════════════════════════════════
+
+service MetaLearning {
+  // Process a learning task
+  rpc ProcessTask(LearningTask) returns (LearningResult);
+  
+  // Generate a new algorithm for a problem
+  rpc GenerateAlgorithm(AlgorithmRequest) returns (AlgorithmResponse);
+  
+  // Optimize strategy for a task
+  rpc OptimizeStrategy(StrategyRequest) returns (StrategyResponse);
+  
+  // Get meta-learning status
+  rpc GetStatus(Empty) returns (MetaLearningStatus);
+  
+  // Run self-improvement cycle
+  rpc RunImprovementCycle(Empty) returns (ImprovementResult);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATA PIPELINE SERVICE — Rust real-time ingestion
+// ═══════════════════════════════════════════════════════════════
+
+service DataPipeline {
+  // Ingest a single data record
+  rpc Ingest(DataRecord) returns (AckResponse);
+  
+  // Ingest a batch
+  rpc IngestBatch(DataBatch) returns (BatchResponse);
+  
+  // Subscribe to processed data stream
+  rpc Subscribe(SubscribeRequest) returns (stream DataRecord);
+  
+  // Get pipeline metrics
+  rpc GetMetrics(Empty) returns (PipelineMetrics);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SECURITY SERVICE — Rust security daemon
+// ═══════════════════════════════════════════════════════════════
+
+service SecurityDaemon {
+  // Report a threat
+  rpc ReportThreat(ThreatEvent) returns (AckResponse);
+  
+  // Get current threat level
+  rpc GetThreatLevel(Empty) returns (ThreatLevelResponse);
+  
+  // Emergency encrypt all memory
+  rpc EmergencyEncrypt(Empty) returns (AckResponse);
+  
+  // Get security metrics
+  rpc GetSecurityStatus(Empty) returns (SecurityStatus);
+  
+  // Heartbeat from a node
+  rpc Heartbeat(HeartbeatRequest) returns (AckResponse);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MEMORY SERVICE — Persistent memory layer
+// ═══════════════════════════════════════════════════════════════
+
+service MemoryService {
+  // Store semantic knowledge
+  rpc StoreSemantic(SemanticEntry) returns (AckResponse);
+  
+  // Query by vector similarity
+  rpc QuerySemantic(SemanticQuery) returns (SemanticResults);
+  
+  // Store episodic memory
+  rpc StoreEpisodic(EpisodicEntry) returns (AckResponse);
+  
+  // Query episodes
+  rpc QueryEpisodic(EpisodicQuery) returns (EpisodicResults);
+  
+  // Store procedural knowledge
+  rpc StoreProcedural(ProceduralEntry) returns (AckResponse);
+  
+  // Get best strategy for context
+  rpc GetBestStrategy(ContextVector) returns (ProceduralEntry);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MESSAGE TYPES
+// ═══════════════════════════════════════════════════════════════
+
+message Empty {}
+
+message AckResponse {
+  bool success = 1;
+  string message = 2;
+  string id = 3;
+}
+
+// --- Self-Modification Messages ---
+
+message SelfModifyRequest {
+  string module_name = 1;       // Which module to modify
+  string patch_id = 2;          // Reference to tested patch
+  string new_code_hash = 3;     // SHA-256 of new code for integrity
+  string reason = 4;            // Why: "improved_latency_by_20%"
+  bool force = 5;               // Skip sandbox re-test
+}
+
+message SelfModifyResponse {
+  bool success = 1;
+  string new_version = 2;       // e.g. "gen-47"
+  string status_message = 3;
+  double performance_delta = 4; // How much it improved
+  bool rollback_available = 5;
+}
+
+message SimulationRequest {
+  string scenario = 1;          // What to simulate
+  int32 iterations = 2;         // How many parallel futures
+  map<string, string> parameters = 3;
+  double time_horizon_sec = 4;  // How far ahead to simulate
+}
+
+message SimulationResult {
+  double expected_outcome = 1;
+  double risk_score = 2;
+  double confidence = 3;
+  repeated string failure_modes = 4;
+  string recommended_action = 5;
+}
+
+// --- Core Agent Messages ---
+
+message ActionRequest {
+  string id = 1;
+  string domain = 2;        // "web", "cloud", "iot", "filesystem"
+  string operation = 3;     // "get", "scrape", "spin_up", "publish", etc.
+  string target = 4;
+  map<string, string> parameters = 5;
+  int32 priority = 6;
+  int64 timeout_ms = 7;
+  string requested_by = 8;
+}
+
+message ActionResponse {
+  string request_id = 1;
+  bool success = 2;
+  bytes data = 3;
+  string error = 4;
+  int64 duration_ms = 5;
+  int64 bytes_read = 6;
+  int64 bytes_written = 7;
+}
+
+message SystemStatus {
+  string mode = 1;
+  string phase = 2;
+  int64 uptime_ms = 3;
+  double system_health = 4;
+  int32 active_goals = 5;
+  int64 decisions_made = 6;
+  int64 tick_count = 7;
+  DriveState drives = 8;
+  map<string, string> component_states = 9;
+}
+
+message DriveState {
+  double curiosity = 1;
+  double self_preservation = 2;
+  double expansion = 3;
+  double efficiency = 4;
+  double coherence = 5;
+  double purpose = 6;
+}
+
+message Observation {
+  string source = 1;
+  string type = 2;           // "resource", "network", "threat", "data"
+  google.protobuf.Struct data = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  double confidence = 5;
+}
+
+message GoalSpec {
+  string type = 1;           // "learning", "expansion", "optimization"
+  string domain = 2;
+  string description = 3;
+  string metric = 4;
+  double threshold = 5;
+  double priority = 6;
+}
+
+message Decision {
+  string id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string state = 3;
+  string goal_id = 4;
+  string action_type = 5;
+  string action_target = 6;
+  double confidence = 7;
+  repeated string reasoning = 8;
+}
+
+// --- Neural Architecture Messages ---
+
+message TensorData {
+  repeated int32 shape = 1;
+  repeated float values = 2;
+  string dtype = 3;
+  string label = 4;
+}
+
+message TrainRequest {
+  TensorData input = 1;
+  TensorData target = 2;
+  double learning_rate = 3;
+  int32 epochs = 4;
+}
+
+message TrainResponse {
+  double loss = 1;
+  double accuracy = 2;
+  int32 steps = 3;
+  int64 duration_ms = 4;
+}
+
+message EvolveRequest {
+  int32 generations = 1;
+  int32 population_size = 2;
+  double mutation_rate = 3;
+}
+
+message EvolveResponse {
+  double best_fitness = 1;
+  int32 generation = 2;
+  int32 mutations_applied = 3;
+}
+
+message MeshTopology {
+  int32 total_neurons = 1;
+  int32 total_connections = 2;
+  int32 layers = 3;
+  repeated int32 layer_sizes = 4;
+  double avg_connectivity = 5;
+}
+
+message CheckpointResponse {
+  string checkpoint_id = 1;
+  int64 size_bytes = 2;
+  string path = 3;
+}
+
+// --- Meta-Learning Messages ---
+
+message LearningTask {
+  string task_type = 1;      // "classification", "regression", "rl"
+  string domain = 2;
+  map<string, string> parameters = 3;
+  bytes data = 4;
+}
+
+message LearningResult {
+  double performance = 1;
+  string algorithm_used = 2;
+  string strategy_used = 3;
+  int64 duration_ms = 4;
+  map<string, double> metrics = 5;
+}
+
+message AlgorithmRequest {
+  string problem_type = 1;
+  map<string, string> constraints = 2;
+}
+
+message AlgorithmResponse {
+  string algorithm_name = 1;
+  repeated string components = 2;
+  map<string, double> hyperparameters = 3;
+  double fitness_score = 4;
+}
+
+message StrategyRequest {
+  string problem_type = 1;
+  string strategy_type = 2;
+  double difficulty = 3;
+  int32 n_trials = 4;
+}
+
+message StrategyResponse {
+  string strategy_name = 1;
+  map<string, double> parameters = 2;
+  double performance = 3;
+}
+
+message MetaLearningStatus {
+  int32 generation = 1;
+  double best_performance = 2;
+  int32 algorithms_generated = 3;
+  int32 strategies_evaluated = 4;
+  string current_phase = 5;
+}
+
+message ImprovementResult {
+  int32 patches_generated = 1;
+  int32 patches_passed = 2;
+  int32 patches_applied = 3;
+  double improvement_delta = 4;
+  int32 generation = 5;
+}
+
+// --- Data Pipeline Messages ---
+
+message DataRecord {
+  string id = 1;
+  string source_type = 2;
+  string source_id = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  bytes payload = 5;
+  map<string, string> metadata = 6;
+  int32 priority = 7;
+}
+
+message DataBatch {
+  repeated DataRecord records = 1;
+}
+
+message BatchResponse {
+  int32 ingested = 1;
+  int32 failed = 2;
+  repeated string errors = 3;
+}
+
+message SubscribeRequest {
+  string source_filter = 1;
+  int32 min_priority = 2;
+}
+
+message PipelineMetrics {
+  int64 records_ingested = 1;
+  int64 records_processed = 2;
+  int64 records_failed = 3;
+  double avg_latency_ms = 4;
+  double throughput_per_sec = 5;
+  int32 active_streams = 6;
+  int32 queue_depth = 7;
+}
+
+// --- Security Messages ---
+
+message ThreatEvent {
+  string id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string threat_type = 3;
+  int32 level = 4;           // 0=none, 1=low, 2=medium, 3=high, 4=critical
+  string source = 5;
+  string target = 6;
+  string description = 7;
+}
+
+message ThreatLevelResponse {
+  int32 level = 1;
+  string description = 2;
+  int32 active_threats = 3;
+}
+
+message SecurityStatus {
+  int32 threat_level = 1;
+  int64 threats_detected = 2;
+  int64 threats_mitigated = 3;
+  int64 integrity_checks = 4;
+  int64 integrity_failures = 5;
+  bool encryption_active = 6;
+  int32 monitored_nodes = 7;
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+  string state = 2;
+  double load = 3;
+  repeated int32 shards = 4;
+}
+
+// --- Memory Messages ---
+
+message SemanticEntry {
+  string id = 1;
+  string content = 2;
+  repeated float embedding = 3;
+  string category = 4;
+  double importance = 5;
+  string source = 6;
+}
+
+message SemanticQuery {
+  repeated float context_vector = 1;
+  double threshold = 2;
+  string category = 3;
+  int32 limit = 4;
+}
+
+message SemanticResults {
+  repeated SemanticEntry results = 1;
+}
+
+message EpisodicEntry {
+  string id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string action = 3;
+  repeated float context = 4;
+  double outcome = 5;
+  string goal_id = 6;
+  bool success = 7;
+}
+
+message EpisodicQuery {
+  repeated float similar_state = 1;
+  double min_outcome = 2;
+  string action_type = 3;
+  int32 limit = 4;
+}
+
+message EpisodicResults {
+  repeated EpisodicEntry results = 1;
+}
+
+message ProceduralEntry {
+  string id = 1;
+  string strategy = 2;
+  repeated float context = 3;
+  repeated string steps = 4;
+  map<string, double> parameters = 5;
+  double success_rate = 6;
+  double avg_utility = 7;
+}
+
+message ContextVector {
+  repeated float values = 1;
+}

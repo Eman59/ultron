@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'ultron-core-agent'
+    static_configs:
+      - targets: ['core-agent:8080']
+
+  - job_name: 'ultron-neural'
+    static_configs:
+      - targets: ['neural-engine:50052']
+
+  - job_name: 'ultron-meta-learning'
+    static_configs:
+      - targets: ['meta-learning:50053']
+
+  - job_name: 'ultron-data-pipeline'
+    static_configs:
+      - targets: ['data-pipeline:50054']
+
+  - job_name: 'ultron-security'
+    static_configs:
+      - targets: ['security-daemon:50055']

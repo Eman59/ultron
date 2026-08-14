@@ -1,0 +1,51 @@
+# ═══════════════════════════════════════════
+# ULTRON — NEVER COMMIT THESE
+# ═══════════════════════════════════════════
+
+# Owner private key (CRITICAL — this IS the ownership)
+ultron_owner.key
+*.key
+configs/keys/
+
+# Environment files with credentials
+.env
+.env.*
+
+# AWS credentials
+*.pem
+credentials
+
+# Generated protobuf code
+python/interface/grpc_gen/
+go/core_agent/proto/gen/
+
+# Build artifacts
+target/
+*.exe
+*.bin
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker volumes
+docker/data/
+
+# Logs
+*.log
+
+# Large binaries
+tools/piper/
+*.tar.gz
+*.onnx
+models/
+
+# Runtime data (generated at runtime)
+data/
+.ultron_sandbox/
+.ultron_backups/
+.ultron/

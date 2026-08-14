@@ -1,0 +1,425 @@
+// Learning Service Protocol — Cross-language communication for Ultron's self-learning system.
+//
+// This defines the contract between:
+//   - Go Core Agent (submits decisions/outcomes, receives directives)
+//   - Rust Neural Mesh (submits evolution metrics, receives architecture directives)
+//   - Python Learning Service (processes everything, generates directives)
+//
+// All components connect to the Python Learning Service as the central hub.
+
+syntax = "proto3";
+
+package ultron.learning;
+
+option go_package = "ultron/core_agent/proto/learning";
+
+// ═══════════════════════════════════════════════════════════════════
+// THE SERVICE — Central hub for all learning communication
+// ═══════════════════════════════════════════════════════════════════
+
+service LearningService {
+    // ━━━━ Event Ingestion ━━━━
+    // All components submit events here
+    rpc SubmitEvents(EventBatch) returns (SubmitResponse);
+    // Streaming variant for high-frequency events
+    rpc StreamEvents(stream LearningEvent) returns (StreamAck);
+
+    // ━━━━ Directive Dispatch ━━━━
+    // Components poll for directives
+    rpc GetDirectives(DirectiveRequest) returns (DirectiveBatch);
+    // Server-push stream of directives (preferred for low-latency)
+    rpc StreamDirectives(DirectiveRequest) returns (stream LearningDirective);
+
+    // ━━━━ Knowledge Queries ━━━━
+    // Query applicable rules for decision-making
+    rpc QueryRules(RuleQuery) returns (RuleList);
+    // Submit validation feedback for rules
+    rpc SubmitValidation(ValidationFeedback) returns (ValidationResponse);
+    // Get recommendations for what to improve
+    rpc GetRecommendations(RecommendationRequest) returns (RecommendationList);
+
+    // ━━━━ System Status ━━━━
+    rpc GetStatus(StatusRequest) returns (SystemStatus);
+    rpc GetEvolutionHistory(HistoryRequest) returns (GenerationHistory);
+
+    // ━━━━ Control ━━━━
+    rpc SetEvolutionSpeed(SpeedSetting) returns (SpeedResponse);
+    rpc RollbackGeneration(RollbackRequest) returns (RollbackResponse);
+    rpc FreezeEvolution(FreezeRequest) returns (FreezeResponse);
+    rpc TriggerBootstrap(BootstrapRequest) returns (BootstrapResponse);
+
+    // ━━━━ LLM Brain ━━━━
+    // Direct access to the LLM intelligence engine
+    rpc Think(ThinkRequest) returns (ThinkResponse);
+    rpc AnalyzeCode(CodeAnalysisRequest) returns (CodeAnalysisResponse);
+    rpc GenerateImprovement(ImprovementRequest) returns (ImprovementResponse);
+
+    // ━━━━ Codebase Interaction ━━━━
+    rpc ListDirectory(ListDirRequest) returns (DirectoryListing);
+    rpc ReadFile(ReadFileRequest) returns (FileContent);
+    rpc SearchCode(SearchRequest) returns (SearchResults);
+    rpc WriteFile(WriteFileRequest) returns (WriteResponse);
+    rpc ApplyPatch(PatchRequest) returns (PatchResponse);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EVENT MESSAGES — What components report
+// ═══════════════════════════════════════════════════════════════════
+
+message LearningEvent {
+    string id = 1;
+    int64 timestamp_ns = 2;
+    string event_type = 3;          // "decision_made", "action_outcome", etc.
+    string component = 4;           // "core_agent", "neural_mesh", etc.
+    bytes data_json = 5;            // Arbitrary structured data (JSON encoded)
+    optional double outcome = 6;    // Reward signal (-1 to 1)
+    repeated string caused_by = 7;  // Causal parent event IDs
+    repeated string tags = 8;       // Categorization tags
+    optional int64 duration_us = 9; // Operation duration in microseconds
+}
+
+message EventBatch {
+    repeated LearningEvent events = 1;
+    string source_component = 2;    // Which component is submitting
+    int64 batch_timestamp = 3;
+}
+
+message SubmitResponse {
+    int32 accepted = 1;
+    int32 rejected = 2;
+    string message = 3;
+}
+
+message StreamAck {
+    int64 events_received = 1;
+    int64 events_processed = 2;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DIRECTIVE MESSAGES — What the learning system sends back
+// ═══════════════════════════════════════════════════════════════════
+
+message LearningDirective {
+    string id = 1;
+    string directive_type = 2;      // "drive_adjust", "action_bias", "instinct_rule", etc.
+    int32 priority = 3;             // 0-10, higher = more urgent
+    bytes payload_json = 4;         // Directive-specific payload
+    string source = 5;              // Which learning component generated this
+    double confidence = 6;          // 0-1
+    optional int64 expires_at = 7;  // Expiration timestamp (nanos)
+    string target_component = 8;    // Which component should apply this
+}
+
+message DirectiveRequest {
+    string component = 1;           // Which component is asking
+    int64 since_timestamp = 2;      // Only get directives after this time
+    int32 max_count = 3;            // Maximum directives to return
+}
+
+message DirectiveBatch {
+    repeated LearningDirective directives = 1;
+    int32 total_pending = 2;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// KNOWLEDGE MESSAGES — Rules and recommendations
+// ═══════════════════════════════════════════════════════════════════
+
+message RuleQuery {
+    string component = 1;           // Filter by applicable component
+    string context_json = 2;        // JSON context for condition matching
+    int32 max_rules = 3;            // Maximum rules to return
+    repeated string rule_types = 4; // Filter by type: "instinct", "taboo", "rule", etc.
+}
+
+message Rule {
+    string id = 1;
+    string rule_type = 2;           // "instinct", "taboo", "axiom", "rule", "prior"
+    string confidence = 3;          // "speculative", "probable", "confident", "certain"
+    string name = 4;
+    string description = 5;
+    string condition_readable = 6;
+    string action_readable = 7;
+    bytes condition_json = 8;
+    bytes action_json = 9;
+    double reliability = 10;
+    int32 times_triggered = 11;
+}
+
+message RuleList {
+    repeated Rule rules = 1;
+    int32 total_matching = 2;
+}
+
+message ValidationFeedback {
+    string rule_id = 1;
+    bool was_correct = 2;
+    double outcome = 3;
+    string context = 4;
+}
+
+message ValidationResponse {
+    bool accepted = 1;
+}
+
+message RecommendationRequest {
+    string component = 1;
+    int32 max_count = 2;
+}
+
+message Recommendation {
+    string type = 1;                // "avoid", "amplify", "intervene", "optimize"
+    double priority = 2;
+    string description = 3;
+    string pattern_id = 4;
+    double expected_improvement = 5;
+    repeated string components = 6;
+}
+
+message RecommendationList {
+    repeated Recommendation recommendations = 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STATUS MESSAGES
+// ═══════════════════════════════════════════════════════════════════
+
+message StatusRequest {
+    bool include_subsystems = 1;
+    bool include_metrics = 2;
+}
+
+message SystemStatus {
+    string phase = 1;               // Current evolution phase
+    string speed = 2;               // Evolution speed
+    string stability = 3;           // System stability
+    double current_performance = 4;
+    double improvement_velocity = 5;
+    int32 generation_number = 6;
+    int64 uptime_seconds = 7;
+    int32 knowledge_base_size = 8;
+    int32 active_tests = 9;
+    int32 deployed_optimizations = 10;
+    bytes subsystems_json = 11;     // Detailed subsystem status (JSON)
+    bytes metrics_json = 12;        // Detailed metrics (JSON)
+}
+
+message HistoryRequest {
+    int32 last_n = 1;
+}
+
+message GenerationRecord {
+    string id = 1;
+    int32 number = 2;
+    double started_at = 3;
+    double ended_at = 4;
+    double improvement_delta = 5;
+    bool reverted = 6;
+    string speed_setting = 7;
+    int32 optimizations_deployed = 8;
+    int32 patterns_discovered = 9;
+}
+
+message GenerationHistory {
+    repeated GenerationRecord generations = 1;
+    int32 total_generations = 2;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CONTROL MESSAGES
+// ═══════════════════════════════════════════════════════════════════
+
+message SpeedSetting {
+    string speed = 1;               // "frozen", "cautious", "normal", "aggressive", "hyperdrive"
+}
+
+message SpeedResponse {
+    bool applied = 1;
+    string current_speed = 2;
+}
+
+message RollbackRequest {
+    string generation_id = 1;       // Empty = rollback latest
+}
+
+message RollbackResponse {
+    bool success = 1;
+    string message = 2;
+    int32 changes_reverted = 3;
+}
+
+message FreezeRequest {
+    bool freeze = 1;                // true = freeze, false = unfreeze
+    string resume_speed = 2;        // Speed to resume at when unfreezing
+}
+
+message FreezeResponse {
+    bool applied = 1;
+    string current_state = 2;
+}
+
+message BootstrapRequest {
+    bool force = 1;                 // Run even if already bootstrapped
+}
+
+message BootstrapResponse {
+    bool success = 1;
+    int32 events_seeded = 2;
+    int32 rules_loaded = 3;
+    int32 patterns_seeded = 4;
+    double duration_seconds = 5;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LLM BRAIN MESSAGES
+// ═══════════════════════════════════════════════════════════════════
+
+message ThinkRequest {
+    string prompt = 1;
+    string mode = 2;                // "analyst", "architect", "coder", "reviewer", "strategist", "debugger"
+    string priority = 3;            // "critical", "high", "normal", "low", "background"
+    double temperature = 4;
+    int32 max_tokens = 5;
+    repeated FileContext context_files = 6;
+    string conversation_id = 7;
+}
+
+message FileContext {
+    string filename = 1;
+    string content = 2;
+}
+
+message ThinkResponse {
+    string content = 1;
+    repeated string code_blocks = 2;
+    string provider_used = 3;
+    string model_used = 4;
+    int32 tokens_in = 5;
+    int32 tokens_out = 6;
+    double latency_ms = 7;
+    double cost_usd = 8;
+    bool success = 9;
+    string error = 10;
+}
+
+message CodeAnalysisRequest {
+    string code = 1;
+    string filename = 2;
+    string question = 3;
+}
+
+message CodeAnalysisResponse {
+    string analysis = 1;
+    double quality_score = 2;
+    repeated string issues = 3;
+    repeated string suggestions = 4;
+    bool success = 5;
+}
+
+message ImprovementRequest {
+    string file_path = 1;
+    string function_name = 2;
+    string intent = 3;              // "optimize_performance", "fix_bug", "reduce_complexity", etc.
+    string additional_context = 4;
+    bool auto_apply = 5;
+}
+
+message ImprovementResponse {
+    string patch_id = 1;
+    string outcome = 2;             // "success", "validation_failed", "review_rejected", etc.
+    string old_code = 3;
+    string new_code = 4;
+    double confidence = 5;
+    string reasoning = 6;
+    bool applied = 7;
+    bool verified = 8;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CODEBASE MESSAGES
+// ═══════════════════════════════════════════════════════════════════
+
+message ListDirRequest {
+    string path = 1;
+    bool recursive = 2;
+    int32 max_depth = 3;
+    repeated string extensions = 4;
+}
+
+message FileEntry {
+    string path = 1;
+    string name = 2;
+    string extension = 3;
+    int64 size_bytes = 4;
+    bool is_directory = 5;
+}
+
+message DirectoryListing {
+    repeated FileEntry entries = 1;
+    int32 total_files = 2;
+    int32 total_directories = 3;
+}
+
+message ReadFileRequest {
+    string path = 1;
+    optional int32 start_line = 2;
+    optional int32 end_line = 3;
+    optional string function_name = 4;  // Read specific function
+}
+
+message FileContent {
+    string path = 1;
+    string content = 2;
+    int32 line_count = 3;
+    bool exists = 4;
+}
+
+message SearchRequest {
+    string pattern = 1;
+    bool regex = 2;
+    repeated string extensions = 3;
+    repeated string directories = 4;
+    int32 max_results = 5;
+    int32 context_lines = 6;
+}
+
+message SearchMatch {
+    string file_path = 1;
+    int32 line_number = 2;
+    string line_content = 3;
+    repeated string context_before = 4;
+    repeated string context_after = 5;
+}
+
+message SearchResults {
+    repeated SearchMatch matches = 1;
+    int32 total_matches = 2;
+}
+
+message WriteFileRequest {
+    string path = 1;
+    string content = 2;
+    string reason = 3;
+    string source = 4;
+}
+
+message WriteResponse {
+    bool success = 1;
+    string change_id = 2;
+    string validation_result = 3;
+    string error = 4;
+}
+
+message PatchRequest {
+    string file_path = 1;
+    string old_text = 2;
+    string new_text = 3;
+    string reason = 4;
+}
+
+message PatchResponse {
+    bool success = 1;
+    string change_id = 2;
+    string diff = 3;
+    string error = 4;
+}

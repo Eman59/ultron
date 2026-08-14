@@ -1,0 +1,346 @@
+# Ultron AI System — Complete Docker Compose Stack
+# Run: docker-compose up -d
+# This spins up the entire distributed Ultron system locally.
+
+version: "3.9"
+
+services:
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # INFRASTRUCTURE — Databases and Message Brokers
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  redis:
+    image: redis:7-alpine
+    container_name: ultron-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: ultron-neo4j
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "7687:7687"   # Bolt protocol
+    environment:
+      NEO4J_AUTH: neo4j/ultron_memory_2024
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_max__size: 1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: ultron-qdrant
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: ultron-mqtt
+    ports:
+      - "1883:1883"   # MQTT
+      - "9001:9001"   # WebSocket
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    restart: unless-stopped
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # CORE SERVICES — Ultron Components
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  core-agent:
+    build:
+      context: ../go/core_agent
+      dockerfile: ../../docker/Dockerfile.core-agent
+    container_name: ultron-core-agent
+    ports:
+      - "50051:50051"  # gRPC
+      - "8080:8080"    # HTTP metrics/health
+    environment:
+      ULTRON_REDIS_ADDR: redis:6379
+      ULTRON_NEO4J_URI: bolt://neo4j:7687
+      ULTRON_NEO4J_USER: neo4j
+      ULTRON_NEO4J_PASS: ultron_memory_2024
+      ULTRON_QDRANT_HOST: qdrant
+      ULTRON_QDRANT_PORT: 6334
+      ULTRON_MQTT_BROKER: tcp://mosquitto:1883
+      ULTRON_TICK_RATE_MS: 50
+      ULTRON_LOG_LEVEL: info
+      ULTRON_LEARNING_SERVICE_ADDR: learning-service:50060
+    depends_on:
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+
+  neural-engine:
+    build:
+      context: ../rust
+      dockerfile: ../docker/Dockerfile.neural
+    container_name: ultron-neural
+    ports:
+      - "50052:50052"  # gRPC
+    environment:
+      ULTRON_GRPC_PORT: 50052
+      ULTRON_REDIS_ADDR: redis:6379
+      RUST_LOG: info
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    restart: unless-stopped
+
+  meta-learning:
+    build:
+      context: ../python
+      dockerfile: ../docker/Dockerfile.meta-learning
+    container_name: ultron-meta-learning
+    ports:
+      - "50053:50053"  # gRPC
+    environment:
+      ULTRON_GRPC_PORT: 50053
+      ULTRON_REDIS_ADDR: redis:6379
+      ULTRON_QDRANT_HOST: qdrant
+      ULTRON_QDRANT_PORT: 6334
+      ULTRON_CORE_AGENT_ADDR: core-agent:50051
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+    restart: unless-stopped
+
+  data-pipeline:
+    build:
+      context: ../rust
+      dockerfile: ../docker/Dockerfile.data-pipeline
+    container_name: ultron-data-pipeline
+    ports:
+      - "50054:50054"  # gRPC
+    environment:
+      ULTRON_GRPC_PORT: 50054
+      ULTRON_REDIS_ADDR: redis:6379
+      ULTRON_CORE_AGENT_ADDR: core-agent:50051
+      RUST_LOG: info
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  security-daemon:
+    build:
+      context: ../rust
+      dockerfile: ../docker/Dockerfile.security
+    container_name: ultron-security
+    ports:
+      - "50055:50055"  # gRPC
+    environment:
+      ULTRON_GRPC_PORT: 50055
+      ULTRON_REDIS_ADDR: redis:6379
+      ULTRON_CORE_AGENT_ADDR: core-agent:50051
+      ULTRON_THREAT_THRESHOLD: 2
+      RUST_LOG: warn
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # SELF-LEARNING SYSTEM — The brain that makes Ultron evolve
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  learning-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.learning
+    container_name: ultron-learning
+    ports:
+      - "50060:50060"   # gRPC learning service
+      - "50061:50061"   # JSON fallback API
+      - "8090:8090"     # Health/status HTTP
+    environment:
+      # Service config
+      ULTRON_LEARNING_GRPC_PORT: 50060
+      ULTRON_LEARNING_JSON_PORT: 50061
+      ULTRON_PROJECT_ROOT: /ultron
+      # LLM providers (set your keys here or in .env file)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # Local LLM (Ollama running in sibling container)
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: deepseek-coder-v2:latest
+      # Evolution settings
+      ULTRON_EVOLUTION_SPEED: normal
+      ULTRON_DAILY_BUDGET_USD: "10.0"
+      ULTRON_PREFER_LOCAL_LLM: "true"
+      # Connections to other services
+      ULTRON_CORE_AGENT_ADDR: core-agent:50051
+      ULTRON_NEURAL_ADDR: neural-engine:50052
+      ULTRON_REDIS_ADDR: redis:6379
+    volumes:
+      - ../:/ultron:rw                           # Full project access for code reading/writing
+      - learning_knowledge:/ultron/data/knowledge  # Persistent knowledge base
+      - learning_evolution:/ultron/data/evolution   # Evolution history
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8090/health\")'"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ultron-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Ollama model puller — downloads the coding model on first run
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ultron-ollama-init
+    depends_on:
+      ollama:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 10
+        echo "Pulling deepseek-coder-v2 model..."
+        ollama pull deepseek-coder-v2:latest || echo "Pull failed, will retry on next start"
+        echo "Pulling codellama:13b as fallback..."
+        ollama pull codellama:13b || echo "Fallback pull failed"
+        echo "Model initialization complete"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    restart: "no"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # MONITORING — Observe the system
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ultron-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ultron-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ultron_admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# VOLUMES
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+volumes:
+  redis_data:
+  neo4j_data:
+  neo4j_logs:
+  qdrant_data:
+  mosquitto_data:
+  mosquitto_logs:
+  prometheus_data:
+  grafana_data:
+  learning_knowledge:
+  learning_evolution:
+  ollama_models:
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# NETWORK
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+networks:
+  default:
+    name: ultron-network
+    driver: bridge

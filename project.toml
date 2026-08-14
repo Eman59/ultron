@@ -1,0 +1,47 @@
+[project]
+name = "ultron"
+version = "0.1.0"
+description = "Recursive Self-Improving Neural Architecture Research System"
+authors = ["AI Research Team"]
+license = "Research Use Only"
+readme = "README.md"
+
+[workspace]
+members = [
+    "rust/dynamic_neural",
+    "rust/real_time_data", 
+    "python/meta_learning",
+    "python/emotional_simulation",
+    "go/p2p_network",
+    "julia/emotional_modeling"
+]
+
+[dependencies]
+# Cross-language dependencies
+grpc = "0.9"
+protobuf = "3.0"
+redis = { version = "0.23", features = ["cluster"] }
+
+[build-dependencies]
+cmake = "0.1"
+
+[features]
+default = ["neural", "meta-learning", "p2p", "real-time", "emotional"]
+neural = ["torch"]
+meta-learning = ["jax", "optuna"]
+p2p = ["libp2p", "ipfs"]
+real-time = ["tokio", "arrow"]
+emotional = ["psychopy", "scikit-learn"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.test]
+opt-level = 1
+debug = true

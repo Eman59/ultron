@@ -1,0 +1,40 @@
+[package]
+name = "dynamic_neural"
+version = "0.1.0"
+edition = "2021"
+description = "Dynamic neural architecture with real-time plasticity"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+rand = "0.8"
+rayon = "1.7"
+ndarray = "0.15"
+tch = "0.13"
+# PyTorch bindings
+libtorch-sys = "0.13"
+libtorch = "0.13"
+# Cross-component communication
+tonic = "0.10"
+prost = "0.12"
+redis = { version = "0.23", features = ["cluster", "tokio"] }
+# WebSocket support
+tokio-tungstenite = "0.20"
+
+[dev-dependencies]
+criterion = "0.5"
+assert_cmd = "2.0"
+
+[build-dependencies]
+cmake = "0.1"
+
+[features]
+default = ["gpu", "web"]
+gpu = ["tch/gpu"]
+web = ["tokio-tungstenite"]
+simulation = []

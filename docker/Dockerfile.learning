@@ -1,0 +1,71 @@
+# Ultron Self-Learning Service
+# The brain that makes Ultron evolve autonomously.
+#
+# This container runs:
+#   - Unified Learning Service (gRPC + JSON)
+#   - Experience Collector
+#   - Pattern Recognizer
+#   - Code Introspector
+#   - Adaptive Optimizer
+#   - Knowledge Distiller
+#   - Evolution Controller
+#   - LLM Brain (connects to Ollama/OpenAI/Anthropic)
+#   - Intelligent Patcher
+#   - Codebase Agent
+#   - Data Pipeline Bootstrap
+
+FROM python:3.11-slim
+
+LABEL maintainer="Ultron Self-Learning System"
+LABEL description="Autonomous code evolution and self-improvement service"
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /ultron
+
+# Copy requirements first for better caching
+COPY python/requirements.txt /tmp/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    grpcio>=1.60.0 \
+    grpcio-tools>=1.60.0 \
+    protobuf>=4.25.0 \
+    numpy>=1.24.0 \
+    && pip install --no-cache-dir -r /tmp/requirements.txt || true
+
+# Copy the project (the volume mount overrides this in dev mode)
+COPY . /ultron/
+
+# Create data directories
+RUN mkdir -p /ultron/data/knowledge/traces \
+    /ultron/data/evolution/generations \
+    /ultron/.ultron/backups \
+    /ultron/.ultron/changelog
+
+# Health check endpoint
+EXPOSE 8090
+# gRPC service
+EXPOSE 50060
+# JSON fallback
+EXPOSE 50061
+
+# Environment defaults
+ENV PYTHONPATH=/ultron/python:/ultron
+ENV PYTHONUNBUFFERED=1
+ENV ULTRON_LEARNING_GRPC_PORT=50060
+ENV ULTRON_LEARNING_JSON_PORT=50061
+ENV ULTRON_PROJECT_ROOT=/ultron
+ENV ULTRON_EVOLUTION_SPEED=normal
+ENV ULTRON_DAILY_BUDGET_USD=10.0
+ENV ULTRON_PREFER_LOCAL_LLM=true
+
+# Entry point: run the unified learning service
+CMD ["python3", "-m", "python.self_improvement.learning.service", "/ultron", "50060"]

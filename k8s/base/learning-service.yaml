@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ultron-learning
+  namespace: ultron
+  labels:
+    app: ultron
+    component: learning-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ultron
+      component: learning-service
+  template:
+    metadata:
+      labels:
+        app: ultron
+        component: learning-service
+    spec:
+      containers:
+        - name: learning-service
+          image: ultron/learning-service:latest
+          ports:
+            - containerPort: 50060
+              name: grpc
+            - containerPort: 50061
+              name: json-api
+            - containerPort: 8090
+              name: health
+          env:
+            - name: ULTRON_PROJECT_ROOT
+              value: /ultron
+            - name: ULTRON_LEARNING_GRPC_PORT
+              value: "50060"
+            - name: ULTRON_LEARNING_JSON_PORT
+              value: "50061"
+            - name: ULTRON_EVOLUTION_SPEED
+              value: normal
+            - name: ULTRON_PREFER_LOCAL_LLM
+              value: "true"
+            - name: OLLAMA_HOST
+              value: http://ollama:11434
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ultron-secrets
+                  key: openai-api-key
+                  optional: true
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ultron-secrets
+                  key: anthropic-api-key
+                  optional: true
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "4000m"
+          volumeMounts:
+            - name: knowledge-data
+              mountPath: /ultron/data/knowledge
+            - name: evolution-data
+              mountPath: /ultron/data/evolution
+            - name: models-data
+              mountPath: /ultron/models
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: knowledge-data
+          persistentVolumeClaim:
+            claimName: ultron-knowledge-pvc
+        - name: evolution-data
+          persistentVolumeClaim:
+            claimName: ultron-evolution-pvc
+        - name: models-data
+          persistentVolumeClaim:
+            claimName: ultron-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: learning-service
+  namespace: ultron
+spec:
+  selector:
+    app: ultron
+    component: learning-service
+  ports:
+    - name: grpc
+      port: 50060
+      targetPort: 50060
+    - name: json-api
+      port: 50061
+      targetPort: 50061
+    - name: health
+      port: 8090
+      targetPort: 8090
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ultron-knowledge-pvc
+  namespace: ultron
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ultron-evolution-pvc
+  namespace: ultron
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ultron-models-pvc
+  namespace: ultron
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 50Gi

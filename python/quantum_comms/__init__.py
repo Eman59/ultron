@@ -1,0 +1,20 @@
+"""
+Ultron Quantum Communication Layer
+
+Simulates quantum key distribution (QKD) and entanglement-based
+secure communication between distributed nodes.
+
+NOTE: This is a SIMULATION of quantum protocols, not actual quantum hardware.
+Real quantum communication requires physical qubits and optical channels.
+What this provides:
+  - Information-theoretically secure key exchange (BB84 protocol simulation)
+  - Entanglement-based node pairing for tamper-evident channels
+  - Quantum random number generation for cryptographic operations
+  - Near-zero latency abstraction for critical decision synchronization
+"""
+
+__version__ = "0.1.0"
+
+from .qkd import QuantumKeyDistribution, BB84Protocol
+from .entanglement import EntanglementPair, QuantumChannel
+from .qrng import QuantumRandomGenerator
