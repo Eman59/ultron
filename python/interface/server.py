@@ -99,7 +99,11 @@ bridge = GRPCBridge(GRPCConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Connect to brain on startup, disconnect on shutdown."""
-    connected = await bridge.connect()
+    try:
+        connected = await asyncio.wait_for(bridge.connect(), timeout=5.0)
+    except (asyncio.TimeoutError, Exception):
+        connected = False
+    
     mode = "LIVE (gRPC)" if connected else "SIMULATION (brain offline)"
 
     if connected:
@@ -109,8 +113,8 @@ async def lifespan(app: FastAPI):
     print("  ULTRON PERSONAL INTERFACE — ONLINE")
     print(f"  Mode: {mode}")
     print(f"  Core Agent: {bridge.config.core_agent_addr}")
-    print(f"  Services: {bridge.get_connection_status()['services']}")
     print("=" * 55)
+    print(flush=True)
 
     yield
 
@@ -544,7 +548,7 @@ def _intelligent_response(request: UserRequest) -> UltronDecision:
 
 
 def _sync_generate(query: str, context: dict):
-    """Synchronous wrapper for LLM call — OpenRouter first, Ollama fallback."""
+    """Synchronous wrapper for LLM call — Ollama FIRST (fast), OpenRouter for fallback."""
     import urllib.request
     import json as _json
     import os
@@ -559,7 +563,31 @@ def _sync_generate(query: str, context: dict):
     
     prompt = f"{query}{state_ctx}\nARCHITECTURE: {arch['total_files']} files, {arch['total_lines']} lines"
 
-    # Try OpenRouter first
+    # Try LOCAL Ollama first (1-2 seconds, always available)
+    try:
+        payload = {
+            "model": "llama3.1:8b",
+            "prompt": prompt,
+            "system": ULTRON_SYSTEM_PROMPT,
+            "stream": False,
+            "options": {"temperature": 0.7, "top_p": 0.9, "num_predict": 300}
+        }
+        data = _json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            "http://localhost:11434/api/generate",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = _json.loads(resp.read().decode('utf-8'))
+            response = result.get("response", "").strip()
+            if response:
+                return response
+    except Exception:
+        pass
+
+    # Fallback: OpenRouter (slower but smarter, only if Ollama fails)
     openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
     if openrouter_key:
         try:
@@ -569,7 +597,7 @@ def _sync_generate(query: str, context: dict):
                     {"role": "system", "content": ULTRON_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
-                "max_tokens": 500,
+                "max_tokens": 300,
                 "temperature": 0.7,
             }
             data = _json.dumps(payload).encode('utf-8')
@@ -580,40 +608,17 @@ def _sync_generate(query: str, context: dict):
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {openrouter_key}",
                     "HTTP-Referer": "http://localhost:8000",
-                    "X-Title": "Ultron AI",
                 },
             )
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=15) as resp:
                 result = _json.loads(resp.read().decode('utf-8'))
                 choices = result.get("choices", [])
                 if choices:
-                    content = choices[0].get("message", {}).get("content", "")
-                    if content:
-                        return content.strip()
+                    return choices[0].get("message", {}).get("content", "").strip()
         except Exception:
-            pass  # Fall to Ollama
+            pass
 
-    # Fallback: local Ollama
-    try:
-        payload = {
-            "model": "llama3.1:8b",
-            "prompt": prompt,
-            "system": ULTRON_SYSTEM_PROMPT,
-            "stream": False,
-            "options": {"temperature": 0.7, "top_p": 0.9, "num_predict": 500}
-        }
-        data = _json.dumps(payload).encode('utf-8')
-        req = urllib.request.Request(
-            "http://localhost:11434/api/generate",
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            result = _json.loads(resp.read().decode('utf-8'))
-            return result.get("response", "").strip()
-    except Exception:
-        return None
+    return None
 
 
 def _template_response(request: UserRequest) -> UltronDecision:
