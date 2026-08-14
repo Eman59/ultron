@@ -1,0 +1,20 @@
+[build]
+builder = "nixpacks"
+
+[build.nixpacks]
+providers = ["python"]
+aptPkgs = ["curl"]
+
+[build.nixpacks.cmds]
+install = "pip install fastapi uvicorn grpcio numpy PyPDF2 python-multipart"
+build = ""
+
+[deploy]
+startCommand = "python3 -m uvicorn python.interface.server:app --host 0.0.0.0 --port ${PORT:-8000}"
+healthcheckPath = "/health"
+healthcheckTimeout = 10
+restartPolicyType = "always"
+
+[variables]
+PYTHONPATH = "/app"
+ULTRON_PROJECT_ROOT = "/app"
