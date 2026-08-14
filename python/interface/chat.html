@@ -257,6 +257,12 @@
         </label>
     </div>
 
+    <!-- Always-visible text input for mobile -->
+    <div id="mobile-input" style="position:fixed;bottom:0;left:0;right:0;padding:10px;background:#111;display:flex;gap:8px;z-index:50;">
+        <input id="typed-input" type="text" placeholder="Type here..." style="flex:1;background:#222;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:8px;font-size:15px;outline:none;" autocomplete="off">
+        <button onclick="sendTyped()" style="background:#e63946;border:none;color:#fff;padding:10px 16px;border-radius:8px;font-size:15px;cursor:pointer;">Send</button>
+    </div>
+
     <script>
     // ═══════════════════════════════════════════════════════════
     // ALWAYS-ON INTELLIGENT VOICE — Like a human in the room
@@ -544,6 +550,22 @@
             document.getElementById('status-text').textContent = 'MUTED';
         } else {
             startListening();
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TEXT INPUT (mobile fallback)
+    // ═══════════════════════════════════════════════════════════
+    document.getElementById('typed-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); sendTyped(); }
+    });
+
+    function sendTyped() {
+        const input = document.getElementById('typed-input');
+        const text = input.value.trim();
+        if (text) {
+            input.value = '';
+            processUtterance(text);
         }
     }
 
