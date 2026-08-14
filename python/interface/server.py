@@ -631,7 +631,28 @@ def _intelligent_response(request: UserRequest) -> UltronDecision:
                     new_code = future2.result(timeout=20)
                 
                 if new_code and len(new_code) > 50:
-                    # Backup
+                    # Try GitHub API first (works on Railway/cloud)
+                    from .github_writer import write_file as gh_write, read_file as gh_read, get_token
+                    
+                    if get_token():
+                        # CLOUD MODE: Push directly to GitHub
+                        result = gh_write(
+                            target_file, 
+                            new_code, 
+                            f"Self-mod: {request.query[:60]}"
+                        )
+                        if result["success"]:
+                            return UltronDecision(
+                                decision_id=f"ultron_{_decision_counter}_{int(time.time())}",
+                                action="self_modify", target=target_file,
+                                details={"source": "self_mod_github", "file": target_file, "commit_url": result.get("commit_url","")},
+                                confidence=0.9,
+                                reasoning=f"Done. I modified {target_file} and pushed to GitHub. Commit: {result.get('commit_url','')}",
+                                alternatives=[], requires_approval=False,
+                            )
+                        # GitHub write failed, try local
+                    
+                    # LOCAL MODE: Edit filesystem + git commit
                     backup_dir = project_root / ".ultron_backups"
                     backup_dir.mkdir(exist_ok=True)
                     (backup_dir / f"{target_file.replace('/','_')}_{int(time.time())}.bak").write_text(old_code)
