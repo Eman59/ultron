@@ -63,6 +63,8 @@
     <div id="conv"></div>
     <div id="ctrls">
         <button class="c" onclick="stopAll()">Stop</button>
+        <button class="c" onclick="toggleMute()">Mute</button>
+        <label class="c" style="cursor:pointer">Upload<input type="file" style="display:none" onchange="uploadFile(this.files[0])" accept="*/*"></label>
     </div>
 
     <script>
@@ -152,6 +154,24 @@
         synthesis.cancel();isSpeaking=false;accum='';
         document.getElementById('transcript').textContent='';
         setState('listening');
+    }
+
+    let muted=false;
+    function toggleMute(){
+        muted=!muted;
+        if(muted){try{recognition.stop()}catch(e){}setState('idle');document.getElementById('status-text').textContent='MUTED'}
+        else{startAlwaysListen()}
+    }
+
+    function uploadFile(file){
+        if(!file)return;
+        addMsg('user','📎 '+file.name);
+        setState('thinking');
+        const fd=new FormData();fd.append('file',file);
+        fetch('/upload',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
+            const reply=d.response||d.analysis||'File received.';
+            addMsg('ai',reply);speak(reply);
+        }).catch(()=>{addMsg('ai','Upload failed.');setState('listening')});
     }
 
     function setState(s){
