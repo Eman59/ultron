@@ -2,612 +2,187 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Ultron</title>
     <link rel="icon" type="image/png" href="/favicon.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg: #000000;
-            --surface: #0d0d0d;
-            --text: #ffffff;
-            --text-dim: #666;
-            --accent: #ef4444;
-            --accent-glow: rgba(239, 68, 68, 0.3);
-            --speak-color: #4ecdc4;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: 'Inter', -apple-system, system-ui, sans-serif;
-            height: 100dvh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            -webkit-font-smoothing: antialiased;
-        }
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:#000;color:#fff;font-family:-apple-system,system-ui,sans-serif;height:100dvh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
 
-        /* ═══════ AMBIENT ═══════ */
-        #ambient {
-            position: fixed; inset: 0; z-index: 0; pointer-events: none;
-            background: radial-gradient(ellipse at 50% 50%, rgba(30,0,0,0.4) 0%, transparent 70%);
-            transition: background 1s;
-        }
-        body.listening #ambient {
-            background: radial-gradient(ellipse at 50% 50%, rgba(60,10,10,0.5) 0%, transparent 70%);
-        }
-        body.speaking #ambient {
-            background: radial-gradient(ellipse at 50% 50%, rgba(10,40,40,0.4) 0%, transparent 70%);
-        }
+        /* Header */
+        header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1a1a1a}
+        .logo{font-size:15px;font-weight:700;letter-spacing:4px;color:#e63946}
+        .status{font-size:11px;color:#4ade80;display:flex;align-items:center;gap:6px}
+        .status::before{content:'';width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 4px #4ade80}
 
-        /* ═══════ CENTRAL ORB ═══════ */
-        #orb-wrap {
-            position: relative;
-            width: 220px; height: 220px;
-            display: flex; align-items: center; justify-content: center;
-        }
+        /* Messages */
+        #messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;scrollbar-width:none}
+        #messages::-webkit-scrollbar{display:none}
 
-        #orb {
-            width: 120px; height: 120px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 38% 38%, #ff3333 0%, #990000 40%, #330000 75%, #0a0a0a 100%);
-            box-shadow: 0 0 50px var(--accent-glow), inset 0 0 20px rgba(0,0,0,0.6);
-            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-            animation: orb-idle 5s ease-in-out infinite;
-        }
+        .msg{max-width:85%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;animation:fadeUp .3s ease}
+        .msg.user{align-self:flex-end;background:#1a1a2e;border-radius:16px 16px 4px 16px}
+        .msg.ai{align-self:flex-start;background:#111;border:1px solid #222;border-radius:16px 16px 16px 4px}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-        @keyframes orb-idle {
-            0%, 100% { transform: scale(1); box-shadow: 0 0 40px var(--accent-glow); }
-            50% { transform: scale(1.02); box-shadow: 0 0 55px var(--accent-glow); }
-        }
+        /* Thinking dots */
+        .dots{display:flex;gap:4px;padding:10px 14px}
+        .dots span{width:6px;height:6px;border-radius:50%;background:#555;animation:blink 1.4s infinite}
+        .dots span:nth-child(2){animation-delay:.2s}
+        .dots span:nth-child(3){animation-delay:.4s}
+        @keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
 
-        /* Voice visualization ring */
-        #voice-ring {
-            position: absolute;
-            width: 160px; height: 160px;
-            border-radius: 50%;
-            border: 2px solid transparent;
-            transition: all 0.3s;
-        }
+        /* Input area */
+        #input-bar{padding:10px 12px;border-top:1px solid #1a1a1a;display:flex;gap:8px;align-items:center;background:#0a0a0a}
+        #input-bar input{flex:1;background:#151515;border:1px solid #2a2a2a;color:#fff;padding:12px 16px;border-radius:22px;font-size:15px;outline:none;transition:border .2s}
+        #input-bar input:focus{border-color:#e63946}
+        .btn{width:42px;height:42px;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+        #mic-btn{background:#1a1a1a;color:#999}
+        #mic-btn.on{background:#e63946;color:#fff;animation:pulse 1.5s infinite}
+        #send-btn{background:#e63946;color:#fff}
+        #send-btn:active{transform:scale(.92)}
+        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(230,57,70,.4)}50%{box-shadow:0 0 0 8px rgba(230,57,70,0)}}
 
-        body.listening #orb {
-            animation: orb-listen 1.5s ease-in-out infinite;
-            box-shadow: 0 0 70px var(--accent-glow), 0 0 120px rgba(239,68,68,0.1);
-        }
-        body.listening #voice-ring {
-            border-color: rgba(239, 68, 68, 0.4);
-            animation: ring-expand 1.5s ease-in-out infinite;
-        }
-        @keyframes orb-listen {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.06); }
-        }
-        @keyframes ring-expand {
-            0% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(1.4); opacity: 0; }
-        }
-
-        /* User is actively speaking — voice amplitude */
-        body.hearing #orb {
-            animation: orb-hear 0.4s ease-in-out infinite alternate;
-            box-shadow: 0 0 80px rgba(239,68,68,0.5);
-        }
-        @keyframes orb-hear {
-            0% { transform: scale(1.02); }
-            100% { transform: scale(1.1); }
-        }
-
-        body.thinking #orb {
-            background: radial-gradient(circle at 38% 38%, #a855f7 0%, #6b21a8 40%, #2d0066 75%, #0a0a0a 100%);
-            box-shadow: 0 0 50px rgba(168,85,247,0.3);
-            animation: orb-think 2s ease-in-out infinite;
-        }
-        @keyframes orb-think {
-            0%, 100% { transform: scale(1) rotate(0deg); }
-            50% { transform: scale(1.03) rotate(2deg); }
-        }
-
-        body.speaking #orb {
-            background: radial-gradient(circle at 38% 38%, #4ecdc4 0%, #0e7c73 40%, #033 75%, #0a0a0a 100%);
-            box-shadow: 0 0 50px rgba(78,205,196,0.3);
-            animation: orb-speak 0.7s ease-in-out infinite alternate;
-        }
-        @keyframes orb-speak {
-            0% { transform: scale(1); }
-            100% { transform: scale(1.05); }
-        }
-
-        /* ═══════ STATUS ═══════ */
-        #status {
-            margin-top: 32px;
-            text-align: center;
-        }
-        #status-text {
-            font-size: 13px;
-            font-weight: 500;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: var(--text-dim);
-            transition: color 0.3s;
-            min-height: 20px;
-        }
-        body.listening #status-text { color: var(--accent); }
-        body.hearing #status-text { color: #ff6b6b; }
-        body.speaking #status-text { color: var(--speak-color); }
-        body.thinking #status-text { color: #a855f7; }
-
-        #transcript {
-            margin-top: 12px;
-            font-size: 16px;
-            color: var(--text);
-            max-width: 480px;
-            text-align: center;
-            line-height: 1.5;
-            min-height: 28px;
-            opacity: 0.9;
-        }
-
-        /* ═══════ CONVERSATION (subtle, bottom) ═══════ */
-        #conversation {
-            position: fixed;
-            bottom: 60px; left: 50%; transform: translateX(-50%);
-            width: min(560px, 88vw);
-            max-height: 180px;
-            overflow-y: auto;
-            padding: 8px 0;
-            scrollbar-width: none;
-            mask-image: linear-gradient(transparent 0%, black 20%, black 100%);
-            -webkit-mask-image: linear-gradient(transparent 0%, black 20%, black 100%);
-        }
-        #conversation::-webkit-scrollbar { display: none; }
-
-        .msg {
-            padding: 6px 14px;
-            margin: 3px 0;
-            font-size: 13px;
-            line-height: 1.4;
-            animation: msg-in 0.3s ease-out;
-            border-radius: 10px;
-            max-width: 80%;
-        }
-        .msg.user {
-            color: #aaa;
-            margin-left: auto;
-            text-align: right;
-        }
-        .msg.ai {
-            color: #ddd;
-            background: rgba(255,255,255,0.03);
-        }
-        @keyframes msg-in {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* ═══════ CONTROLS ═══════ */
-        #controls {
-            position: fixed;
-            bottom: 16px;
-            display: flex; gap: 10px;
-        }
-        .ctrl {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid #222;
-            color: #666;
-            padding: 8px 14px;
-            font-size: 12px;
-            font-family: inherit;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .ctrl:hover { border-color: #444; color: #aaa; }
-
-        /* ═══════ PERMISSION BANNER ═══════ */
-        #mic-permission {
-            position: fixed; top: 0; left: 0; right: 0;
-            background: #1a1a1a;
-            padding: 14px 20px;
-            text-align: center;
-            font-size: 13px;
-            color: #aaa;
-            display: none;
-            z-index: 100;
-            border-bottom: 1px solid #333;
-        }
-        #mic-permission button {
-            margin-left: 12px;
-            background: var(--accent);
-            border: none;
-            color: white;
-            padding: 6px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-family: inherit;
-        }
+        /* Speaking bar */
+        #speak-bar{position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#4ecdc4,transparent);opacity:0;z-index:99}
+        body.speaking #speak-bar{opacity:1;animation:slide 1.5s infinite linear}
+        @keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
     </style>
 </head>
 <body>
-    <div id="mic-permission">
-        Ultron needs microphone access to listen
-        <button onclick="requestMic()">Allow</button>
-    </div>
-    <div id="ambient"></div>
+    <div id="speak-bar"></div>
+    <header>
+        <span class="logo">ULTRON</span>
+        <span class="status" id="status-text">Online</span>
+    </header>
 
-    <div id="orb-wrap">
-        <div id="voice-ring"></div>
-        <div id="orb"></div>
-    </div>
+    <div id="messages"></div>
 
-    <div id="status">
-        <div id="status-text">INITIALIZING</div>
-        <div id="transcript"></div>
-    </div>
-
-    <div id="conversation"></div>
-
-    <div id="controls">
-        <button class="ctrl" onclick="toggleMute()">Mute</button>
-        <button class="ctrl" onclick="stopSpeech()">Stop</button>
-        <label class="ctrl" style="cursor:pointer">
-            Upload <input type="file" id="file-input" style="display:none" onchange="handleFileUpload(event)" accept="image/*,.pdf,.txt,.md,.py,.js,.go,.rs,.json,.mp4,.mov">
-        </label>
-    </div>
-
-    <!-- Always-visible text input for mobile -->
-    <div id="mobile-input" style="position:fixed;bottom:0;left:0;right:0;padding:10px;background:#111;display:flex;gap:8px;z-index:50;">
-        <input id="typed-input" type="text" placeholder="Type here..." style="flex:1;background:#222;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:8px;font-size:15px;outline:none;" autocomplete="off">
-        <button onclick="sendTyped()" style="background:#e63946;border:none;color:#fff;padding:10px 16px;border-radius:8px;font-size:15px;cursor:pointer;">Send</button>
+    <div id="input-bar">
+        <button class="btn" id="mic-btn" onclick="toggleMic()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        </button>
+        <input id="input" type="text" placeholder="Message Ultron..." autocomplete="off">
+        <button class="btn" id="send-btn" onclick="send()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
     </div>
 
     <script>
-    // ═══════════════════════════════════════════════════════════
-    // ALWAYS-ON INTELLIGENT VOICE — Like a human in the room
-    //
-    // How it works:
-    //  1. Microphone is ALWAYS listening (after permission)
-    //  2. Voice Activity Detection (VAD) detects when you START talking
-    //  3. Silence detection knows when you STOP talking
-    //  4. Only sends to AI when you've finished a thought (1.5s silence)
-    //  5. If Ultron is speaking and you interrupt, it STOPS immediately
-    //  6. It doesn't reply to background noise or short sounds
-    //  7. Minimum utterance length filter — ignores coughs, "um", etc.
-    // ═══════════════════════════════════════════════════════════
-
+    const input = document.getElementById('input');
+    const messages = document.getElementById('messages');
     const synthesis = window.speechSynthesis;
-    let recognition = null;
-    let isMuted = false;
-    let isSpeaking = false;
-    let isProcessing = false;
-    let silenceTimer = null;
-    let accumulatedText = '';
-    let lastSpeechTime = 0;
-    let state = 'idle'; // idle, listening, hearing, thinking, speaking
+    let recognition, isListening = false, isSpeaking = false;
 
-    const SILENCE_THRESHOLD_MS = 2000;  // Wait 2 seconds of silence (was 1.5)
-    const MIN_UTTERANCE_LENGTH = 4;     // Minimum 4 words to process (was 3)
-    const INTERRUPT_WORDS = ['stop', 'shut up', 'quiet', 'enough', 'ok stop', 'okay stop', 'mute'];
+    // Send on Enter
+    input.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();send()} });
 
-    // ═══════════════════════════════════════════════════════════
-    // INIT — Start always-on listening
-    // ═══════════════════════════════════════════════════════════
-    async function init() {
-        // Check for speech recognition
+    function send() {
+        const text = input.value.trim();
+        if(!text) return;
+        input.value = '';
+        processInput(text);
+    }
+
+    // Mic
+    function toggleMic() {
+        if(isListening) { stopMic(); return; }
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SR) {
-            setState('idle');
-            document.getElementById('status-text').textContent = 'VOICE NOT SUPPORTED';
-            return;
-        }
-
-        // Request mic permission
-        try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
-            startListening();
-        } catch (e) {
-            document.getElementById('mic-permission').style.display = 'block';
-        }
-    }
-
-    function requestMic() {
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
-            document.getElementById('mic-permission').style.display = 'none';
-            startListening();
-        });
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // ALWAYS-ON RECOGNITION
-    // ═══════════════════════════════════════════════════════════
-    function startListening() {
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognition = new SR();
-        recognition.continuous = true;       // ALWAYS listening
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-
-        recognition.onresult = handleSpeechResult;
-        recognition.onend = handleRecognitionEnd;
-        recognition.onerror = handleRecognitionError;
-
-        recognition.start();
-        setState('listening');
-    }
-
-    function handleSpeechResult(event) {
-        if (isMuted) return;
-
-        let interim = '';
-        let finalText = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-                finalText += transcript;
-            } else {
-                interim += transcript;
-            }
-        }
-
-        // User is actively speaking
-        if (interim || finalText) {
-            lastSpeechTime = Date.now();
-            setState('hearing');
-            document.getElementById('transcript').textContent = interim || finalText;
-
-            // If Ultron is speaking and user talks, INTERRUPT
-            if (isSpeaking) {
-                synthesis.cancel();
-                isSpeaking = false;
-            }
-
-            // Clear previous silence timer
-            if (silenceTimer) clearTimeout(silenceTimer);
-        }
-
-        // Got final recognized text
-        if (finalText) {
-            accumulatedText += ' ' + finalText;
-            document.getElementById('transcript').textContent = accumulatedText.trim();
-
-            // Check for explicit stop commands
-            const lower = finalText.toLowerCase().trim();
-            if (INTERRUPT_WORDS.some(w => lower.includes(w))) {
-                synthesis.cancel();
-                isSpeaking = false;
-                accumulatedText = '';
-                document.getElementById('transcript').textContent = '';
-                setState('listening');
-                return;
-            }
-
-            // Start silence timer — if no more speech for SILENCE_THRESHOLD_MS,
-            // treat accumulated text as complete thought and process it
-            silenceTimer = setTimeout(() => {
-                const text = accumulatedText.trim();
-                accumulatedText = '';
-
-                // Filter: must be meaningful (not just "um" or cough)
-                const words = text.split(/\s+/).filter(w => w.length > 0);
-                if (words.length >= MIN_UTTERANCE_LENGTH) {
-                    processUtterance(text);
-                } else {
-                    // Too short — ignore (might be noise, cough, etc.)
-                    document.getElementById('transcript').textContent = '';
-                    setState('listening');
+        if(!SR) { input.focus(); return; }
+        if(!recognition) {
+            recognition = new SR();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+            recognition.onresult = e => {
+                let final = '';
+                for(let i=e.resultIndex;i<e.results.length;i++){
+                    if(e.results[i].isFinal) final += e.results[i][0].transcript;
+                    else input.value = e.results[i][0].transcript;
                 }
-            }, SILENCE_THRESHOLD_MS);
+                if(final){ input.value=''; stopMic(); processInput(final.trim()); }
+            };
+            recognition.onend = () => stopMic();
+            recognition.onerror = () => stopMic();
         }
+        isListening = true;
+        document.getElementById('mic-btn').classList.add('on');
+        input.placeholder = 'Listening...';
+        try{recognition.start()}catch(e){}
     }
 
-    function handleRecognitionEnd() {
-        // Auto-restart (always-on behavior)
-        if (!isMuted) {
-            setTimeout(() => {
-                try { recognition.start(); } catch(e) {}
-            }, 100);
-        }
+    function stopMic() {
+        isListening = false;
+        document.getElementById('mic-btn').classList.remove('on');
+        input.placeholder = 'Message Ultron...';
+        try{recognition.stop()}catch(e){}
     }
 
-    function handleRecognitionError(event) {
-        if (event.error === 'not-allowed') {
-            document.getElementById('mic-permission').style.display = 'block';
-            return;
-        }
-        // Auto-restart on transient errors
-        if (!isMuted && event.error !== 'aborted') {
-            setTimeout(() => {
-                try { recognition.start(); } catch(e) {}
-            }, 500);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // PROCESS COMPLETE UTTERANCE
-    // ═══════════════════════════════════════════════════════════
-    function processUtterance(text) {
-        if (isProcessing) return;
-        isProcessing = true;
-
-        addMessage('user', text);
-        document.getElementById('transcript').textContent = '';
-        setState('thinking');
+    // Process
+    function processInput(text) {
+        addMsg('user', text);
+        showDots();
+        synthesis.cancel();
 
         fetch('/decide', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({query: text, priority: 'normal'})
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({query:text, priority:'normal'})
         })
-        .then(r => r.json())
-        .then(data => {
-            isProcessing = false;
-            const response = data.reasoning || data.response || '';
-            if (response) {
-                addMessage('ai', response);
-                speak(response);
-            } else {
-                setState('listening');
-            }
+        .then(r=>r.json())
+        .then(d=>{
+            removeDots();
+            const reply = d.reasoning || d.response || 'No response.';
+            addMsg('ai', reply);
+            speak(reply);
         })
-        .catch(() => {
-            isProcessing = false;
-            setState('listening');
-        });
+        .catch(()=>{ removeDots(); addMsg('ai','Connection error.'); });
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // SPEECH OUTPUT (natural, sentence-by-sentence)
-    // ═══════════════════════════════════════════════════════════
+    // Messages
+    function addMsg(who, text) {
+        const el = document.createElement('div');
+        el.className = 'msg ' + who;
+        el.textContent = text;
+        messages.appendChild(el);
+        messages.scrollTop = messages.scrollHeight;
+        if(messages.children.length > 50) messages.removeChild(messages.firstChild);
+    }
+    function showDots() {
+        const el = document.createElement('div');
+        el.className='dots';el.id='thinking';
+        el.innerHTML='<span></span><span></span><span></span>';
+        messages.appendChild(el);
+        messages.scrollTop = messages.scrollHeight;
+    }
+    function removeDots() { const d=document.getElementById('thinking');if(d)d.remove(); }
+
+    // TTS
     function speak(text) {
-        let clean = text
-            .replace(/```[\s\S]*?```/g, '')
-            .replace(/`([^`]+)`/g, '$1')
-            .replace(/\*\*([^*]+)\*\*/g, '$1')
-            .replace(/#{1,6}\s/g, '')
-            .trim();
-
-        if (!clean) { setState('listening'); return; }
-
-        isSpeaking = true;
-        setState('speaking');
-
-        const sentences = clean.match(/[^.!?]+[.!?]+/g) || [clean];
-        let i = 0;
-
-        function next() {
-            if (i >= sentences.length || !isSpeaking) {
-                isSpeaking = false;
-                setState('listening');
-                return;
-            }
-            const utt = new SpeechSynthesisUtterance(sentences[i].trim());
-            utt.rate = 1.0;
-            utt.pitch = 0.95;
-
-            const voices = synthesis.getVoices();
-            const voice = voices.find(v => v.name.includes('Daniel') || v.name.includes('Samantha'))
-                       || voices.find(v => v.lang.startsWith('en') && v.localService)
-                       || voices[0];
-            if (voice) utt.voice = voice;
-
-            utt.onend = () => { i++; setTimeout(next, 80); };
-            utt.onerror = () => { isSpeaking = false; setState('listening'); };
-            synthesis.speak(utt);
+        let clean = text.replace(/```[\s\S]*?```/g,'').replace(/`([^`]+)`/g,'$1').replace(/\*\*?([^*]+)\*\*?/g,'$1').trim();
+        if(!clean) return;
+        isSpeaking=true; document.body.classList.add('speaking');
+        const parts = clean.match(/[^.!?]+[.!?]+/g)||[clean];
+        let i=0;
+        function next(){
+            if(i>=parts.length||!isSpeaking){isSpeaking=false;document.body.classList.remove('speaking');return}
+            const u=new SpeechSynthesisUtterance(parts[i].trim());
+            u.rate=1; u.pitch=.95;
+            const v=synthesis.getVoices();
+            const voice=v.find(x=>x.name.includes('Daniel')||x.name.includes('Samantha'))||v.find(x=>x.lang.startsWith('en'))||v[0];
+            if(voice)u.voice=voice;
+            u.onend=()=>{i++;setTimeout(next,80)};
+            u.onerror=()=>{isSpeaking=false;document.body.classList.remove('speaking')};
+            synthesis.speak(u);
         }
-
-        setTimeout(next, 150);
+        setTimeout(next,100);
     }
 
-    function stopSpeech() {
-        synthesis.cancel();
-        isSpeaking = false;
-        accumulatedText = '';
-        document.getElementById('transcript').textContent = '';
-        setState('listening');
-    }
+    // Stop on input focus
+    input.addEventListener('focus',()=>{synthesis.cancel();isSpeaking=false;document.body.classList.remove('speaking')});
 
-    // ═══════════════════════════════════════════════════════════
-    // STATE MACHINE
-    // ═══════════════════════════════════════════════════════════
-    function setState(newState) {
-        state = newState;
-        document.body.className = newState;
-
-        const labels = {
-            'idle': '',
-            'listening': 'LISTENING',
-            'hearing': '',
-            'thinking': 'THINKING',
-            'speaking': 'SPEAKING',
-        };
-        document.getElementById('status-text').textContent = labels[newState] || '';
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // CONVERSATION LOG
-    // ═══════════════════════════════════════════════════════════
-    function addMessage(who, text) {
-        const conv = document.getElementById('conversation');
-        const msg = document.createElement('div');
-        msg.className = `msg ${who}`;
-        msg.textContent = text;
-        conv.appendChild(msg);
-        conv.scrollTop = conv.scrollHeight;
-        while (conv.children.length > 30) conv.removeChild(conv.firstChild);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // MUTE TOGGLE
-    // ═══════════════════════════════════════════════════════════
-    function toggleMute() {
-        isMuted = !isMuted;
-        if (isMuted) {
-            recognition.stop();
-            setState('idle');
-            document.getElementById('status-text').textContent = 'MUTED';
-        } else {
-            startListening();
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // TEXT INPUT (mobile fallback)
-    // ═══════════════════════════════════════════════════════════
-    document.getElementById('typed-input').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); sendTyped(); }
-    });
-
-    function sendTyped() {
-        const input = document.getElementById('typed-input');
-        const text = input.value.trim();
-        if (text) {
-            input.value = '';
-            processUtterance(text);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // BOOT
-    // ═══════════════════════════════════════════════════════════
+    // Init voices
     synthesis.getVoices();
-    speechSynthesis.onvoiceschanged = () => {};
-    init();
-
-    // ═══════════════════════════════════════════════════════════
-    // FILE UPLOAD (drag-drop + button)
-    // ═══════════════════════════════════════════════════════════
-    document.body.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
-    document.body.addEventListener('drop', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        if (e.dataTransfer.files.length > 0) uploadFile(e.dataTransfer.files[0]);
-    });
-
-    function handleFileUpload(event) {
-        if (event.target.files.length > 0) uploadFile(event.target.files[0]);
-    }
-
-    function uploadFile(file) {
-        addMessage('user', `📎 Uploading: ${file.name} (${(file.size/1024).toFixed(0)} KB)`);
-        setState('thinking');
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        fetch('/upload', { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(data => {
-            const response = data.response || data.analysis || 'File processed.';
-            addMessage('ai', response);
-            speak(response);
-        })
-        .catch(() => {
-            addMessage('ai', 'Failed to process file.');
-            setState('listening');
-        });
-    }
+    speechSynthesis.onvoiceschanged=()=>{};
     </script>
 </body>
 </html>
