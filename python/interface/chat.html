@@ -7,182 +7,166 @@
     <link rel="icon" type="image/png" href="/favicon.png">
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
-        body{background:#000;color:#fff;font-family:-apple-system,system-ui,sans-serif;height:100dvh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+        body{background:#000;color:#fff;font-family:-apple-system,system-ui,sans-serif;height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;-webkit-font-smoothing:antialiased}
 
-        /* Header */
-        header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1a1a1a}
-        .logo{font-size:15px;font-weight:700;letter-spacing:4px;color:#e63946}
-        .status{font-size:11px;color:#4ade80;display:flex;align-items:center;gap:6px}
-        .status::before{content:'';width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 4px #4ade80}
+        /* Ambient */
+        #ambient{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 50%,rgba(30,0,0,.4) 0%,transparent 70%);transition:background 1s}
+        body.listening #ambient{background:radial-gradient(ellipse at 50% 50%,rgba(60,10,10,.5) 0%,transparent 70%)}
+        body.speaking #ambient{background:radial-gradient(ellipse at 50% 50%,rgba(10,40,40,.4) 0%,transparent 70%)}
 
-        /* Messages */
-        #messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;scrollbar-width:none}
-        #messages::-webkit-scrollbar{display:none}
+        /* Orb */
+        #orb{width:140px;height:140px;border-radius:50%;background:radial-gradient(circle at 38% 38%,#ff3333 0%,#990000 40%,#330000 75%,#0a0a0a 100%);box-shadow:0 0 50px rgba(230,57,70,.4);transition:all .6s cubic-bezier(.4,0,.2,1);animation:breathe 5s ease-in-out infinite;cursor:pointer;-webkit-tap-highlight-color:transparent}
+        @keyframes breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.03);opacity:1}}
 
-        .msg{max-width:85%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;animation:fadeUp .3s ease}
-        .msg.user{align-self:flex-end;background:#1a1a2e;border-radius:16px 16px 4px 16px}
-        .msg.ai{align-self:flex-start;background:#111;border:1px solid #222;border-radius:16px 16px 16px 4px}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        body.listening #orb{animation:listen 1.2s ease-in-out infinite;box-shadow:0 0 80px rgba(230,57,70,.6)}
+        @keyframes listen{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 
-        /* Thinking dots */
-        .dots{display:flex;gap:4px;padding:10px 14px}
-        .dots span{width:6px;height:6px;border-radius:50%;background:#555;animation:blink 1.4s infinite}
-        .dots span:nth-child(2){animation-delay:.2s}
-        .dots span:nth-child(3){animation-delay:.4s}
-        @keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
+        body.hearing #orb{animation:hear .4s ease-in-out infinite alternate;box-shadow:0 0 90px rgba(230,57,70,.6)}
+        @keyframes hear{0%{transform:scale(1.02)}100%{transform:scale(1.12)}}
 
-        /* Input area */
-        #input-bar{padding:10px 12px;border-top:1px solid #1a1a1a;display:flex;gap:8px;align-items:center;background:#0a0a0a}
-        #input-bar input{flex:1;background:#151515;border:1px solid #2a2a2a;color:#fff;padding:12px 16px;border-radius:22px;font-size:15px;outline:none;transition:border .2s}
-        #input-bar input:focus{border-color:#e63946}
-        .btn{width:42px;height:42px;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
-        #mic-btn{background:#1a1a1a;color:#999}
-        #mic-btn.on{background:#e63946;color:#fff;animation:pulse 1.5s infinite}
-        #send-btn{background:#e63946;color:#fff}
-        #send-btn:active{transform:scale(.92)}
-        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(230,57,70,.4)}50%{box-shadow:0 0 0 8px rgba(230,57,70,0)}}
+        body.thinking #orb{background:radial-gradient(circle at 38% 38%,#a855f7 0%,#6b21a8 40%,#2d0066 75%,#0a0a0a 100%);box-shadow:0 0 50px rgba(168,85,247,.4);animation:think 2s ease-in-out infinite}
+        @keyframes think{0%,100%{transform:scale(1) rotate(0deg)}50%{transform:scale(1.03) rotate(2deg)}}
 
-        /* Speaking bar */
-        #speak-bar{position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#4ecdc4,transparent);opacity:0;z-index:99}
-        body.speaking #speak-bar{opacity:1;animation:slide 1.5s infinite linear}
-        @keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+        body.speaking #orb{background:radial-gradient(circle at 38% 38%,#4ecdc4 0%,#0e7c73 40%,#033 75%,#0a0a0a 100%);box-shadow:0 0 50px rgba(78,205,196,.4);animation:speak .7s ease-in-out infinite alternate}
+        @keyframes speak{0%{transform:scale(1)}100%{transform:scale(1.05)}}
+
+        /* Status */
+        #status{margin-top:32px;text-align:center}
+        #status-text{font-size:12px;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:#555;transition:color .3s}
+        body.listening #status-text{color:#e63946}
+        body.hearing #status-text{color:#ff6b6b}
+        body.thinking #status-text{color:#a855f7}
+        body.speaking #status-text{color:#4ecdc4}
+        #transcript{margin-top:10px;font-size:15px;max-width:400px;text-align:center;line-height:1.5;min-height:24px;color:#ccc}
+
+        /* Conversation */
+        #conv{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);width:min(500px,90vw);max-height:160px;overflow-y:auto;scrollbar-width:none;mask-image:linear-gradient(transparent,black 30%,black)}
+        #conv::-webkit-scrollbar{display:none}
+        .msg{padding:6px 12px;margin:3px 0;font-size:12px;border-radius:8px;animation:fadeUp .3s ease;max-width:85%}
+        .msg.user{color:#888;margin-left:auto;text-align:right}
+        .msg.ai{color:#ddd;background:rgba(255,255,255,.03)}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+        /* Controls */
+        #ctrls{position:fixed;bottom:12px;display:flex;gap:10px}
+        .c{background:rgba(255,255,255,.05);border:1px solid #222;color:#666;padding:7px 12px;font-size:11px;border-radius:6px;cursor:pointer;font-family:inherit}
+        .c:hover{border-color:#444;color:#aaa}
     </style>
 </head>
 <body>
-    <div id="speak-bar"></div>
-    <header>
-        <span class="logo">ULTRON</span>
-        <span class="status" id="status-text">Online</span>
-    </header>
-
-    <div id="messages"></div>
-
-    <div id="input-bar">
-        <button class="btn" id="mic-btn" onclick="toggleMic()">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-        </button>
-        <input id="input" type="text" placeholder="Message Ultron..." autocomplete="off">
-        <button class="btn" id="send-btn" onclick="send()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-        </button>
+    <div id="ambient"></div>
+    <div id="orb" onclick="handleTap()"></div>
+    <div id="status">
+        <div id="status-text">TAP TO START</div>
+        <div id="transcript"></div>
+    </div>
+    <div id="conv"></div>
+    <div id="ctrls">
+        <button class="c" onclick="stopAll()">Stop</button>
     </div>
 
     <script>
-    const input = document.getElementById('input');
-    const messages = document.getElementById('messages');
     const synthesis = window.speechSynthesis;
-    let recognition, isListening = false, isSpeaking = false;
+    let recognition, state='idle', accum='', silenceTimer, isSpeaking=false;
 
-    // Send on Enter
-    input.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();send()} });
-
-    function send() {
-        const text = input.value.trim();
-        if(!text) return;
-        input.value = '';
-        processInput(text);
+    function handleTap(){
+        if(state==='speaking'){stopAll();return}
+        if(state==='idle'||state==='listening') startAlwaysListen();
     }
 
-    // Mic
-    function toggleMic() {
-        if(isListening) { stopMic(); return; }
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if(!SR) { input.focus(); return; }
-        if(!recognition) {
-            recognition = new SR();
-            recognition.continuous = false;
-            recognition.interimResults = true;
-            recognition.lang = 'en-US';
-            recognition.onresult = e => {
-                let final = '';
-                for(let i=e.resultIndex;i<e.results.length;i++){
-                    if(e.results[i].isFinal) final += e.results[i][0].transcript;
-                    else input.value = e.results[i][0].transcript;
-                }
-                if(final){ input.value=''; stopMic(); processInput(final.trim()); }
-            };
-            recognition.onend = () => stopMic();
-            recognition.onerror = () => stopMic();
+    function startAlwaysListen(){
+        const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+        if(!SR){setState('idle');document.getElementById('status-text').textContent='VOICE NOT SUPPORTED';return}
+        if(!recognition){
+            recognition=new SR();
+            recognition.continuous=true;
+            recognition.interimResults=true;
+            recognition.lang='en-US';
+            recognition.onresult=onResult;
+            recognition.onend=()=>{if(state!=='thinking'&&state!=='speaking')try{recognition.start()}catch(e){}};
+            recognition.onerror=e=>{if(e.error!=='aborted'&&e.error!=='not-allowed')setTimeout(()=>{try{recognition.start()}catch(e){}},300)};
         }
-        isListening = true;
-        document.getElementById('mic-btn').classList.add('on');
-        input.placeholder = 'Listening...';
         try{recognition.start()}catch(e){}
+        setState('listening');
     }
 
-    function stopMic() {
-        isListening = false;
-        document.getElementById('mic-btn').classList.remove('on');
-        input.placeholder = 'Message Ultron...';
-        try{recognition.stop()}catch(e){}
+    function onResult(e){
+        let interim='',final='';
+        for(let i=e.resultIndex;i<e.results.length;i++){
+            if(e.results[i].isFinal) final+=e.results[i][0].transcript;
+            else interim+=e.results[i][0].transcript;
+        }
+        if(interim||final){
+            setState('hearing');
+            document.getElementById('transcript').textContent=interim||final;
+            if(isSpeaking){synthesis.cancel();isSpeaking=false}
+            if(silenceTimer)clearTimeout(silenceTimer);
+        }
+        if(final){
+            accum+=' '+final;
+            document.getElementById('transcript').textContent=accum.trim();
+            silenceTimer=setTimeout(()=>{
+                const text=accum.trim();accum='';
+                if(text.split(/\s+/).length>=2) processInput(text);
+                else{document.getElementById('transcript').textContent='';setState('listening')}
+            },1800);
+        }
     }
 
-    // Process
-    function processInput(text) {
-        addMsg('user', text);
-        showDots();
-        synthesis.cancel();
+    function processInput(text){
+        document.getElementById('transcript').textContent='';
+        addMsg('user',text);
+        setState('thinking');
 
-        fetch('/decide', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({query:text, priority:'normal'})
-        })
+        fetch('/decide',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:text,priority:'normal'})})
         .then(r=>r.json())
         .then(d=>{
-            removeDots();
-            const reply = d.reasoning || d.response || 'No response.';
-            addMsg('ai', reply);
-            speak(reply);
+            const reply=d.reasoning||d.response||'';
+            if(reply){addMsg('ai',reply);speak(reply)}
+            else setState('listening');
         })
-        .catch(()=>{ removeDots(); addMsg('ai','Connection error.'); });
+        .catch(()=>{setState('listening')});
     }
 
-    // Messages
-    function addMsg(who, text) {
-        const el = document.createElement('div');
-        el.className = 'msg ' + who;
-        el.textContent = text;
-        messages.appendChild(el);
-        messages.scrollTop = messages.scrollHeight;
-        if(messages.children.length > 50) messages.removeChild(messages.firstChild);
-    }
-    function showDots() {
-        const el = document.createElement('div');
-        el.className='dots';el.id='thinking';
-        el.innerHTML='<span></span><span></span><span></span>';
-        messages.appendChild(el);
-        messages.scrollTop = messages.scrollHeight;
-    }
-    function removeDots() { const d=document.getElementById('thinking');if(d)d.remove(); }
-
-    // TTS
-    function speak(text) {
-        let clean = text.replace(/```[\s\S]*?```/g,'').replace(/`([^`]+)`/g,'$1').replace(/\*\*?([^*]+)\*\*?/g,'$1').trim();
-        if(!clean) return;
-        isSpeaking=true; document.body.classList.add('speaking');
-        const parts = clean.match(/[^.!?]+[.!?]+/g)||[clean];
+    function speak(text){
+        let clean=text.replace(/```[\s\S]*?```/g,'').replace(/`([^`]+)`/g,'$1').replace(/\*\*?([^*]+)\*\*?/g,'$1').trim();
+        if(!clean){setState('listening');return}
+        isSpeaking=true;setState('speaking');
+        const parts=clean.match(/[^.!?]+[.!?]+/g)||[clean];
         let i=0;
         function next(){
-            if(i>=parts.length||!isSpeaking){isSpeaking=false;document.body.classList.remove('speaking');return}
+            if(i>=parts.length||!isSpeaking){isSpeaking=false;setState('listening');return}
             const u=new SpeechSynthesisUtterance(parts[i].trim());
-            u.rate=1; u.pitch=.95;
+            u.rate=1;u.pitch=.95;
             const v=synthesis.getVoices();
-            const voice=v.find(x=>x.name.includes('Daniel')||x.name.includes('Samantha'))||v.find(x=>x.lang.startsWith('en'))||v[0];
+            const voice=v.find(x=>x.name.includes('Daniel')||x.name.includes('Samantha'))||v.find(x=>x.lang.startsWith('en')&&x.localService)||v[0];
             if(voice)u.voice=voice;
             u.onend=()=>{i++;setTimeout(next,80)};
-            u.onerror=()=>{isSpeaking=false;document.body.classList.remove('speaking')};
+            u.onerror=()=>{isSpeaking=false;setState('listening')};
             synthesis.speak(u);
         }
-        setTimeout(next,100);
+        setTimeout(next,120);
     }
 
-    // Stop on input focus
-    input.addEventListener('focus',()=>{synthesis.cancel();isSpeaking=false;document.body.classList.remove('speaking')});
+    function stopAll(){
+        synthesis.cancel();isSpeaking=false;accum='';
+        document.getElementById('transcript').textContent='';
+        setState('listening');
+    }
 
-    // Init voices
-    synthesis.getVoices();
-    speechSynthesis.onvoiceschanged=()=>{};
+    function setState(s){
+        state=s;document.body.className=s==='idle'?'':s;
+        const labels={idle:'TAP TO START',listening:'LISTENING',hearing:'',thinking:'THINKING',speaking:'SPEAKING'};
+        document.getElementById('status-text').textContent=labels[s]||'';
+    }
+
+    function addMsg(who,text){
+        const c=document.getElementById('conv'),el=document.createElement('div');
+        el.className='msg '+who;el.textContent=text;c.appendChild(el);c.scrollTop=c.scrollHeight;
+        while(c.children.length>20)c.removeChild(c.firstChild);
+    }
+
+    synthesis.getVoices();speechSynthesis.onvoiceschanged=()=>{};
     </script>
 </body>
 </html>
