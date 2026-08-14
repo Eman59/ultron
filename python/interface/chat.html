@@ -281,9 +281,9 @@
     let lastSpeechTime = 0;
     let state = 'idle'; // idle, listening, hearing, thinking, speaking
 
-    const SILENCE_THRESHOLD_MS = 1500;  // Wait this long after speech stops
-    const MIN_UTTERANCE_LENGTH = 3;     // Minimum words to process
-    const INTERRUPT_WORDS = ['stop', 'shut up', 'quiet', 'enough', 'ok stop', 'okay stop'];
+    const SILENCE_THRESHOLD_MS = 2000;  // Wait 2 seconds of silence (was 1.5)
+    const MIN_UTTERANCE_LENGTH = 4;     // Minimum 4 words to process (was 3)
+    const INTERRUPT_WORDS = ['stop', 'shut up', 'quiet', 'enough', 'ok stop', 'okay stop', 'mute'];
 
     // ═══════════════════════════════════════════════════════════
     // INIT — Start always-on listening

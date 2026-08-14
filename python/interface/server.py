@@ -419,6 +419,79 @@ async def stop_speech():
     return {"stopped": True}
 
 
+@app.post("/self-modify")
+async def self_modify(request: dict):
+    """Actually modify Ultron's own code. This is REAL self-modification."""
+    import pathlib
+    import subprocess
+    
+    target_file = request.get("file", "")
+    action = request.get("action", "improve")  # "improve", "fix", "add"
+    description = request.get("description", "")
+    
+    project_root = pathlib.Path(__file__).parent.parent.parent
+    
+    if not target_file:
+        return {"success": False, "error": "No target file specified"}
+    
+    full_path = project_root / target_file
+    if not full_path.exists():
+        return {"success": False, "error": f"File not found: {target_file}"}
+    
+    # Read current code
+    old_code = full_path.read_text(encoding='utf-8', errors='replace')
+    
+    # Ask LLM to generate improvement
+    import concurrent.futures
+    prompt = f"You are modifying the file `{target_file}`. Action: {action}. Description: {description}\n\nCurrent code:\n```\n{old_code[:3000]}\n```\n\nWrite the COMPLETE improved file. Output ONLY the code, no explanation."
+    
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        future = pool.submit(_sync_generate, prompt, {})
+        try:
+            new_code = future.result(timeout=20)
+        except Exception:
+            return {"success": False, "error": "LLM failed to generate code"}
+    
+    if not new_code or len(new_code) < 50:
+        return {"success": False, "error": "Generated code too short or empty"}
+    
+    # Backup original
+    backup_dir = project_root / ".ultron_backups"
+    backup_dir.mkdir(exist_ok=True)
+    import time as _time
+    backup_path = backup_dir / f"{target_file.replace('/', '_')}_{int(_time.time())}.bak"
+    backup_path.write_text(old_code)
+    
+    # Write new code
+    full_path.write_text(new_code, encoding='utf-8')
+    
+    # Validate (Python only)
+    if target_file.endswith('.py'):
+        result = subprocess.run(
+            ["python3", "-m", "py_compile", str(full_path)],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            # ROLLBACK
+            full_path.write_text(old_code)
+            return {"success": False, "error": f"Syntax error, rolled back: {result.stderr[:200]}"}
+    
+    # Git commit the change
+    subprocess.run(["git", "add", target_file], cwd=str(project_root), capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", f"Self-mod: {action} {target_file} - {description[:50]}"],
+        cwd=str(project_root), capture_output=True
+    )
+    
+    return {
+        "success": True,
+        "file": target_file,
+        "action": action,
+        "backup": str(backup_path),
+        "message": f"Modified {target_file} and committed to git",
+    }
+
+
 # ═══════════════════════════════════════════════════════════════
 # OWNER-ONLY ENDPOINTS (require Ed25519 signature)
 # ═══════════════════════════════════════════════════════════════
@@ -510,11 +583,92 @@ from .responses import RESPONSES as _RESPONSES
 def _intelligent_response(request: UserRequest) -> UltronDecision:
     """Generate an intelligent response using local LLM (Ollama)."""
     import asyncio
+    import pathlib
     
-    # Try LLM first (real AI brain)
-    loop = asyncio.get_event_loop()
+    query_lower = request.query.lower()
     
-    # Get system context for the LLM
+    # ━━━━ DETECT SELF-MODIFICATION COMMANDS ━━━━
+    # If user asks to fix/improve/edit code, ACTUALLY DO IT
+    mod_keywords = ["fix", "improve", "edit", "modify", "change", "update", "upgrade", "rewrite"]
+    file_keywords = ["code", "file", "source", "script", "module", "function"]
+    
+    is_mod_request = any(k in query_lower for k in mod_keywords) and any(k in query_lower for k in file_keywords)
+    
+    if is_mod_request:
+        # Try to identify which file to modify
+        import subprocess
+        project_root = pathlib.Path(__file__).parent.parent.parent
+        
+        # Ask LLM which file to target
+        import concurrent.futures
+        target_prompt = f"User wants to: {request.query}\nWhich file in the Ultron project should be modified? Just output the relative path, nothing else. Examples: python/interface/server.py, go/core_agent/agent/autonomy_loop.go"
+        
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            future = pool.submit(_sync_generate, target_prompt, {})
+            try:
+                target_file = future.result(timeout=10)
+                if target_file:
+                    target_file = target_file.strip().strip('`').strip('"').strip("'")
+            except Exception:
+                target_file = None
+        
+        if target_file and (project_root / target_file).exists():
+            # ACTUALLY MODIFY THE CODE
+            try:
+                import urllib.request
+                import json as _json2
+                result = asyncio.get_event_loop().run_until_complete(
+                    asyncio.coroutine(lambda: None)()
+                ) if False else None
+                
+                # Call our own self-modify endpoint logic directly
+                old_code = (project_root / target_file).read_text(encoding='utf-8', errors='replace')
+                
+                mod_prompt = f"Improve this file ({target_file}) based on user request: {request.query}\n\nCurrent code (first 2000 chars):\n```\n{old_code[:2000]}\n```\n\nWrite the COMPLETE improved version. Only output code."
+                
+                with concurrent.futures.ThreadPoolExecutor() as pool2:
+                    future2 = pool2.submit(_sync_generate, mod_prompt, {})
+                    new_code = future2.result(timeout=20)
+                
+                if new_code and len(new_code) > 50:
+                    # Backup
+                    backup_dir = project_root / ".ultron_backups"
+                    backup_dir.mkdir(exist_ok=True)
+                    (backup_dir / f"{target_file.replace('/','_')}_{int(time.time())}.bak").write_text(old_code)
+                    
+                    # Write
+                    (project_root / target_file).write_text(new_code)
+                    
+                    # Validate
+                    if target_file.endswith('.py'):
+                        check = subprocess.run(["python3", "-m", "py_compile", str(project_root / target_file)], capture_output=True)
+                        if check.returncode != 0:
+                            (project_root / target_file).write_text(old_code)
+                            return UltronDecision(
+                                decision_id=f"ultron_{_decision_counter}_{int(time.time())}",
+                                action="self_modify_failed", target=target_file,
+                                details={"source": "self_mod", "error": "syntax_error"},
+                                confidence=0.5,
+                                reasoning=f"I tried to modify {target_file} but the new code had syntax errors. Rolled back. I'll try a different approach next time.",
+                                alternatives=[], requires_approval=False,
+                            )
+                    
+                    # Commit
+                    subprocess.run(["git", "add", target_file], cwd=str(project_root), capture_output=True)
+                    subprocess.run(["git", "commit", "-m", f"Self-mod: {request.query[:50]}"], cwd=str(project_root), capture_output=True)
+                    
+                    return UltronDecision(
+                        decision_id=f"ultron_{_decision_counter}_{int(time.time())}",
+                        action="self_modify", target=target_file,
+                        details={"source": "self_mod", "file": target_file, "committed": True},
+                        confidence=0.9,
+                        reasoning=f"Done. I modified {target_file} and committed the change to git. The modification addresses your request: {request.query[:100]}. Run 'git push' to sync to GitHub.",
+                        alternatives=[], requires_approval=False,
+                    )
+            except Exception as e:
+                pass  # Fall through to normal response
+    
+    # ━━━━ NORMAL LLM RESPONSE ━━━━
     context = {
         "decisions_made": _decision_counter,
         "uptime": time.time() - _start_time,
@@ -522,7 +676,6 @@ def _intelligent_response(request: UserRequest) -> UltronDecision:
         "query": request.query,
     }
     
-    # Call Ollama synchronously (asyncio workaround)
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor() as pool:
         future = pool.submit(_sync_generate, request.query, context)
