@@ -49,3 +49,6 @@ data/
 .ultron_sandbox/
 .ultron_backups/
 .ultron/
+
+# Chunk files (context compaction artifacts)
+chunk_*.txt

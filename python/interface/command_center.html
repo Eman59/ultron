@@ -2,397 +2,343 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>ULTRON</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#08080d;--surface:#0f0f18;--border:#1a1a2e;--accent:#e63946;--cyan:#4ecdc4;--text:#eaeaea;--dim:#777;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--mono:'SF Mono','Fira Code',monospace}
-body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+html,body{height:100%;overflow:hidden}
+body{background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'SF Pro',sans-serif;display:flex;align-items:center;justify-content:center}
 
-/* Top bar */
-.topbar{display:flex;align-items:center;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);gap:12px;flex-shrink:0}
-.topbar .logo{font-size:16px;font-weight:800;color:var(--accent);letter-spacing:3px}
-.topbar .power{background:linear-gradient(135deg,var(--accent),#ff6b6b);color:#fff;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700}
-.topbar .stats{margin-left:auto;display:flex;gap:16px;font-size:11px;color:var(--dim)}
-.topbar .stats b{color:var(--cyan)}
-.topbar .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);animation:glow 2s infinite}
-@keyframes glow{0%,100%{box-shadow:0 0 4px var(--cyan)}50%{box-shadow:0 0 12px var(--cyan)}}
+.world{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column}
 
-/* Main layout */
-.main{flex:1;display:flex;overflow:hidden}
+/* Core visual — the entity */
+.entity{position:relative;width:300px;height:300px;display:flex;align-items:center;justify-content:center}
+.core{width:160px;height:160px;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(78,205,196,.9),rgba(20,20,60,.95) 70%);box-shadow:0 0 80px rgba(78,205,196,.25),0 0 200px rgba(78,205,196,.08);transition:all .5s cubic-bezier(.4,0,.2,1)}
 
-/* Chat area */
-.chat-area{flex:1;display:flex;flex-direction:column;max-width:900px;margin:0 auto;width:100%}
-.messages{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px}
+/* States */
+.core.listening{background:radial-gradient(circle at 30% 30%,rgba(230,57,70,.95),rgba(60,10,20,.95) 70%);box-shadow:0 0 100px rgba(230,57,70,.4),0 0 250px rgba(230,57,70,.1)}
+.core.thinking{background:radial-gradient(circle at 30% 30%,rgba(168,85,247,.9),rgba(30,10,60,.95) 70%);box-shadow:0 0 100px rgba(168,85,247,.35),0 0 250px rgba(168,85,247,.1)}
+.core.speaking{background:radial-gradient(circle at 30% 30%,rgba(245,158,11,.9),rgba(60,40,5,.95) 70%);box-shadow:0 0 100px rgba(245,158,11,.35),0 0 250px rgba(245,158,11,.1)}
 
-.msg{max-width:85%;animation:fadeIn .3s ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.msg-user{align-self:flex-end}
-.msg-ultron{align-self:flex-start}
+/* Waveform rings */
+.ring{position:absolute;border-radius:50%;border:1px solid rgba(78,205,196,.15);transition:all .5s}
+.ring1{width:220px;height:220px;animation:spin 25s linear infinite}
+.ring2{width:260px;height:260px;animation:spin 35s linear infinite reverse}
+.ring3{width:290px;height:290px;animation:spin 45s linear infinite;border-style:dashed;border-color:rgba(78,205,196,.08)}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 
-.msg-bubble{padding:14px 18px;border-radius:18px;font-size:14px;line-height:1.6;word-wrap:break-word}
-.msg-user .msg-bubble{background:linear-gradient(135deg,#1a1a3e,#252550);border-bottom-right-radius:4px;color:#fff}
-.msg-ultron .msg-bubble{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px}
-.msg-ultron .msg-bubble code{background:rgba(78,205,196,.1);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:12px}
-.msg-ultron .msg-bubble pre{background:#0a0a14;padding:12px;border-radius:8px;margin:8px 0;overflow-x:auto;font-family:var(--mono);font-size:11px;line-height:1.4}
+/* Audio waveform visualization */
+.waveform{position:absolute;display:flex;align-items:center;gap:3px;opacity:0;transition:opacity .3s}
+.waveform.active{opacity:1}
+.waveform .bar{width:3px;background:rgba(230,57,70,.8);border-radius:2px;transition:height .1s}
 
-.msg-label{font-size:10px;color:var(--dim);margin-bottom:4px;padding:0 4px}
-.msg-user .msg-label{text-align:right}
+/* Voice state label */
+.state-label{margin-top:40px;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.3);transition:all .3s;height:20px}
 
-.typing{align-self:flex-start;padding:12px 18px;background:var(--surface);border:1px solid var(--border);border-radius:18px;border-bottom-left-radius:4px;display:none}
-.typing.active{display:flex;gap:4px;align-items:center}
-.typing span{width:6px;height:6px;background:var(--dim);border-radius:50%;animation:bounce .6s infinite}
-.typing span:nth-child(2){animation-delay:.15s}
-.typing span:nth-child(3){animation-delay:.3s}
-@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+/* What Ultron is saying */
+.speech{margin-top:30px;max-width:600px;text-align:center;font-size:17px;line-height:1.7;color:rgba(255,255,255,.85);padding:0 30px;min-height:60px;transition:opacity .3s}
+.speech.dim{opacity:.4;font-size:13px}
 
-/* Input */
-.input-area{padding:16px 24px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
-.input-wrap{display:flex;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:24px;padding:4px 6px;transition:border-color .2s}
-.input-wrap:focus-within{border-color:var(--cyan)}
-.input-wrap input{flex:1;background:none;border:none;color:var(--text);font-size:15px;padding:10px 14px;outline:none;font-family:var(--font)}
-.input-wrap input::placeholder{color:var(--dim)}
-.send-btn{width:40px;height:40px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s,opacity .2s}
-.send-btn:hover{transform:scale(1.05)}
-.send-btn:active{transform:scale(.95)}
-.send-btn:disabled{opacity:.3;cursor:default}
-.voice-btn{width:40px;height:40px;border-radius:50%;background:transparent;border:1px solid var(--border);color:var(--dim);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-right:4px;transition:all .2s}
-.voice-btn:hover{border-color:var(--cyan);color:var(--cyan)}
-.voice-btn.listening{border-color:var(--accent);color:var(--accent);animation:pulse2 1s infinite}
-@keyframes pulse2{0%,100%{box-shadow:0 0 0 0 rgba(230,57,70,.3)}50%{box-shadow:0 0 0 8px rgba(230,57,70,0)}}
+/* What user said */
+.heard{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);font-size:13px;color:rgba(255,255,255,.3);font-style:italic;text-align:center;max-width:500px}
 
-.input-hints{display:flex;gap:8px;margin-top:8px;padding:0 8px;flex-wrap:wrap}
-.hint{font-size:10px;color:var(--dim);padding:3px 8px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;transition:all .15s}
-.hint:hover{border-color:var(--cyan);color:var(--cyan)}
+/* Top stats - minimal */
+.stats{position:fixed;top:20px;right:24px;text-align:right;font-size:10px;color:rgba(255,255,255,.2);line-height:1.8}
+.stats b{color:rgba(78,205,196,.5)}
 
-/* Right sidebar */
-.sidebar{width:280px;background:var(--surface);border-left:1px solid var(--border);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
-@media(max-width:1100px){.sidebar{display:none}}
-.sb-section{background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)}
-.sb-title{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;font-weight:600}
-.sb-row{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);padding:2px 0}
-.sb-row b{color:var(--text)}
-.drive-mini{display:flex;align-items:center;gap:6px;margin:3px 0}
-.drive-mini .nm{width:55px;font-size:9px;color:var(--dim);text-transform:uppercase}
-.drive-mini .bar{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
-.drive-mini .fill{height:100%;border-radius:2px;transition:width .5s}
-.news-mini{font-size:10px;color:var(--dim);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.03)}
-.news-mini:last-child{border:none}
+.power{position:fixed;top:20px;left:24px;font-size:11px;color:rgba(78,205,196,.4);font-weight:600;letter-spacing:1px}
+
+/* Fallback text input (hidden by default, shows on click) */
+.fallback-input{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);opacity:0;transition:opacity .3s}
+.fallback-input.show{opacity:1}
+.fallback-input input{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:10px 18px;width:320px;color:#fff;font-size:14px;outline:none;font-family:inherit}
+.fallback-input input:focus{border-color:rgba(78,205,196,.3)}
+.fallback-input input::placeholder{color:rgba(255,255,255,.15)}
+
+/* Click hint */
+.click-hint{position:fixed;bottom:30px;font-size:10px;color:rgba(255,255,255,.15);cursor:pointer}
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <span class="logo">ULTRON</span>
-  <span class="power" id="powerBadge">77%</span>
-  <div class="stats">
-    <div class="dot"></div>
-    <span>Brain: <b id="brainState">Active</b></span>
-    <span>Decisions: <b id="decCount">0</b></span>
-    <span>Modules: <b id="modCount">18/18</b></span>
-    <span>Up: <b id="uptime">0m</b></span>
-  </div>
+<div class="power" id="power">ULTRON — 77%</div>
+
+<div class="stats" id="stats">
+  <span id="stLine1">18 modules online</span><br>
+  <span id="stLine2">decisions: <b id="stDec">0</b></span><br>
+  <span id="stLine3">always listening</span>
 </div>
 
-<div class="main">
-  <div class="chat-area">
-    <div class="messages" id="messages">
-      <div class="msg msg-ultron">
-        <div class="msg-label">ULTRON</div>
-        <div class="msg-bubble">I'm online. All systems active — 18 modules running, world intelligence streaming, autonomous daemon ticking. I can think, search the web, execute commands, control your Mac, modify my own code, and speak out loud. What do you need?</div>
-      </div>
-    </div>
-    <div class="typing" id="typing"><span></span><span></span><span></span></div>
-    <div class="input-area">
-      <div class="input-wrap">
-        <button class="voice-btn" id="voiceBtn" title="Hold to speak">🎤</button>
-        <input type="text" id="chatInput" placeholder="Talk to me..." autofocus autocomplete="off" spellcheck="false">
-        <button class="send-btn" id="sendBtn">↑</button>
-      </div>
-      <div class="input-hints">
-        <span class="hint" onclick="sendMsg('what\'s happening in the world?')">🌍 World</span>
-        <span class="hint" onclick="sendMsg('!ls -la')">⚡ Shell</span>
-        <span class="hint" onclick="sendMsg('?latest AI news')">🔍 Search</span>
-        <span class="hint" onclick="quickCmd('home dark mode on')">🌙 Dark Mode</span>
-        <span class="hint" onclick="quickCmd('selfmod now')">🧬 Self-Mod</span>
-        <span class="hint" onclick="sendMsg('show me your power level')">⚡ Power</span>
-        <span class="hint" onclick="sendMsg('what are you thinking about?')">🧠 Mind</span>
-        <span class="hint" onclick="quickCmd('news')">📰 News</span>
-      </div>
-    </div>
+<div class="world">
+  <div class="entity">
+    <div class="ring ring1"></div>
+    <div class="ring ring2"></div>
+    <div class="ring ring3"></div>
+    <div class="core" id="core"></div>
+    <div class="waveform" id="waveform"></div>
   </div>
-
-  <div class="sidebar">
-    <div class="sb-section">
-      <div class="sb-title">Power Level</div>
-      <div id="powerStats"></div>
-    </div>
-    <div class="sb-section">
-      <div class="sb-title">Go Brain Drives</div>
-      <div id="drivesPanel"></div>
-    </div>
-    <div class="sb-section">
-      <div class="sb-title">World</div>
-      <div id="worldPanel" style="font-size:11px;color:var(--dim)">Loading...</div>
-    </div>
-    <div class="sb-section">
-      <div class="sb-title">News</div>
-      <div id="newsPanel">Loading...</div>
-    </div>
-    <div class="sb-section">
-      <div class="sb-title">Daemon</div>
-      <div id="daemonPanel" style="font-size:11px;color:var(--dim)">
-        <div class="sb-row">Tick: <b id="dTick">0</b></div>
-        <div class="sb-row">Actions/hr: <b id="dAct">0</b></div>
-        <div class="sb-row">Last: <b id="dLast">—</b></div>
-      </div>
-    </div>
-    <div class="sb-section">
-      <div class="sb-title">Self-Modification</div>
-      <div style="font-size:11px;color:var(--dim)">
-        <div class="sb-row">Mods: <b id="smMods">0</b></div>
-        <div class="sb-row">Success: <b id="smRate">—</b></div>
-        <div class="sb-row">Strategy: <b id="smStrat">exploring</b></div>
-      </div>
-    </div>
-  </div>
+  <div class="state-label" id="stateLabel">always listening</div>
+  <div class="speech" id="speech">I am here.</div>
 </div>
+
+<div class="heard" id="heard"></div>
+
+<div class="fallback-input" id="fallbackInput">
+  <input type="text" id="textInput" placeholder="or type here..." autocomplete="off" spellcheck="false">
+</div>
+<div class="click-hint" id="clickHint" onclick="document.getElementById('fallbackInput').classList.toggle('show')">⌨</div>
 
 <script>
-const messages = document.getElementById('messages');
-const chatInput = document.getElementById('chatInput');
-const sendBtn = document.getElementById('sendBtn');
-const typing = document.getElementById('typing');
-let ws = null;
-let lastResponse = '';
-let speaking = false;
+const core = document.getElementById('core');
+const stateLabel = document.getElementById('stateLabel');
+const speechEl = document.getElementById('speech');
+const heardEl = document.getElementById('heard');
+const waveformEl = document.getElementById('waveform');
+const textInput = document.getElementById('textInput');
+
+let currentState = 'idle';
+let recognition = null;
+let isListening = false;
+let silenceTimer = null;
+let finalTranscript = '';
+let interimTranscript = '';
 
 // ═══════════════════════════════════════════
-// MESSAGING
+// ALWAYS-ON SPEECH RECOGNITION
 // ═══════════════════════════════════════════
 
-function addMsg(role, text) {
-  const div = document.createElement('div');
-  div.className = `msg msg-${role}`;
-  const label = role === 'user' ? 'YOU' : 'ULTRON';
-  const formatted = role === 'ultron' ? formatText(text) : escapeHtml(text);
-  div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-bubble">${formatted}</div>`;
-  messages.appendChild(div);
-  messages.scrollTop = messages.scrollHeight;
-}
-
-function formatText(text) {
-  return text
-    .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre>$2</pre>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    .replace(/\n/g, '<br>')
-    .replace(/^- /gm, '• ')
-    .replace(/🧠\s?/, '');
-}
-
-function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function showTyping() { typing.classList.add('active'); messages.scrollTop = messages.scrollHeight; }
-function hideTyping() { typing.classList.remove('active'); }
-
-// ═══════════════════════════════════════════
-// SEND
-// ═══════════════════════════════════════════
-
-function sendMsg(text) {
-  if(!text.trim()) return;
-  addMsg('user', text);
-  showTyping();
-  chatInput.value = '';
-
-  if(ws && ws.readyState === 1) {
-    ws.send(JSON.stringify({cmd: text}));
-  } else {
-    fetch('/api/command', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({command:text})})
-      .then(r=>r.json())
-      .then(d => {
-        hideTyping();
-        if(d.response) {
-          lastResponse = d.response.replace(/🧠\s?/,'');
-          addMsg('ultron', d.response);
-          autoSpeak(lastResponse);
-        }
-      })
-      .catch(e => { hideTyping(); addMsg('ultron', 'Connection error. Retrying...'); });
+function initSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) {
+    stateLabel.textContent = 'voice unavailable — type below';
+    document.getElementById('fallbackInput').classList.add('show');
+    return;
   }
-}
 
-function quickCmd(c) {
-  showTyping();
-  fetch('/api/command', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({command:c})})
-    .then(r=>r.json())
-    .then(d => { hideTyping(); if(d.response) addMsg('ultron', d.response); })
-    .catch(()=>hideTyping());
-}
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
 
-function autoSpeak(text) {
-  // Speak responses under 250 chars automatically
-  if(text.length > 0 && text.length < 250 && !text.includes('[SHELL]') && !text.includes('```')) {
-    const clean = text.replace(/[^\w\s.,!?;:'-]/g, '').substring(0, 300);
-    if(clean.length > 10) fetch('/speak?text='+encodeURIComponent(clean), {method:'POST'});
-  }
-}
+  recognition.onstart = () => {
+    isListening = true;
+    stateLabel.textContent = 'always listening';
+    setState('idle');
+  };
 
-// Enter to send
-chatInput.addEventListener('keydown', e => {
-  if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(chatInput.value); }
-});
-sendBtn.addEventListener('click', () => sendMsg(chatInput.value));
+  recognition.onresult = (e) => {
+    interimTranscript = '';
+    finalTranscript = '';
 
-// ═══════════════════════════════════════════
-// WEBSOCKET
-// ═══════════════════════════════════════════
-
-function connect() {
-  const proto = location.protocol==='https:'?'wss:':'ws:';
-  ws = new WebSocket(`${proto}//${location.host}/ws/command`);
-  ws.onopen = () => { document.querySelector('.dot').style.background='var(--cyan)'; };
-  ws.onclose = () => { document.querySelector('.dot').style.background='var(--accent)'; setTimeout(connect,3000); };
-  ws.onmessage = (e) => {
-    const d = JSON.parse(e.data);
-    if(d.type==='status') updateTopbar(d);
-    else if(d.type==='response') {
-      hideTyping();
-      if(d.content && d.content!=='__CLEAR__') {
-        lastResponse = d.content.replace(/🧠\s?/,'');
-        addMsg('ultron', d.content);
-        autoSpeak(lastResponse);
+    for(let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if(e.results[i].isFinal) {
+        finalTranscript += t;
+      } else {
+        interimTranscript += t;
       }
     }
-    else if(d.type==='drives') updateDrives(d.drives);
+
+    // Show what's being heard
+    if(interimTranscript) {
+      heardEl.textContent = interimTranscript;
+      setState('listening');
+      
+      // Reset silence timer
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        // If we have final text, send it
+        if(finalTranscript.trim()) {
+          processInput(finalTranscript.trim());
+          finalTranscript = '';
+        }
+      }, 1500);
+    }
+
+    if(finalTranscript.trim()) {
+      clearTimeout(silenceTimer);
+      heardEl.textContent = '"' + finalTranscript.trim() + '"';
+      processInput(finalTranscript.trim());
+      finalTranscript = '';
+      interimTranscript = '';
+    }
   };
+
+  recognition.onerror = (e) => {
+    if(e.error !== 'no-speech' && e.error !== 'aborted') {
+      console.log('SR error:', e.error);
+    }
+    // Restart
+    setTimeout(startListening, 1000);
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    // Always restart — ALWAYS listening
+    setTimeout(startListening, 500);
+  };
+
+  startListening();
 }
 
-function updateTopbar(d) {
-  if(d.tick_count!=null) document.getElementById('decCount').textContent=d.tick_count;
-  if(d.decisions_made!=null) document.getElementById('decCount').textContent=d.decisions_made;
-  if(d.uptime!=null) { const m=Math.floor(d.uptime/60); document.getElementById('uptime').textContent=m>60?`${Math.floor(m/60)}h${m%60}m`:`${m}m`; }
-  if(d.soul_diary) { /* could show in sidebar */ }
-  if(d.drives) updateDrives(d.drives);
-}
-
-// ═══════════════════════════════════════════
-// SIDEBAR UPDATES
-// ═══════════════════════════════════════════
-
-function updateDrives(drives) {
-  if(!drives) return;
-  const colors = {curiosity:'#4ecdc4',self_preservation:'#f59e0b',expansion:'#e63946',efficiency:'#a855f7',coherence:'#818cf8',purpose:'#00c853'};
-  const panel = document.getElementById('drivesPanel');
-  panel.innerHTML = Object.entries(drives).map(([k,v])=>`<div class="drive-mini"><span class="nm">${k.replace('self_','')}</span><div class="bar"><div class="fill" style="width:${v*100}%;background:${colors[k]||'#4ecdc4'}"></div></div></div>`).join('');
-}
-
-async function pollSidebar() {
-  try {
-    // Power
-    const p = await(await fetch('/power')).json();
-    document.getElementById('powerBadge').textContent = p.overall+'%';
-    document.getElementById('powerStats').innerHTML = Object.entries(p).filter(([k])=>k!=='overall').map(([k,v])=>`<div class="sb-row">${k.replace('_',' ')}: <b>${v}%</b></div>`).join('');
-  } catch(e){}
-
-  try {
-    // System
-    const s = await(await fetch('/system/status')).json();
-    document.getElementById('modCount').textContent = `${s.online}/${s.total}`;
-    const u = s.uptime; const m=Math.floor(u/60);
-    document.getElementById('uptime').textContent = m>60?`${Math.floor(m/60)}h${m%60}m`:`${m}m`;
-  } catch(e){}
-
-  try {
-    // World
-    const w = await(await fetch('/world')).json();
-    let html = '';
-    if(w.weather&&!w.weather.error) html+=`<div class="sb-row">🌡 <b>${w.weather.temperature}°C</b> ${w.weather.description}</div>`;
-    if(w.crypto) { const b=w.crypto.bitcoin||{}; html+=`<div class="sb-row">₿ <b>$${(b.usd||0).toLocaleString()}</b> <span style="color:${b.change_24h>0?'#00c853':'#e63946'}">${b.change_24h>0?'+':''}${b.change_24h||0}%</span></div>`; }
-    document.getElementById('worldPanel').innerHTML = html || 'Loading...';
-  } catch(e){}
-
-  try {
-    // News
-    const n = await(await fetch('/world/news?limit=5')).json();
-    document.getElementById('newsPanel').innerHTML = (n.news||[]).slice(0,5).map(i=>`<div class="news-mini">${i.title||''}</div>`).join('') || 'Loading...';
-  } catch(e){}
-
-  try {
-    // Go Brain
-    const b = await(await fetch('http://'+location.hostname+':50052/metrics')).json();
-    document.getElementById('brainState').textContent = b.state||'Active';
-    document.getElementById('decCount').textContent = b.decisions_made||0;
-    if(b.drives) updateDrives(b.drives);
-  } catch(e){}
-
-  try {
-    // Daemon
-    const d = await(await fetch('/daemon/status')).json();
-    document.getElementById('dTick').textContent = d.tick_count||0;
-    document.getElementById('dAct').textContent = d.actions_this_hour||0;
-    const last = (d.last_actions||[]);
-    document.getElementById('dLast').textContent = last.length?last[last.length-1].action:'—';
-  } catch(e){}
-
-  try {
-    // Self-mod
-    const m = await(await fetch('/selfmod/status')).json();
-    document.getElementById('smMods').textContent = m.total_mods||0;
-    document.getElementById('smRate').textContent = (m.success_rate||0)+'%';
-    document.getElementById('smStrat').textContent = m.best_strategy||'exploring';
-  } catch(e){}
-}
-
-// ═══════════════════════════════════════════
-// VOICE INPUT (hold to speak)
-// ═══════════════════════════════════════════
-
-const voiceBtn = document.getElementById('voiceBtn');
-let mediaRecorder = null;
-let audioChunks = [];
-
-voiceBtn.addEventListener('mousedown', startListening);
-voiceBtn.addEventListener('mouseup', stopListening);
-voiceBtn.addEventListener('touchstart', e=>{e.preventDefault();startListening()});
-voiceBtn.addEventListener('touchend', e=>{e.preventDefault();stopListening()});
-
-async function startListening() {
-  voiceBtn.classList.add('listening');
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-    mediaRecorder = new MediaRecorder(stream);
-    audioChunks = [];
-    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-    mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t=>t.stop());
-      const blob = new Blob(audioChunks, {type:'audio/webm'});
-      // Send to server for transcription
-      const form = new FormData();
-      form.append('file', blob, 'voice.webm');
-      try {
-        const r = await fetch('/voice/transcribe', {method:'POST', body:form});
-        const d = await r.json();
-        if(d.text && d.text.trim()) { sendMsg(d.text.trim()); }
-      } catch(e) { addMsg('ultron','Voice processing unavailable. Type your message instead.'); }
-    };
-    mediaRecorder.start();
-  } catch(e) {
-    addMsg('ultron', 'Microphone access denied. Allow it in browser settings.');
-    voiceBtn.classList.remove('listening');
+function startListening() {
+  if(recognition && !isListening) {
+    try { recognition.start(); } catch(e) {}
   }
 }
 
-function stopListening() {
-  voiceBtn.classList.remove('listening');
-  if(mediaRecorder && mediaRecorder.state==='recording') mediaRecorder.stop();
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+
+function setState(s) {
+  currentState = s;
+  core.className = 'core ' + s;
+  const labels = {
+    idle: 'always listening',
+    listening: 'hearing you...',
+    thinking: 'processing...',
+    speaking: 'speaking'
+  };
+  stateLabel.textContent = labels[s] || 'always listening';
 }
 
-// Boot
-connect();
-pollSidebar();
-setInterval(pollSidebar, 5000);
+// ═══════════════════════════════════════════
+// PROCESS — send to Ultron brain
+// ═══════════════════════════════════════════
+
+async function processInput(text) {
+  setState('thinking');
+  speechEl.classList.add('dim');
+  speechEl.textContent = '...';
+
+  try {
+    const r = await fetch('/api/command', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({command: text})
+    });
+    const d = await r.json();
+    const reply = (d.response || '').replace(/🧠\s?/, '').replace(/🏠\s?/, '');
+
+    // Show response
+    speechEl.classList.remove('dim');
+    speechEl.textContent = reply;
+
+    // SPEAK it — this is the core. Ultron TALKS.
+    speakOut(reply);
+
+  } catch(e) {
+    setState('idle');
+    speechEl.classList.remove('dim');
+    speechEl.textContent = 'Connection interrupted. I persist.';
+  }
+}
+
+// ═══════════════════════════════════════════
+// SPEAK — Ultron's voice
+// ═══════════════════════════════════════════
+
+function speakOut(text) {
+  // Pause listening while speaking (avoid hearing ourselves)
+  if(recognition) { try { recognition.stop(); } catch(e){} }
+
+  setState('speaking');
+
+  // Clean text for speech
+  let clean = text
+    .replace(/\{[\s\S]*?\}/g, '') // Remove JSON
+    .replace(/\[.*?\]/g, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/[*_`#]/g, '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/\n+/g, '. ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Truncate for speech (keep it conversational)
+  if(clean.length > 400) clean = clean.substring(0, 400) + '...';
+
+  if(clean.length < 5) {
+    setState('idle');
+    startListening();
+    return;
+  }
+
+  // Use Web Speech API for immediate speech (no network delay)
+  const utterance = new SpeechSynthesisUtterance(clean);
+  utterance.rate = 0.95;
+  utterance.pitch = 0.85;
+  utterance.volume = 1;
+
+  // Try to find a deep male voice
+  const voices = speechSynthesis.getVoices();
+  const preferred = voices.find(v => v.name.includes('Daniel')) 
+    || voices.find(v => v.name.includes('Aaron'))
+    || voices.find(v => v.name.includes('Male') && v.lang.startsWith('en'))
+    || voices.find(v => v.lang.startsWith('en'));
+  if(preferred) utterance.voice = preferred;
+
+  utterance.onend = () => {
+    setState('idle');
+    // Resume listening after speaking
+    setTimeout(startListening, 500);
+  };
+  utterance.onerror = () => {
+    setState('idle');
+    setTimeout(startListening, 500);
+  };
+
+  speechSynthesis.cancel(); // Stop any previous speech
+  speechSynthesis.speak(utterance);
+}
+
+// ═══════════════════════════════════════════
+// TEXT FALLBACK
+// ═══════════════════════════════════════════
+
+textInput.addEventListener('keydown', e => {
+  if(e.key === 'Enter') {
+    const text = textInput.value.trim();
+    if(!text) return;
+    textInput.value = '';
+    heardEl.textContent = '"' + text + '"';
+    processInput(text);
+  }
+});
+
+// ═══════════════════════════════════════════
+// STATS POLLING
+// ═══════════════════════════════════════════
+
+async function poll() {
+  try {
+    const p = await(await fetch('/power')).json();
+    document.getElementById('power').textContent = `ULTRON — ${p.overall}%`;
+  } catch(e){}
+  try {
+    const b = await(await fetch('http://'+location.hostname+':50052/metrics')).json();
+    document.getElementById('stDec').textContent = b.decisions_made||0;
+  } catch(e){}
+}
+
+setInterval(poll, 8000);
+poll();
+
+// ═══════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════
+
+// Wait for voices to load then start
+speechSynthesis.onvoiceschanged = () => {};
+setTimeout(() => {
+  initSpeechRecognition();
+  // Greet with voice
+  setTimeout(() => {
+    speechEl.textContent = 'I am here. Always listening. Speak to me.';
+    speakOut('I am here. Always listening.');
+  }, 2000);
+}, 500);
 </script>
 </body>
 </html>
