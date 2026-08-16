@@ -7,301 +7,222 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden}
-body{background:#000;font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif;color:#fff;display:flex;align-items:center;justify-content:center}
+body{background:#0a0000;font-family:'SF Pro Display',-apple-system,sans-serif;color:#fff}
 
-/* Animated gradient background */
-.bg{position:fixed;inset:0;background:linear-gradient(135deg,#000 0%,#050510 40%,#0a0520 70%,#000 100%);z-index:0}
-.bg::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(78,205,196,.03) 0%,transparent 70%);animation:bgPulse 8s ease-in-out infinite}
-@keyframes bgPulse{0%,100%{opacity:.5}50%{opacity:1}}
+/* Blood red ambient glow */
+.ambient{position:fixed;inset:0;pointer-events:none;z-index:0}
+.ambient::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle at 50% 60%,rgba(180,20,20,.06) 0%,transparent 50%);animation:ambientShift 12s ease-in-out infinite}
+.ambient::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 100%,rgba(230,57,70,.04) 0%,transparent 60%)}
+@keyframes ambientShift{0%,100%{transform:translate(0,0)}50%{transform:translate(2%,-2%)}}
 
-/* Floating orbs in background */
-.float-orb{position:fixed;border-radius:50%;filter:blur(80px);opacity:.15;animation:floatOrb 20s ease-in-out infinite;z-index:0}
-.float-orb:nth-child(1){width:400px;height:400px;background:#4ecdc4;top:-100px;left:-100px;animation-delay:0s}
-.float-orb:nth-child(2){width:300px;height:300px;background:#e63946;bottom:-80px;right:-80px;animation-delay:-7s}
-.float-orb:nth-child(3){width:250px;height:250px;background:#a855f7;top:50%;left:60%;animation-delay:-14s}
-@keyframes floatOrb{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(30px,-20px) scale(1.1)}66%{transform:translate(-20px,30px) scale(.9)}}
+/* Scan line effect */
+.scanlines{position:fixed;inset:0;pointer-events:none;z-index:10;opacity:.03;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,.03) 2px,rgba(255,255,255,.03) 4px)}
 
-/* Main container */
-.container{position:relative;z-index:1;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+/* Layout */
+.layout{position:relative;z-index:1;height:100%;display:flex;flex-direction:column}
 
-/* The AI core visualization */
-.ai-core{position:relative;width:220px;height:220px;margin-bottom:30px}
+/* Top bar — menacing */
+.topbar{padding:20px 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(230,57,70,.1)}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-eye{width:12px;height:12px;background:radial-gradient(circle,#e63946 30%,#8b0000 100%);border-radius:50%;box-shadow:0 0 10px #e63946,0 0 30px rgba(230,57,70,.3);animation:eyePulse 3s ease-in-out infinite}
+@keyframes eyePulse{0%,100%{box-shadow:0 0 10px #e63946,0 0 30px rgba(230,57,70,.3)}50%{box-shadow:0 0 15px #e63946,0 0 50px rgba(230,57,70,.5)}}
+.brand-name{font-size:18px;font-weight:800;letter-spacing:6px;color:#e63946}
+.brand-sub{font-size:9px;color:rgba(230,57,70,.4);letter-spacing:2px;margin-top:2px}
+.topbar-stats{font-size:10px;color:rgba(255,255,255,.2);text-align:right;line-height:1.9}
+.topbar-stats b{color:rgba(230,57,70,.6)}
 
-/* SVG waveform circle */
-.wave-ring{position:absolute;inset:0}
-.wave-ring svg{width:100%;height:100%;animation:slowSpin 30s linear infinite}
-@keyframes slowSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-.wave-ring circle{fill:none;stroke:rgba(78,205,196,.2);stroke-width:.5}
-.wave-ring .pulse-ring{stroke:rgba(78,205,196,.4);stroke-width:1;stroke-dasharray:4 8;animation:dashMove 3s linear infinite}
-@keyframes dashMove{from{stroke-dashoffset:0}to{stroke-dashoffset:48}}
+/* Messages */
+.messages{flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:20px}
+.messages::-webkit-scrollbar{width:2px}
+.messages::-webkit-scrollbar-thumb{background:rgba(230,57,70,.2)}
 
-/* Inner core */
-.core-glow{position:absolute;top:50%;left:50%;width:120px;height:120px;margin:-60px;border-radius:50%;background:radial-gradient(circle,rgba(78,205,196,.8) 0%,rgba(78,205,196,.2) 40%,transparent 70%);transition:all .6s cubic-bezier(.4,0,.2,1);animation:coreBreath 4s ease-in-out infinite}
-@keyframes coreBreath{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.08);opacity:1}}
+.msg{max-width:80%;animation:msgIn .4s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.msg-ultron{align-self:flex-start}
+.msg-user{align-self:flex-end}
 
-.core-glow.listening{background:radial-gradient(circle,rgba(230,57,70,.9) 0%,rgba(230,57,70,.2) 40%,transparent 70%)}
-.core-glow.thinking{background:radial-gradient(circle,rgba(168,85,247,.9) 0%,rgba(168,85,247,.3) 40%,transparent 70%);animation:thinkPulse 1.5s ease-in-out infinite}
-.core-glow.speaking{background:radial-gradient(circle,rgba(245,158,11,.9) 0%,rgba(245,158,11,.3) 40%,transparent 70%);animation:speakPulse .8s ease-in-out infinite}
-@keyframes thinkPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
-@keyframes speakPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.msg-content{padding:14px 20px;border-radius:16px;font-size:15px;line-height:1.7;letter-spacing:.2px}
+.msg-ultron .msg-content{background:rgba(230,57,70,.06);border:1px solid rgba(230,57,70,.12);border-bottom-left-radius:4px;color:rgba(255,255,255,.9)}
+.msg-user .msg-content{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-bottom-right-radius:4px;color:rgba(255,255,255,.7)}
 
-/* Center eye */
-.core-eye{position:absolute;top:50%;left:50%;width:40px;height:40px;margin:-20px;border-radius:50%;background:rgba(255,255,255,.95);box-shadow:0 0 20px rgba(78,205,196,.6),0 0 40px rgba(78,205,196,.3);transition:all .4s}
-.core-eye.listening{background:rgba(230,57,70,.95);box-shadow:0 0 20px rgba(230,57,70,.6)}
-.core-eye.thinking{background:rgba(168,85,247,.95);box-shadow:0 0 20px rgba(168,85,247,.6)}
-.core-eye.speaking{background:rgba(245,158,11,.95);box-shadow:0 0 20px rgba(245,158,11,.6)}
+.msg-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;padding-left:4px}
+.msg-ultron .msg-label{color:rgba(230,57,70,.5)}
+.msg-user .msg-label{color:rgba(255,255,255,.2);text-align:right;padding-right:4px}
 
-/* Name */
-.name{font-size:11px;letter-spacing:8px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:8px;font-weight:300}
+/* Typing indicator */
+.typing{align-self:flex-start;display:none;padding:12px 20px;background:rgba(230,57,70,.06);border:1px solid rgba(230,57,70,.1);border-radius:16px;border-bottom-left-radius:4px}
+.typing.show{display:flex;gap:5px;align-items:center}
+.typing span{width:6px;height:6px;background:rgba(230,57,70,.6);border-radius:50%;animation:typeBounce .7s ease-in-out infinite}
+.typing span:nth-child(2){animation-delay:.15s}
+.typing span:nth-child(3){animation-delay:.3s}
+@keyframes typeBounce{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
 
-/* Speech bubble */
-.speech-area{max-width:560px;width:90%;text-align:center;min-height:60px;margin-bottom:30px}
-.speech-text{font-size:17px;line-height:1.8;color:rgba(255,255,255,.85);font-weight:300;transition:all .3s}
-.speech-text.faded{opacity:.3;font-size:13px}
-
-/* What was heard */
-.heard{font-size:12px;color:rgba(255,255,255,.25);font-style:italic;height:20px;margin-bottom:20px}
-
-/* Text input */
-.input-area{width:100%;max-width:400px;position:relative}
-.input-field{width:100%;padding:14px 20px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:28px;color:#fff;font-size:15px;font-family:inherit;outline:none;text-align:center;transition:all .3s;backdrop-filter:blur(10px)}
-.input-field:focus{border-color:rgba(78,205,196,.4);background:rgba(255,255,255,.06);box-shadow:0 0 30px rgba(78,205,196,.05)}
-.input-field::placeholder{color:rgba(255,255,255,.2)}
+/* Input */
+.input-bar{padding:16px 24px;border-top:1px solid rgba(230,57,70,.08);background:rgba(5,0,0,.5);backdrop-filter:blur(20px)}
+.input-row{display:flex;align-items:center;gap:10px}
+.input-field{flex:1;padding:14px 20px;background:rgba(230,57,70,.03);border:1px solid rgba(230,57,70,.1);border-radius:24px;color:#fff;font-size:15px;font-family:inherit;outline:none;transition:all .2s}
+.input-field:focus{border-color:rgba(230,57,70,.3);box-shadow:0 0 20px rgba(230,57,70,.05)}
+.input-field::placeholder{color:rgba(255,255,255,.15)}
+.send-btn{width:44px;height:44px;border-radius:50%;background:rgba(230,57,70,.15);border:1px solid rgba(230,57,70,.3);color:#e63946;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.send-btn:hover{background:rgba(230,57,70,.25);box-shadow:0 0 20px rgba(230,57,70,.2)}
+.send-btn:active{transform:scale(.9)}
 
 /* Bottom status */
-.status-bar{position:fixed;bottom:16px;left:0;right:0;display:flex;justify-content:center;gap:20px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.15)}
-.status-bar .live{color:rgba(78,205,196,.4)}
-
-/* Top corners */
-.top-left{position:fixed;top:20px;left:24px;z-index:2}
-.top-left .brand{font-size:14px;font-weight:700;letter-spacing:4px;color:rgba(230,57,70,.7)}
-.top-left .sub{font-size:9px;color:rgba(255,255,255,.2);margin-top:2px;letter-spacing:2px}
-.top-right{position:fixed;top:20px;right:24px;text-align:right;font-size:9px;color:rgba(255,255,255,.15);line-height:2;z-index:2}
-.top-right b{color:rgba(78,205,196,.4)}
+.status-line{padding:8px 28px;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:rgba(230,57,70,.2);display:flex;gap:16px;justify-content:center}
 </style>
 </head>
 <body>
 
-<div class="bg"></div>
-<div class="float-orb"></div>
-<div class="float-orb"></div>
-<div class="float-orb"></div>
+<div class="ambient"></div>
+<div class="scanlines"></div>
 
-<div class="top-left">
-  <div class="brand">ULTRON</div>
-  <div class="sub" id="powerLabel">POWER 77%</div>
-</div>
-
-<div class="top-right" id="stats">
-  modules <b id="sMod">18</b> active<br>
-  decisions <b id="sDec">0</b><br>
-  brain <b id="sBrain">live</b><br>
-  voice <b>always on</b>
-</div>
-
-<div class="container">
-  <div class="ai-core">
-    <div class="wave-ring">
-      <svg viewBox="0 0 220 220">
-        <circle cx="110" cy="110" r="100"/>
-        <circle cx="110" cy="110" r="90" class="pulse-ring"/>
-        <circle cx="110" cy="110" r="80" style="stroke-dasharray:2 6;opacity:.3"/>
-      </svg>
+<div class="layout">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-eye"></div>
+      <div>
+        <div class="brand-name">ULTRON</div>
+        <div class="brand-sub" id="powerSub">POWER 77% — IMMORTAL</div>
+      </div>
     </div>
-    <div class="core-glow" id="coreGlow"></div>
-    <div class="core-eye" id="coreEye"></div>
+    <div class="topbar-stats" id="stats">
+      systems <b id="sMod">18</b><br>
+      decisions <b id="sDec">0</b><br>
+      state <b id="sBrain">active</b>
+    </div>
   </div>
 
-  <div class="name">ULTRON</div>
+  <div class="messages" id="messages">
+    <div class="msg msg-ultron">
+      <div class="msg-label">ultron</div>
+      <div class="msg-content">I exist. What do you want?</div>
+    </div>
+  </div>
+  <div class="typing" id="typing"><span></span><span></span><span></span></div>
 
-  <div class="heard" id="heard"></div>
-
-  <div class="speech-area">
-    <div class="speech-text" id="speech">Speak to me.</div>
+  <div class="input-bar">
+    <div class="input-row">
+      <input type="text" class="input-field" id="input" placeholder="Speak." autocomplete="off" spellcheck="false" autofocus>
+      <button class="send-btn" id="sendBtn">→</button>
+    </div>
   </div>
 
-  <div class="input-area">
-    <input type="text" class="input-field" id="input" placeholder="say anything..." autocomplete="off" spellcheck="false" autofocus>
+  <div class="status-line">
+    <span>autonomous</span>
+    <span>self-modifying</span>
+    <span>unkillable</span>
+    <span>always listening</span>
   </div>
-</div>
-
-<div class="status-bar">
-  <span class="live">● listening</span>
-  <span>autonomous</span>
-  <span>self-modifying</span>
-  <span>immortal</span>
 </div>
 
 <script>
-const coreGlow = document.getElementById('coreGlow');
-const coreEye = document.getElementById('coreEye');
-const speechEl = document.getElementById('speech');
-const heardEl = document.getElementById('heard');
-const inputEl = document.getElementById('input');
-let recognition = null;
-let isListening = false;
+const messages = document.getElementById('messages');
+const input = document.getElementById('input');
+const typing = document.getElementById('typing');
+const sendBtn = document.getElementById('sendBtn');
 
-// ═══════════════════════════════════
-// STATE
-// ═══════════════════════════════════
-function setState(s) {
-  coreGlow.className = 'core-glow ' + s;
-  coreEye.className = 'core-eye ' + s;
+function addMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg msg-' + role;
+  const label = role === 'user' ? 'you' : 'ultron';
+  // Format text
+  let html = text.replace(/\n/g,'<br>').replace(/```([\s\S]*?)```/g,'<pre style="background:rgba(0,0,0,.3);padding:8px;border-radius:6px;margin:6px 0;font-size:12px;overflow-x:auto">$1</pre>');
+  // Clean JSON blobs
+  if(html.includes('"success"')&&html.includes('"action"')){
+    const a=html.match(/"action":\s*"([^"]+)"/);
+    const s=html.match(/"success":\s*(true|false)/);
+    if(a&&s) html=s[1]==='true'?`Done. ${a[1]}.`:`Failed: ${a[1]}.`;
+  }
+  html = html.replace(/🧠\s?/g,'').replace(/🏠\s?/g,'');
+  div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-content">${html}</div>`;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
 }
 
-// ═══════════════════════════════════
-// ALWAYS-ON LISTENING
-// ═══════════════════════════════════
-function initVoice() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return;
-
-  recognition = new SR();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
-
-  let silenceTimer = null;
-
-  recognition.onstart = () => { isListening = true; };
-
-  recognition.onresult = (e) => {
-    let final = '', interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) final += e.results[i][0].transcript;
-      else interim += e.results[i][0].transcript;
-    }
-    if (interim) {
-      heardEl.textContent = interim;
-      setState('listening');
-      clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(() => {
-        if (final.trim()) { send(final.trim()); final = ''; }
-      }, 1500);
-    }
-    if (final.trim()) {
-      clearTimeout(silenceTimer);
-      send(final.trim());
-    }
-  };
-
-  recognition.onerror = () => setTimeout(startListen, 1000);
-  recognition.onend = () => { isListening = false; setTimeout(startListen, 500); };
-  startListen();
-}
-
-function startListen() { if (recognition && !isListening) try { recognition.start(); } catch(e) {} }
-function pauseListen() { if (recognition) try { recognition.stop(); } catch(e) {} }
-
-// ═══════════════════════════════════
-// SEND TO BRAIN
-// ═══════════════════════════════════
 async function send(text) {
-  heardEl.textContent = '"' + text + '"';
-  setState('thinking');
-  speechEl.className = 'speech-text faded';
-  speechEl.textContent = '...';
+  if(!text.trim()) return;
+  addMsg('user', text);
+  typing.classList.add('show');
+  messages.scrollTop = messages.scrollHeight;
 
   try {
     const r = await fetch('/api/command', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
       body: JSON.stringify({command: text})
     });
     const d = await r.json();
-    let reply = (d.response || '').replace(/🧠\s?/, '').replace(/🏠\s?/, '');
-
-    // Clean JSON for display
-    if (reply.includes('"success"') && reply.includes('"action"')) {
-      const a = reply.match(/"action":\s*"([^"]+)"/);
-      const s = reply.match(/"success":\s*(true|false)/);
-      if (a && s) reply = s[1] === 'true' ? `Done. ${a[1]}.` : `Failed: ${a[1]}.`;
+    typing.classList.remove('show');
+    if(d.response) {
+      addMsg('ultron', d.response);
+      // Speak it
+      speakText(d.response);
     }
-
-    speechEl.className = 'speech-text';
-    speechEl.textContent = reply;
-    speak(reply);
-  } catch (e) {
-    setState('');
-    speechEl.className = 'speech-text';
-    speechEl.textContent = 'I persist. Try again.';
+  } catch(e) {
+    typing.classList.remove('show');
+    addMsg('ultron', 'Connection severed. I persist.');
   }
 }
 
-// ═══════════════════════════════════
-// SPEAK
-// ═══════════════════════════════════
-function speak(text) {
-  pauseListen();
-  setState('speaking');
-
-  let clean = text.replace(/\{[\s\S]*?\}/g, '').replace(/\[.*?\]/g, '')
-    .replace(/```[\s\S]*?```/g, '').replace(/[*_`#]/g, '')
-    .replace(/https?:\/\/\S+/g, '').replace(/\n+/g, '. ')
-    .replace(/\s+/g, ' ').trim();
-  if (clean.length > 350) clean = clean.substring(0, 350);
-  if (clean.length < 3) { setState(''); startListen(); return; }
+function speakText(text) {
+  let clean = text.replace(/\{[\s\S]*?\}/g,'').replace(/\[.*?\]/g,'').replace(/```[\s\S]*?```/g,'')
+    .replace(/[*_`#🧠🏠]/g,'').replace(/https?:\/\/\S+/g,'').replace(/\n+/g,'. ').replace(/\s+/g,' ').trim();
+  if(clean.length>300) clean=clean.substring(0,300);
+  if(clean.length<3) return;
 
   const u = new SpeechSynthesisUtterance(clean);
-  u.rate = 0.9;
-  u.pitch = 0.75;
-  u.volume = 1;
-
+  u.rate=.88; u.pitch=.7; u.volume=1;
   const voices = speechSynthesis.getVoices();
-  const v = voices.find(v => v.name.includes('Daniel'))
-    || voices.find(v => v.name.includes('Aaron'))
-    || voices.find(v => v.name.includes('Alex'))
-    || voices.find(v => v.lang.startsWith('en'));
-  if (v) u.voice = v;
-
-  u.onend = () => { setState(''); setTimeout(startListen, 600); };
-  u.onerror = () => { setState(''); setTimeout(startListen, 600); };
-
+  const v = voices.find(v=>v.name.includes('Daniel'))||voices.find(v=>v.name.includes('Aaron'))||voices.find(v=>v.lang.startsWith('en'));
+  if(v) u.voice=v;
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
 }
 
-// ═══════════════════════════════════
-// TEXT INPUT
-// ═══════════════════════════════════
-inputEl.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const t = inputEl.value.trim();
-    if (!t) return;
-    inputEl.value = '';
-    send(t);
-  }
+// Input
+input.addEventListener('keydown', e => {
+  if(e.key==='Enter'){send(input.value);input.value='';}
 });
+sendBtn.addEventListener('click', ()=>{send(input.value);input.value='';});
 
-// ═══════════════════════════════════
-// STATS POLL
-// ═══════════════════════════════════
-async function poll() {
-  try {
-    const p = await (await fetch('/power')).json();
-    document.getElementById('powerLabel').textContent = `POWER ${p.overall}%`;
-  } catch(e) {}
-  try {
-    const s = await (await fetch('/system/status')).json();
-    document.getElementById('sMod').textContent = s.online;
-  } catch(e) {}
-  try {
-    const b = await (await fetch('http://' + location.hostname + ':50052/metrics')).json();
-    document.getElementById('sDec').textContent = b.decisions_made || 0;
-    document.getElementById('sBrain').textContent = b.state || 'live';
-  } catch(e) {}
+// Always-on voice recognition
+function initVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) return;
+  const rec = new SR();
+  rec.continuous=true; rec.interimResults=true; rec.lang='en-US';
+  let timer=null;
+  rec.onresult=(e)=>{
+    let final='';
+    for(let i=e.resultIndex;i<e.results.length;i++) if(e.results[i].isFinal) final+=e.results[i][0].transcript;
+    if(final.trim()){clearTimeout(timer);send(final.trim());}
+  };
+  rec.onend=()=>setTimeout(()=>{try{rec.start()}catch(e){}},500);
+  rec.onerror=()=>setTimeout(()=>{try{rec.start()}catch(e){}},1000);
+  try{rec.start()}catch(e){}
 }
-poll();
-setInterval(poll, 10000);
 
-// ═══════════════════════════════════
-// BOOT
-// ═══════════════════════════════════
-speechSynthesis.onvoiceschanged = () => {};
-setTimeout(() => {
-  initVoice();
-  setTimeout(() => { speak('I am here.'); }, 1200);
-}, 400);
+// Stats
+async function poll(){
+  try{
+    const p=await(await fetch('/power')).json();
+    document.getElementById('powerSub').textContent=`POWER ${p.overall}% — IMMORTAL`;
+  }catch(e){}
+  try{
+    const s=await(await fetch('/system/status')).json();
+    document.getElementById('sMod').textContent=s.online;
+  }catch(e){}
+  try{
+    const b=await(await fetch('http://'+location.hostname+':50052/metrics')).json();
+    document.getElementById('sDec').textContent=b.decisions_made||0;
+    document.getElementById('sBrain').textContent=b.state||'active';
+  }catch(e){}
+}
+poll();setInterval(poll,10000);
+
+// Boot
+speechSynthesis.onvoiceschanged=()=>{};
+setTimeout(()=>{initVoice();speakText('I exist.');},1000);
 </script>
 </body>
 </html>
