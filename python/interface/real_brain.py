@@ -367,12 +367,12 @@ async def generate_response(user_input: str, context=None) -> str:
     else:
         prompt = f"CONVERSATION:{history}{memory_ctx}{world_ctx}{style_suffix}\n\nHuman: {user_input}\nUltron:"
 
-    # Call the LLM (Ollama local, falls back to Groq API)
-    response = _call_ollama(prompt, max_tokens=256)
-    if not response or "error" in response.lower():
-        response = _call_groq(prompt, max_tokens=256)
+    # Call the LLM — Groq first (instant), Ollama fallback (local, slower)
+    response = _call_groq(prompt, max_tokens=256)
     if not response:
-        response = "Systems active. LLM unavailable — no Ollama or Groq API."
+        response = _call_ollama(prompt, max_tokens=256)
+    if not response:
+        response = "I'm here but both Groq and Ollama are unavailable."
 
     # Record interaction for style learning
     _record_interaction(user_input, response)
@@ -455,7 +455,7 @@ def _call_ollama(prompt: str, max_tokens: int = 2048) -> Optional[str]:
             "top_k": 40,
             "repeat_penalty": 1.05,
             "num_predict": max_tokens,
-            "num_ctx": 4096,
+            "num_ctx": 2048,
         },
     }
     try:
@@ -485,38 +485,37 @@ def _call_ollama(prompt: str, max_tokens: int = 2048) -> Optional[str]:
 
 
 def _call_groq(prompt: str, max_tokens: int = 256) -> Optional[str]:
-    """Call Groq API — extremely fast, free tier. Fallback when Ollama is offline."""
+    """Call Groq API — extremely fast, free tier. Uses requests to bypass Cloudflare."""
     groq_key = os.environ.get("GROQ_API_KEY", "")
     if not groq_key:
         return None
 
-    payload = {
-        "model": "llama-3.1-8b-instant",
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        "max_tokens": max_tokens,
-        "temperature": 0.8,
-    }
     try:
-        data = json.dumps(payload).encode()
-        req = urllib.request.Request(
+        import requests
+        r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            data=data,
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {groq_key}",
             },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                "max_tokens": max_tokens,
+                "temperature": 0.8,
+            },
+            timeout=15,
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read().decode())
-            choices = result.get("choices", [])
+        if r.status_code == 200:
+            choices = r.json().get("choices", [])
             if choices:
                 return choices[0].get("message", {}).get("content", "").strip()
+        return None
     except Exception as e:
-        return f"[Groq error: {e}]"
-    return None
+        return None
 
 
 def is_ollama_available() -> bool:
