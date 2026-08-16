@@ -3,10 +3,10 @@ builder = "nixpacks"
 
 [build.nixpacks]
 providers = ["python"]
-aptPkgs = ["curl"]
+aptPkgs = ["curl", "ffmpeg", "sox"]
 
 [build.nixpacks.cmds]
-install = "pip install fastapi uvicorn grpcio numpy PyPDF2 python-multipart"
+install = "pip install fastapi uvicorn grpcio numpy PyPDF2 python-multipart optuna paho-mqtt scikit-learn"
 build = ""
 
 [deploy]
