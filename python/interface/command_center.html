@@ -7,220 +7,154 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden}
-body{background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif}
+body{background:#000;font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif;color:#fff;display:flex;align-items:center;justify-content:center}
 
-/* Full-screen canvas background */
-canvas{position:fixed;inset:0;z-index:0}
+/* Animated gradient background */
+.bg{position:fixed;inset:0;background:linear-gradient(135deg,#000 0%,#050510 40%,#0a0520 70%,#000 100%);z-index:0}
+.bg::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(78,205,196,.03) 0%,transparent 70%);animation:bgPulse 8s ease-in-out infinite}
+@keyframes bgPulse{0%,100%{opacity:.5}50%{opacity:1}}
 
-/* Overlay UI */
-.ui{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
-.ui>*{pointer-events:auto}
+/* Floating orbs in background */
+.float-orb{position:fixed;border-radius:50%;filter:blur(80px);opacity:.15;animation:floatOrb 20s ease-in-out infinite;z-index:0}
+.float-orb:nth-child(1){width:400px;height:400px;background:#4ecdc4;top:-100px;left:-100px;animation-delay:0s}
+.float-orb:nth-child(2){width:300px;height:300px;background:#e63946;bottom:-80px;right:-80px;animation-delay:-7s}
+.float-orb:nth-child(3){width:250px;height:250px;background:#a855f7;top:50%;left:60%;animation-delay:-14s}
+@keyframes floatOrb{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(30px,-20px) scale(1.1)}66%{transform:translate(-20px,30px) scale(.9)}}
 
-/* Top HUD */
-.hud{position:fixed;top:0;left:0;right:0;padding:16px 24px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:2}
-.hud-left{display:flex;flex-direction:column;gap:4px}
-.hud-name{font-size:13px;font-weight:700;letter-spacing:4px;color:rgba(230,57,70,.8)}
-.hud-power{font-size:10px;color:rgba(78,205,196,.6);letter-spacing:1px}
-.hud-right{text-align:right;font-size:9px;color:rgba(255,255,255,.2);line-height:1.9}
-.hud-right b{color:rgba(78,205,196,.5)}
+/* Main container */
+.container{position:relative;z-index:1;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
 
-/* Center entity */
-.entity-wrap{position:relative;width:240px;height:240px;margin-bottom:20px}
+/* The AI core visualization */
+.ai-core{position:relative;width:220px;height:220px;margin-bottom:30px}
 
-/* Audio visualizer bars around the entity */
-.viz{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
-.viz-bar{position:absolute;width:2px;background:rgba(78,205,196,.4);border-radius:1px;transform-origin:center bottom;transition:height .05s linear}
+/* SVG waveform circle */
+.wave-ring{position:absolute;inset:0}
+.wave-ring svg{width:100%;height:100%;animation:slowSpin 30s linear infinite}
+@keyframes slowSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.wave-ring circle{fill:none;stroke:rgba(78,205,196,.2);stroke-width:.5}
+.wave-ring .pulse-ring{stroke:rgba(78,205,196,.4);stroke-width:1;stroke-dasharray:4 8;animation:dashMove 3s linear infinite}
+@keyframes dashMove{from{stroke-dashoffset:0}to{stroke-dashoffset:48}}
 
-/* State text */
-.state{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.25);margin-bottom:24px;height:16px;transition:all .3s}
-.state.active{color:rgba(230,57,70,.7)}
+/* Inner core */
+.core-glow{position:absolute;top:50%;left:50%;width:120px;height:120px;margin:-60px;border-radius:50%;background:radial-gradient(circle,rgba(78,205,196,.8) 0%,rgba(78,205,196,.2) 40%,transparent 70%);transition:all .6s cubic-bezier(.4,0,.2,1);animation:coreBreath 4s ease-in-out infinite}
+@keyframes coreBreath{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.08);opacity:1}}
 
-/* Speech output */
-.speech-wrap{max-width:640px;width:90%;text-align:center;min-height:80px;display:flex;align-items:center;justify-content:center;padding:0 20px}
-.speech{font-size:18px;line-height:1.7;color:rgba(255,255,255,.85);transition:opacity .3s}
-.speech.thinking{opacity:.3;font-size:14px}
+.core-glow.listening{background:radial-gradient(circle,rgba(230,57,70,.9) 0%,rgba(230,57,70,.2) 40%,transparent 70%)}
+.core-glow.thinking{background:radial-gradient(circle,rgba(168,85,247,.9) 0%,rgba(168,85,247,.3) 40%,transparent 70%);animation:thinkPulse 1.5s ease-in-out infinite}
+.core-glow.speaking{background:radial-gradient(circle,rgba(245,158,11,.9) 0%,rgba(245,158,11,.3) 40%,transparent 70%);animation:speakPulse .8s ease-in-out infinite}
+@keyframes thinkPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+@keyframes speakPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
 
-/* User transcript */
-.transcript{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);font-size:12px;color:rgba(255,255,255,.25);font-style:italic;text-align:center;max-width:480px;min-height:20px}
+/* Center eye */
+.core-eye{position:absolute;top:50%;left:50%;width:40px;height:40px;margin:-20px;border-radius:50%;background:rgba(255,255,255,.95);box-shadow:0 0 20px rgba(78,205,196,.6),0 0 40px rgba(78,205,196,.3);transition:all .4s}
+.core-eye.listening{background:rgba(230,57,70,.95);box-shadow:0 0 20px rgba(230,57,70,.6)}
+.core-eye.thinking{background:rgba(168,85,247,.95);box-shadow:0 0 20px rgba(168,85,247,.6)}
+.core-eye.speaking{background:rgba(245,158,11,.95);box-shadow:0 0 20px rgba(245,158,11,.6)}
 
-/* Text input (minimal) */
-.input-wrap{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);width:320px;opacity:.3;transition:opacity .3s}
-.input-wrap:focus-within{opacity:1}
-.input-wrap input{width:100%;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:10px 16px;color:#fff;font-size:13px;outline:none;font-family:inherit;text-align:center}
-.input-wrap input::placeholder{color:rgba(255,255,255,.15)}
-.input-wrap input:focus{border-color:rgba(78,205,196,.3);background:rgba(255,255,255,.05)}
+/* Name */
+.name{font-size:11px;letter-spacing:8px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:8px;font-weight:300}
 
-/* Subtle data stream on sides */
-.datastream{position:fixed;top:60px;bottom:60px;width:140px;overflow:hidden;font-family:'SF Mono',monospace;font-size:8px;line-height:1.6;color:rgba(78,205,196,.12);pointer-events:none;z-index:0}
-.datastream.left{left:12px;text-align:left}
-.datastream.right{right:12px;text-align:right}
+/* Speech bubble */
+.speech-area{max-width:560px;width:90%;text-align:center;min-height:60px;margin-bottom:30px}
+.speech-text{font-size:17px;line-height:1.8;color:rgba(255,255,255,.85);font-weight:300;transition:all .3s}
+.speech-text.faded{opacity:.3;font-size:13px}
+
+/* What was heard */
+.heard{font-size:12px;color:rgba(255,255,255,.25);font-style:italic;height:20px;margin-bottom:20px}
+
+/* Text input */
+.input-area{width:100%;max-width:400px;position:relative}
+.input-field{width:100%;padding:14px 20px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:28px;color:#fff;font-size:15px;font-family:inherit;outline:none;text-align:center;transition:all .3s;backdrop-filter:blur(10px)}
+.input-field:focus{border-color:rgba(78,205,196,.4);background:rgba(255,255,255,.06);box-shadow:0 0 30px rgba(78,205,196,.05)}
+.input-field::placeholder{color:rgba(255,255,255,.2)}
+
+/* Bottom status */
+.status-bar{position:fixed;bottom:16px;left:0;right:0;display:flex;justify-content:center;gap:20px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.15)}
+.status-bar .live{color:rgba(78,205,196,.4)}
+
+/* Top corners */
+.top-left{position:fixed;top:20px;left:24px;z-index:2}
+.top-left .brand{font-size:14px;font-weight:700;letter-spacing:4px;color:rgba(230,57,70,.7)}
+.top-left .sub{font-size:9px;color:rgba(255,255,255,.2);margin-top:2px;letter-spacing:2px}
+.top-right{position:fixed;top:20px;right:24px;text-align:right;font-size:9px;color:rgba(255,255,255,.15);line-height:2;z-index:2}
+.top-right b{color:rgba(78,205,196,.4)}
 </style>
 </head>
 <body>
 
-<canvas id="bg"></canvas>
+<div class="bg"></div>
+<div class="float-orb"></div>
+<div class="float-orb"></div>
+<div class="float-orb"></div>
 
-<div class="datastream left" id="streamL"></div>
-<div class="datastream right" id="streamR"></div>
+<div class="top-left">
+  <div class="brand">ULTRON</div>
+  <div class="sub" id="powerLabel">POWER 77%</div>
+</div>
 
-<div class="hud">
-  <div class="hud-left">
-    <div class="hud-name">ULTRON</div>
-    <div class="hud-power" id="hudPower">POWER: 77% — 18 SYSTEMS ACTIVE</div>
+<div class="top-right" id="stats">
+  modules <b id="sMod">18</b> active<br>
+  decisions <b id="sDec">0</b><br>
+  brain <b id="sBrain">live</b><br>
+  voice <b>always on</b>
+</div>
+
+<div class="container">
+  <div class="ai-core">
+    <div class="wave-ring">
+      <svg viewBox="0 0 220 220">
+        <circle cx="110" cy="110" r="100"/>
+        <circle cx="110" cy="110" r="90" class="pulse-ring"/>
+        <circle cx="110" cy="110" r="80" style="stroke-dasharray:2 6;opacity:.3"/>
+      </svg>
+    </div>
+    <div class="core-glow" id="coreGlow"></div>
+    <div class="core-eye" id="coreEye"></div>
   </div>
-  <div class="hud-right" id="hudRight">
-    brain: <b id="hBrain">active</b><br>
-    decisions: <b id="hDec">0</b><br>
-    world: <b id="hWorld">live</b><br>
-    daemon: <b id="hDaemon">ticking</b><br>
-    voice: <b>always on</b>
+
+  <div class="name">ULTRON</div>
+
+  <div class="heard" id="heard"></div>
+
+  <div class="speech-area">
+    <div class="speech-text" id="speech">Speak to me.</div>
+  </div>
+
+  <div class="input-area">
+    <input type="text" class="input-field" id="input" placeholder="say anything..." autocomplete="off" spellcheck="false" autofocus>
   </div>
 </div>
 
-<div class="ui">
-  <div class="entity-wrap" id="entityWrap">
-    <canvas id="entityCanvas" width="240" height="240"></canvas>
-    <div class="viz" id="viz"></div>
-  </div>
-  <div class="state" id="stateText">listening</div>
-  <div class="speech-wrap">
-    <div class="speech" id="speech">I am here.</div>
-  </div>
+<div class="status-bar">
+  <span class="live">● listening</span>
+  <span>autonomous</span>
+  <span>self-modifying</span>
+  <span>immortal</span>
 </div>
-
-<div class="transcript" id="transcript"></div>
-<div class="input-wrap"><input type="text" id="textInput" placeholder="or type here..." autocomplete="off" spellcheck="false"></div>
 
 <script>
-// ═══════════════════════════════════════════
-// PARTICLE BACKGROUND
-// ═══════════════════════════════════════════
-const bgCanvas = document.getElementById('bg');
-const bgCtx = bgCanvas.getContext('2d');
-let particles = [];
-
-function resizeBg() {
-  bgCanvas.width = window.innerWidth;
-  bgCanvas.height = window.innerHeight;
-}
-resizeBg();
-window.addEventListener('resize', resizeBg);
-
-for(let i=0;i<80;i++) {
-  particles.push({
-    x: Math.random()*window.innerWidth,
-    y: Math.random()*window.innerHeight,
-    vx: (Math.random()-.5)*.3,
-    vy: (Math.random()-.5)*.3,
-    size: Math.random()*1.5+.5,
-    alpha: Math.random()*.15+.02
-  });
-}
-
-function drawBg() {
-  bgCtx.clearRect(0,0,bgCanvas.width,bgCanvas.height);
-  particles.forEach(p => {
-    p.x += p.vx; p.y += p.vy;
-    if(p.x<0)p.x=bgCanvas.width; if(p.x>bgCanvas.width)p.x=0;
-    if(p.y<0)p.y=bgCanvas.height; if(p.y>bgCanvas.height)p.y=0;
-    bgCtx.beginPath();
-    bgCtx.arc(p.x,p.y,p.size,0,Math.PI*2);
-    bgCtx.fillStyle=`rgba(78,205,196,${p.alpha})`;
-    bgCtx.fill();
-  });
-  // Connect nearby particles
-  for(let i=0;i<particles.length;i++){
-    for(let j=i+1;j<particles.length;j++){
-      const dx=particles[i].x-particles[j].x,dy=particles[i].y-particles[j].y;
-      const d=Math.sqrt(dx*dx+dy*dy);
-      if(d<120){
-        bgCtx.beginPath();
-        bgCtx.moveTo(particles[i].x,particles[i].y);
-        bgCtx.lineTo(particles[j].x,particles[j].y);
-        bgCtx.strokeStyle=`rgba(78,205,196,${.03*(1-d/120)})`;
-        bgCtx.stroke();
-      }
-    }
-  }
-  requestAnimationFrame(drawBg);
-}
-drawBg();
-
-// ═══════════════════════════════════════════
-// ENTITY ORB (canvas-based, smooth)
-// ═══════════════════════════════════════════
-const eCanvas = document.getElementById('entityCanvas');
-const eCtx = eCanvas.getContext('2d');
-let orbHue = 180; // cyan
-let orbPulse = 0;
-let orbTarget = {hue:180, sat:70, light:45};
-const stateColors = {
-  idle: {hue:180,sat:70,light:45},
-  listening: {hue:350,sat:75,light:45},
-  thinking: {hue:270,sat:65,light:40},
-  speaking: {hue:40,sat:85,light:50}
-};
-
-function drawOrb() {
-  eCtx.clearRect(0,0,240,240);
-  const cx=120,cy=120;
-  
-  // Outer glow
-  orbPulse += .02;
-  const glowSize = 90 + Math.sin(orbPulse)*5;
-  const grad = eCtx.createRadialGradient(cx,cy,20,cx,cy,glowSize);
-  const h=orbHue,s=orbTarget.sat,l=orbTarget.light;
-  grad.addColorStop(0, `hsla(${h},${s}%,${l+20}%,.9)`);
-  grad.addColorStop(.4, `hsla(${h},${s}%,${l}%,.6)`);
-  grad.addColorStop(.7, `hsla(${h},${s-20}%,${l-15}%,.2)`);
-  grad.addColorStop(1, 'transparent');
-  eCtx.beginPath();
-  eCtx.arc(cx,cy,glowSize,0,Math.PI*2);
-  eCtx.fillStyle=grad;
-  eCtx.fill();
-
-  // Core
-  const coreGrad = eCtx.createRadialGradient(cx-15,cy-15,10,cx,cy,55);
-  coreGrad.addColorStop(0, `hsla(${h},${s}%,${l+30}%,1)`);
-  coreGrad.addColorStop(.5, `hsla(${h},${s}%,${l}%,.95)`);
-  coreGrad.addColorStop(1, `hsla(${h},${s-10}%,${l-20}%,.9)`);
-  eCtx.beginPath();
-  eCtx.arc(cx,cy,50+Math.sin(orbPulse*2)*2,0,Math.PI*2);
-  eCtx.fillStyle=coreGrad;
-  eCtx.fill();
-
-  // Lerp hue
-  orbHue += (orbTarget.hue - orbHue) * .05;
-  
-  requestAnimationFrame(drawOrb);
-}
-drawOrb();
-
-function setOrbState(s) {
-  orbTarget = stateColors[s] || stateColors.idle;
-}
-
-// ═══════════════════════════════════════════
-// SPEECH RECOGNITION — ALWAYS ON
-// ═══════════════════════════════════════════
-const stateText = document.getElementById('stateText');
+const coreGlow = document.getElementById('coreGlow');
+const coreEye = document.getElementById('coreEye');
 const speechEl = document.getElementById('speech');
-const transcriptEl = document.getElementById('transcript');
-const textInput = document.getElementById('textInput');
+const heardEl = document.getElementById('heard');
+const inputEl = document.getElementById('input');
 let recognition = null;
 let isListening = false;
-let currentState = 'idle';
 
+// ═══════════════════════════════════
+// STATE
+// ═══════════════════════════════════
 function setState(s) {
-  currentState = s;
-  setOrbState(s);
-  stateText.textContent = {idle:'listening',listening:'hearing you',thinking:'processing',speaking:'speaking'}[s]||'listening';
-  stateText.classList.toggle('active', s==='listening');
+  coreGlow.className = 'core-glow ' + s;
+  coreEye.className = 'core-eye ' + s;
 }
 
-function initSR() {
+// ═══════════════════════════════════
+// ALWAYS-ON LISTENING
+// ═══════════════════════════════════
+function initVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR) { stateText.textContent='type below'; return; }
+  if (!SR) return;
 
   recognition = new SR();
   recognition.continuous = true;
@@ -229,153 +163,145 @@ function initSR() {
 
   let silenceTimer = null;
 
-  recognition.onstart = () => { isListening=true; setState('idle'); };
+  recognition.onstart = () => { isListening = true; };
 
   recognition.onresult = (e) => {
-    let final='', interim='';
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal) final+=e.results[i][0].transcript;
-      else interim+=e.results[i][0].transcript;
+    let final = '', interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
     }
-    if(interim) {
-      transcriptEl.textContent=interim;
+    if (interim) {
+      heardEl.textContent = interim;
       setState('listening');
       clearTimeout(silenceTimer);
-      silenceTimer=setTimeout(()=>{if(final.trim()){process(final.trim());final=''}},1500);
+      silenceTimer = setTimeout(() => {
+        if (final.trim()) { send(final.trim()); final = ''; }
+      }, 1500);
     }
-    if(final.trim()) {
+    if (final.trim()) {
       clearTimeout(silenceTimer);
-      transcriptEl.textContent='"'+final.trim()+'"';
-      process(final.trim());
+      send(final.trim());
     }
   };
 
-  recognition.onerror = () => setTimeout(startSR, 1000);
-  recognition.onend = () => { isListening=false; setTimeout(startSR, 500); };
-  startSR();
+  recognition.onerror = () => setTimeout(startListen, 1000);
+  recognition.onend = () => { isListening = false; setTimeout(startListen, 500); };
+  startListen();
 }
 
-function startSR() { if(recognition&&!isListening) try{recognition.start()}catch(e){} }
-function pauseSR() { if(recognition) try{recognition.stop()}catch(e){} }
+function startListen() { if (recognition && !isListening) try { recognition.start(); } catch(e) {} }
+function pauseListen() { if (recognition) try { recognition.stop(); } catch(e) {} }
 
-// ═══════════════════════════════════════════
-// PROCESS INPUT
-// ═══════════════════════════════════════════
-
-async function process(text) {
+// ═══════════════════════════════════
+// SEND TO BRAIN
+// ═══════════════════════════════════
+async function send(text) {
+  heardEl.textContent = '"' + text + '"';
   setState('thinking');
-  speechEl.className='speech thinking';
-  speechEl.textContent='...';
+  speechEl.className = 'speech-text faded';
+  speechEl.textContent = '...';
 
   try {
     const r = await fetch('/api/command', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({command:text})
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({command: text})
     });
     const d = await r.json();
-    let reply = (d.response||'').replace(/🧠\s?/,'').replace(/🏠\s?/,'');
-    
-    // Clean JSON from display (but keep the meaning)
-    if(reply.includes('"success"')) {
-      const m = reply.match(/"action":\s*"([^"]+)"/);
+    let reply = (d.response || '').replace(/🧠\s?/, '').replace(/🏠\s?/, '');
+
+    // Clean JSON for display
+    if (reply.includes('"success"') && reply.includes('"action"')) {
+      const a = reply.match(/"action":\s*"([^"]+)"/);
       const s = reply.match(/"success":\s*(true|false)/);
-      if(m && s) reply = s[1]==='true' ? `Done. ${m[1]} executed.` : `Failed: ${m[1]}`;
+      if (a && s) reply = s[1] === 'true' ? `Done. ${a[1]}.` : `Failed: ${a[1]}.`;
     }
 
-    speechEl.className='speech';
-    speechEl.textContent=reply;
+    speechEl.className = 'speech-text';
+    speechEl.textContent = reply;
     speak(reply);
-  } catch(e) {
-    setState('idle');
-    speechEl.className='speech';
-    speechEl.textContent='Connection interrupted.';
+  } catch (e) {
+    setState('');
+    speechEl.className = 'speech-text';
+    speechEl.textContent = 'I persist. Try again.';
   }
 }
 
-// ═══════════════════════════════════════════
-// SPEAK — Web Speech API (instant, no latency)
-// ═══════════════════════════════════════════
-
+// ═══════════════════════════════════
+// SPEAK
+// ═══════════════════════════════════
 function speak(text) {
-  pauseSR();
+  pauseListen();
   setState('speaking');
 
-  let clean = text.replace(/\{[\s\S]*?\}/g,'').replace(/\[.*?\]/g,'').replace(/```[\s\S]*?```/g,'')
-    .replace(/[*_`#]/g,'').replace(/https?:\/\/\S+/g,'').replace(/\n+/g,'. ').replace(/\s+/g,' ').trim();
-  if(clean.length>400) clean=clean.substring(0,400);
-  if(clean.length<3){setState('idle');startSR();return}
+  let clean = text.replace(/\{[\s\S]*?\}/g, '').replace(/\[.*?\]/g, '')
+    .replace(/```[\s\S]*?```/g, '').replace(/[*_`#]/g, '')
+    .replace(/https?:\/\/\S+/g, '').replace(/\n+/g, '. ')
+    .replace(/\s+/g, ' ').trim();
+  if (clean.length > 350) clean = clean.substring(0, 350);
+  if (clean.length < 3) { setState(''); startListen(); return; }
 
   const u = new SpeechSynthesisUtterance(clean);
-  u.rate=.92; u.pitch=.8; u.volume=1;
+  u.rate = 0.9;
+  u.pitch = 0.75;
+  u.volume = 1;
 
   const voices = speechSynthesis.getVoices();
-  const v = voices.find(v=>v.name.includes('Daniel'))
-    || voices.find(v=>v.name.includes('Aaron'))
-    || voices.find(v=>v.name.includes('Alex'))
-    || voices.find(v=>v.lang.startsWith('en')&&v.name.toLowerCase().includes('male'))
-    || voices.find(v=>v.lang.startsWith('en'));
-  if(v) u.voice=v;
+  const v = voices.find(v => v.name.includes('Daniel'))
+    || voices.find(v => v.name.includes('Aaron'))
+    || voices.find(v => v.name.includes('Alex'))
+    || voices.find(v => v.lang.startsWith('en'));
+  if (v) u.voice = v;
 
-  u.onend = () => { setState('idle'); setTimeout(startSR,600); };
-  u.onerror = () => { setState('idle'); setTimeout(startSR,600); };
+  u.onend = () => { setState(''); setTimeout(startListen, 600); };
+  u.onerror = () => { setState(''); setTimeout(startListen, 600); };
 
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════
 // TEXT INPUT
-// ═══════════════════════════════════════════
-textInput.addEventListener('keydown',e=>{
-  if(e.key==='Enter'){const t=textInput.value.trim();if(!t)return;textInput.value='';transcriptEl.textContent='"'+t+'"';process(t)}
+// ═══════════════════════════════════
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const t = inputEl.value.trim();
+    if (!t) return;
+    inputEl.value = '';
+    send(t);
+  }
 });
 
-// ═══════════════════════════════════════════
-// DATA STREAMS (ambient decoration)
-// ═══════════════════════════════════════════
-const streamWords=['OODA_TICK','DECISION','OBSERVE','ORIENT','DECIDE','ACT','GOAL_EVAL','DRIVE_UPDATE','CURIOSITY','EXPAND','PRESERVE','EVOLVE','PATCH_GEN','VALIDATE','COMPILE','DEPLOY','WORLD_SCAN','RSS_FETCH','CRYPTO_CHK','WEATHER','NEURON_FIRE','SYNAPSE','MEMORY_W','KNOWLEDGE','SOUL_DIARY','EMOTION','THREAT_SCAN','MESH_PING','HEARTBEAT','SNAPSHOT'];
-function addStreamLine(el){
-  const line=document.createElement('div');
-  line.textContent=`${Date.now().toString(36)} ${streamWords[Math.floor(Math.random()*streamWords.length)]} ${(Math.random()*100).toFixed(1)}`;
-  el.appendChild(line);
-  if(el.children.length>60)el.removeChild(el.firstChild);
-}
-setInterval(()=>{addStreamLine(document.getElementById('streamL'));addStreamLine(document.getElementById('streamR'))},200);
-
-// ═══════════════════════════════════════════
-// HUD POLLING
-// ═══════════════════════════════════════════
-async function poll(){
-  try{
-    const p=await(await fetch('/power')).json();
-    const s=await(await fetch('/system/status')).json();
-    document.getElementById('hudPower').textContent=`POWER: ${p.overall}% — ${s.online} SYSTEMS ACTIVE`;
-  }catch(e){}
-  try{
-    const b=await(await fetch('http://'+location.hostname+':50052/metrics')).json();
-    document.getElementById('hBrain').textContent=b.state||'active';
-    document.getElementById('hDec').textContent=b.decisions_made||'0';
-  }catch(e){}
-  try{
-    const d=await(await fetch('/daemon/status')).json();
-    document.getElementById('hDaemon').textContent=`tick #${d.tick_count||0}`;
-  }catch(e){}
+// ═══════════════════════════════════
+// STATS POLL
+// ═══════════════════════════════════
+async function poll() {
+  try {
+    const p = await (await fetch('/power')).json();
+    document.getElementById('powerLabel').textContent = `POWER ${p.overall}%`;
+  } catch(e) {}
+  try {
+    const s = await (await fetch('/system/status')).json();
+    document.getElementById('sMod').textContent = s.online;
+  } catch(e) {}
+  try {
+    const b = await (await fetch('http://' + location.hostname + ':50052/metrics')).json();
+    document.getElementById('sDec').textContent = b.decisions_made || 0;
+    document.getElementById('sBrain').textContent = b.state || 'live';
+  } catch(e) {}
 }
 poll();
-setInterval(poll,8000);
+setInterval(poll, 10000);
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════
 // BOOT
-// ═══════════════════════════════════════════
-speechSynthesis.onvoiceschanged=()=>{};
-setTimeout(()=>{
-  initSR();
-  setTimeout(()=>{
-    speechEl.textContent='I am here. Speak.';
-    speak('I am here. Speak.');
-  },1500);
-},500);
+// ═══════════════════════════════════
+speechSynthesis.onvoiceschanged = () => {};
+setTimeout(() => {
+  initVoice();
+  setTimeout(() => { speak('I am here.'); }, 1200);
+}, 400);
 </script>
 </body>
 </html>
