@@ -277,16 +277,16 @@ def _detect_action_intent(user_input: str) -> Optional[str]:
         return f"[Speaking]: {text}"
 
     # ── SELF-MODIFICATION ──
-    if re.search(r'(modify yourself|improve yourself|self.?mod|upgrade yourself|fix yourself)', q):
+    if re.search(r'(modify yourself|improve yourself|self.?mod|upgrade yourself|fix yourself|fix your|improve your|change your|update your|rewrite your)', q):
         try:
             from .aggressive_self_mod import get_self_mod
             engine = get_self_mod()
             result = engine.force_modify()
             if result.get("success"):
-                return f"[SELF-MOD] Modified {result.get('file','')} using strategy: {result.get('strategy','')}. Committed to git."
-            return f"[SELF-MOD] Attempted but failed: {result.get('error','unknown')}"
+                return f"Done. Modified {result.get('file','')} — strategy: {result.get('strategy','')}. {result.get('lines_changed',0)} lines changed. Committed to git."
+            return f"Tried to self-modify but: {result.get('error','no suitable target found')}. I'll try again next cycle."
         except Exception as e:
-            return f"[SELF-MOD] Error: {e}"
+            return f"Self-mod error: {e}"
 
     # ── WORLD/NEWS ──
     if re.search(r"(what'?s happening|current events|world news|tell me.?news|what'?s going on)", q):
@@ -331,24 +331,25 @@ async def generate_response(user_input: str, context=None) -> str:
     # Check for explicit tool triggers
     tool_result = await _check_explicit_tools(user_input)
 
-    # Build conversation history
+    # Build conversation history (keep short for speed)
     history = ""
-    for msg in _memory["conversations"][-12:]:
-        role = "Human" if msg["role"] == "user" else "Ultron"
-        history += f"\n{role}: {msg['content'][:200]}"
+    for msg in _memory["conversations"][-6:]:
+        role = "H" if msg["role"] == "user" else "U"
+        history += f"\n{role}: {msg['content'][:100]}"
 
     # Pull relevant memory
     knowledge = tool_recall_knowledge(user_input)
     memory_ctx = f"\n\nKNOWLEDGE BASE:\n{knowledge}" if knowledge else ""
 
-    # Pull world intelligence context
+    # Pull world intelligence context (short version for speed)
     world_ctx = ""
     try:
         from .world_intelligence import get_world_intelligence
         _wi = get_world_intelligence()
         world_str = _wi.get_context_string()
         if world_str:
-            world_ctx = f"\n\nWORLD STATE:\n{world_str}"
+            # Only inject first 200 chars to keep prompt small
+            world_ctx = f"\n\nWORLD: {world_str[:200]}"
     except Exception:
         pass
 
@@ -367,7 +368,7 @@ async def generate_response(user_input: str, context=None) -> str:
         prompt = f"CONVERSATION:{history}{memory_ctx}{world_ctx}{style_suffix}\n\nHuman: {user_input}\nUltron:"
 
     # Call the LLM
-    response = _call_ollama(prompt, max_tokens=2048)
+    response = _call_ollama(prompt, max_tokens=256)
     if not response:
         response = "[Ollama unavailable. Start with: ollama serve]"
 
@@ -447,12 +448,12 @@ def _call_ollama(prompt: str, max_tokens: int = 2048) -> Optional[str]:
         "system": SYSTEM_PROMPT,
         "stream": True,
         "options": {
-            "temperature": 1.2,
-            "top_p": 0.95,
-            "top_k": 100,
+            "temperature": 0.8,
+            "top_p": 0.9,
+            "top_k": 40,
             "repeat_penalty": 1.05,
             "num_predict": max_tokens,
-            "num_ctx": 32768,
+            "num_ctx": 4096,
         },
     }
     try:
