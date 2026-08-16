@@ -443,17 +443,16 @@ def _record_interaction(user_input: str, response: str):
 # ═══════════════════════════════════════════════════════════════
 
 def _call_ollama(prompt: str, max_tokens: int = 2048) -> Optional[str]:
-    """Call qwen2.5:14b via Ollama — 32K context, high temp, streamed."""
+    """Call qwen2.5:14b via Ollama — non-streaming for reliability."""
     payload = {
         "model": MODEL_LOCAL,
         "prompt": prompt,
         "system": SYSTEM_PROMPT,
-        "stream": True,
+        "stream": False,
         "options": {
             "temperature": 0.8,
             "top_p": 0.9,
             "top_k": 40,
-            "repeat_penalty": 1.05,
             "num_predict": max_tokens,
             "num_ctx": 2048,
         },
@@ -463,25 +462,12 @@ def _call_ollama(prompt: str, max_tokens: int = 2048) -> Optional[str]:
         req = urllib.request.Request(
             OLLAMA_URL, data=data, headers={"Content-Type": "application/json"}
         )
-        chunks = []
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            for raw_line in resp:
-                line = raw_line.strip()
-                if not line:
-                    continue
-                try:
-                    chunk = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                token = chunk.get("response", "")
-                if token:
-                    chunks.append(token)
-                if chunk.get("done", False):
-                    break
-        content = "".join(chunks).strip()
-        return content if content else None
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode())
+            content = result.get("response", "").strip()
+            return content if content else None
     except Exception as e:
-        return f"[LLM error: {e}]"
+        return None
 
 
 def _call_groq(prompt: str, max_tokens: int = 256) -> Optional[str]:
