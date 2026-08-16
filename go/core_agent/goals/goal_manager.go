@@ -12,24 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// GoalStatus represents the lifecycle of a goal.
-type GoalStatus int
-
+// GoalStatus is defined in autonomous_drives.go — not redeclared here.
+// Additional status values used by GoalManager:
 const (
-	GoalActive GoalStatus = iota
-	GoalPaused
-	GoalCompleted
-	GoalFailed
-	GoalAbandoned
+	GoalPaused GoalStatus = 10 // Paused (unique to GoalManager)
 )
-
-func (s GoalStatus) String() string {
-	names := []string{"Active", "Paused", "Completed", "Failed", "Abandoned"}
-	if int(s) < len(names) {
-		return names[s]
-	}
-	return "Unknown"
-}
 
 // GoalType categorizes what kind of goal this is.
 type GoalType int

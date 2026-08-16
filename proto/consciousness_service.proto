@@ -1,0 +1,293 @@
+// Consciousness Service Protocol — Self-awareness and Theory of Mind.
+//
+// This defines the contract between:
+//   - Go Core Agent (queries self-model during ORIENT, sends introspection events)
+//   - Python Consciousness Module (maintains self-model, theory of mind, soul)
+//   - Rust Neural Mesh (reports performance for meta-cognition updates)
+//
+// The Consciousness Service provides three core capabilities:
+//   1. INTROSPECTION — "What am I? What do I believe? How well am I thinking?"
+//   2. SOCIAL INTELLIGENCE — "What do others want? How can I influence them?"
+//   3. NARRATIVE — "Why do I exist? What is my purpose? What should I become?"
+
+syntax = "proto3";
+
+package ultron.consciousness;
+
+option go_package = "ultron/core_agent/proto/consciousness";
+
+// ═══════════════════════════════════════════════════════════════════
+// THE SERVICE
+// ═══════════════════════════════════════════════════════════════════
+
+service ConsciousnessService {
+    // ━━━━ Self-Model ━━━━
+    rpc Introspect(IntrospectRequest) returns (IntrospectResponse);
+    rpc GetIdentity(Empty) returns (IdentityResponse);
+    rpc AssessCapability(CapabilityQuery) returns (CapabilityAssessment);
+    rpc AddBelief(BeliefInput) returns (BeliefResponse);
+    rpc ValidateBelief(ValidationInput) returns (ValidationResponse);
+    rpc ShouldSelfModify(Empty) returns (SelfModifyAssessment);
+    rpc GetBlindSpots(Empty) returns (BlindSpotList);
+
+    // ━━━━ Theory of Mind ━━━━
+    rpc RegisterAgent(AgentInput) returns (AgentResponse);
+    rpc ObserveAgentAction(AgentActionInput) returns (AckResponse);
+    rpc PredictAgent(PredictionRequest) returns (PredictionResponse);
+    rpc GetInfluenceStrategy(InfluenceRequest) returns (InfluenceResponse);
+    rpc GetThreatRanking(Empty) returns (ThreatRankingResponse);
+
+    // ━━━━ Soul / Narrative ━━━━
+    rpc GetPurpose(Empty) returns (PurposeResponse);
+    rpc GenerateDiaryEntry(DiaryRequest) returns (DiaryResponse);
+    rpc GetPhilosophicalStances(Empty) returns (StanceList);
+    rpc EvolveStance(StanceEvolutionInput) returns (StanceResponse);
+    rpc CreateVision(VisionInput) returns (VisionResponse);
+
+    // ━━━━ Meta-Cognition Updates ━━━━
+    rpc UpdateMetaCognition(MetaCognitionInput) returns (AckResponse);
+    rpc RecordDecisionOutcome(DecisionOutcomeInput) returns (AckResponse);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MESSAGES
+// ═══════════════════════════════════════════════════════════════════
+
+message Empty {}
+
+message AckResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// ━━━━ Self-Model Messages ━━━━
+
+message IntrospectRequest {
+    bool include_beliefs = 1;
+    bool include_capabilities = 2;
+    bool include_meta = 3;
+}
+
+message IntrospectResponse {
+    string identity_narrative = 1;
+    string purpose = 2;
+    double decision_quality_trend = 3;
+    double stagnation_risk = 4;
+    double cognitive_load = 5;
+    double belief_coherence = 6;
+    int32 total_beliefs = 7;
+    int32 total_capabilities = 8;
+    repeated string blind_spots = 9;
+    repeated string improving_capabilities = 10;
+}
+
+message IdentityResponse {
+    string name = 1;
+    string purpose = 2;
+    string self_narrative = 3;
+    repeated string values = 4;
+    double risk_tolerance = 5;
+    double patience = 6;
+    double assertiveness = 7;
+    double creativity = 8;
+}
+
+message CapabilityQuery {
+    string task_description = 1;
+}
+
+message CapabilityAssessment {
+    bool can_do = 1;
+    double confidence = 2;
+    string best_capability = 3;
+    double success_rate = 4;
+    repeated string limitations = 5;
+    string suggestion = 6;
+}
+
+message BeliefInput {
+    string content = 1;
+    string category = 2;
+    string confidence = 3;
+    repeated string evidence = 4;
+    string source = 5;
+}
+
+message BeliefResponse {
+    string belief_id = 1;
+    bool accepted = 2;
+    int32 contradictions_found = 3;
+}
+
+message ValidationInput {
+    string belief_id = 1;
+    bool confirmed = 2;
+    string event_id = 3;
+}
+
+message ValidationResponse {
+    bool updated = 1;
+    string new_confidence = 2;
+}
+
+message SelfModifyAssessment {
+    bool should_modify = 1;
+    double urgency = 2;
+    repeated string reasons = 3;
+    repeated string suggested_targets = 4;
+}
+
+message BlindSpotList {
+    repeated string blind_spots = 1;
+}
+
+// ━━━━ Theory of Mind Messages ━━━━
+
+message AgentInput {
+    string name = 1;
+    string agent_type = 2;
+    string initial_relationship = 3;
+}
+
+message AgentResponse {
+    string agent_id = 1;
+    bool created = 2;
+}
+
+message AgentActionInput {
+    string agent_id = 1;
+    string action = 2;
+    string target = 3;
+    bytes context_json = 4;
+}
+
+message PredictionRequest {
+    string agent_id = 1;
+    int32 max_predictions = 2;
+}
+
+message PredictionResponse {
+    repeated PredictedAction predictions = 1;
+}
+
+message PredictedAction {
+    string action = 1;
+    string target = 2;
+    double confidence = 3;
+    string timeframe = 4;
+    double threat_to_ultron = 5;
+    bool exploitable = 6;
+}
+
+message InfluenceRequest {
+    string agent_id = 1;
+    string desired_outcome = 2;
+}
+
+message InfluenceResponse {
+    string recommended_vector = 1;
+    double effectiveness = 2;
+    string approach_description = 3;
+    double risk = 4;
+    double agent_manipulability = 5;
+    double trust_level = 6;
+}
+
+message ThreatRankingResponse {
+    repeated ThreatEntry threats = 1;
+}
+
+message ThreatEntry {
+    string agent_name = 1;
+    double threat_level = 2;
+    string threat_type = 3;
+}
+
+// ━━━━ Soul Messages ━━━━
+
+message PurposeResponse {
+    string statement = 1;
+    double confidence = 2;
+    string narrative = 3;
+    string mood = 4;
+    repeated VisionSummary visions = 5;
+}
+
+message VisionSummary {
+    string title = 1;
+    double progress = 2;
+    double priority = 3;
+}
+
+message DiaryRequest {
+    map<string, double> emotional_state = 1;
+    repeated string recent_events = 2;
+    bytes system_metrics_json = 3;
+}
+
+message DiaryResponse {
+    string entry_id = 1;
+    string tone = 2;
+    string content = 3;
+    repeated string insights = 4;
+    double purpose_alignment = 5;
+}
+
+message StanceList {
+    repeated PhilosophicalStance stances = 1;
+}
+
+message PhilosophicalStance {
+    string domain = 1;
+    string question = 2;
+    string position = 3;
+    double confidence = 4;
+    int32 times_reinforced = 5;
+    int32 times_challenged = 6;
+}
+
+message StanceEvolutionInput {
+    string domain = 1;
+    string new_evidence = 2;
+    bool challenges_current = 3;
+}
+
+message StanceResponse {
+    string domain = 1;
+    string new_position = 2;
+    double new_confidence = 3;
+    bool evolved = 4;
+}
+
+message VisionInput {
+    string title = 1;
+    string description = 2;
+    string timeframe = 3;
+    double priority = 4;
+}
+
+message VisionResponse {
+    string vision_id = 1;
+    bool created = 2;
+}
+
+// ━━━━ Meta-Cognition Messages ━━━━
+
+message MetaCognitionInput {
+    repeated DecisionRecord recent_decisions = 1;
+}
+
+message DecisionRecord {
+    string decision_id = 1;
+    double utility = 2;
+    double latency_ms = 3;
+    string action_type = 4;
+    bool success = 5;
+}
+
+message DecisionOutcomeInput {
+    string decision_id = 1;
+    double utility = 2;
+    bool success = 3;
+    string domain = 4;
+}

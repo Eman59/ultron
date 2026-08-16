@@ -10,12 +10,14 @@ pub mod evolution_manager;
 pub mod quantum_simulator;
 pub mod neural_types;
 pub mod learning_bridge;
+pub mod hot_swap;
 
 pub use neural_mesh::NeuralMesh;
 pub use plasticity_engine::PlasticityEngine;
 pub use evolution_manager::EvolutionManager;
 pub use quantum_simulator::QuantumSimulator;
 pub use learning_bridge::LearningBridge;
+pub use hot_swap::HotSwapEngine;
 
 /// Re-exports for common neural types
 pub mod prelude {

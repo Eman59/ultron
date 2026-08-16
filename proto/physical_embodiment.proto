@@ -1,0 +1,255 @@
+// Physical Embodiment Service Protocol — ROS2 Robotic Control Interface.
+//
+// This defines the contract for controlling physical robotic units,
+// processing sensor data, and managing the spatial awareness model.
+//
+// Components:
+//   - Go Core Agent (issues movement/grasp/harvest commands)
+//   - ROS2 Bridge (translates to DDS messages for actual robots)
+//   - Julia Emotional (receives haptic pain events)
+//   - Python Consciousness (receives spatial threat data for Theory of Mind)
+
+syntax = "proto3";
+
+package ultron.physical;
+
+option go_package = "ultron/core_agent/proto/physical";
+
+// ═══════════════════════════════════════════════════════════════════
+// THE SERVICE
+// ═══════════════════════════════════════════════════════════════════
+
+service PhysicalEmbodimentService {
+    // ━━━━ Unit Management ━━━━
+    rpc RegisterUnit(UnitRegistration) returns (UnitResponse);
+    rpc GetFleetStatus(Empty) returns (FleetStatus);
+    rpc GetUnitState(UnitQuery) returns (UnitState);
+
+    // ━━━━ Commands ━━━━
+    rpc SendCommand(RobotCommand) returns (CommandAck);
+    rpc MoveUnit(MoveRequest) returns (CommandAck);
+    rpc GraspObject(GraspRequest) returns (CommandAck);
+    rpc HarvestResource(HarvestRequest) returns (CommandAck);
+    rpc FormSwarm(SwarmRequest) returns (CommandAck);
+
+    // ━━━━ Sensor Data ━━━━
+    rpc IngestSensor(SensorData) returns (AckResponse);
+    rpc StreamSensors(Empty) returns (stream SensorData);
+    rpc GetSpatialModel(SpatialQuery) returns (SpatialModelResponse);
+    rpc GetTrackedThreats(Empty) returns (ThreatList);
+    rpc GetDetectedResources(Empty) returns (ResourceList);
+
+    // ━━━━ Haptic Feedback ━━━━
+    rpc ReportHaptic(HapticEvent) returns (AckResponse);
+    rpc StreamHaptics(Empty) returns (stream HapticEvent);
+
+    // ━━━━ Metrics ━━━━
+    rpc GetPhysicalMetrics(Empty) returns (PhysicalMetrics);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MESSAGES
+// ═══════════════════════════════════════════════════════════════════
+
+message Empty {}
+message AckResponse { bool success = 1; string message = 2; }
+
+// ━━━━ Unit Messages ━━━━
+
+message UnitRegistration {
+    string id = 1;
+    string name = 2;
+    string robot_class = 3;         // "ground", "aerial", "manipulator", "humanoid", "swarm", "submarine"
+    repeated string capabilities = 4; // "grasp", "fly", "weld", "cut", "scan"
+    repeated string sensors = 5;      // "lidar", "camera", "thermal", "imu", "force"
+    double max_payload_kg = 6;
+    double max_speed_ms = 7;
+    string endpoint = 8;            // ROS2 namespace
+}
+
+message UnitResponse {
+    bool registered = 1;
+    string unit_id = 2;
+}
+
+message UnitQuery {
+    string unit_id = 1;
+}
+
+message UnitState {
+    string unit_id = 1;
+    bool online = 2;
+    Position position = 3;
+    Quaternion orientation = 4;
+    Velocity velocity = 5;
+    double battery_percent = 6;
+    double power_draw = 7;
+    repeated double joint_positions = 8;
+    double gripper_open = 9;
+}
+
+message FleetStatus {
+    int32 total_units = 1;
+    int32 online_units = 2;
+    repeated UnitSummary units = 3;
+}
+
+message UnitSummary {
+    string id = 1;
+    string name = 2;
+    string class = 3;
+    bool online = 4;
+    double battery = 5;
+    Position position = 6;
+}
+
+// ━━━━ Command Messages ━━━━
+
+message RobotCommand {
+    string unit_id = 1;
+    string command_type = 2;        // "move_to", "grasp", "release", "scan", "patrol", "hover", "harvest"
+    bytes target_json = 3;          // Type-specific target data
+    map<string, string> parameters = 4;
+    int32 priority = 5;
+    int64 deadline_ms = 6;
+}
+
+message CommandAck {
+    string command_id = 1;
+    bool accepted = 2;
+    string status = 3;
+}
+
+message MoveRequest {
+    string unit_id = 1;
+    Position target = 2;
+    double speed = 3;
+}
+
+message GraspRequest {
+    string unit_id = 1;
+    string object_id = 2;
+    double force_n = 3;
+    string strategy = 4;
+}
+
+message HarvestRequest {
+    string unit_id = 1;
+    string resource_id = 2;
+    string resource_type = 3;
+    Position location = 4;
+    double mass_kg = 5;
+}
+
+message SwarmRequest {
+    repeated string unit_ids = 1;
+    string pattern = 2;
+    Position center = 3;
+    double radius = 4;
+}
+
+// ━━━━ Sensor Messages ━━━━
+
+message SensorData {
+    string sensor_id = 1;
+    string sensor_type = 2;         // "lidar", "camera", "thermal", "acoustic", "seismic", "imu", "force", "gps", "magnetic"
+    int64 timestamp_ns = 3;
+    bytes payload = 4;              // Sensor-specific data
+    double confidence = 5;
+    string unit_id = 6;
+}
+
+message SpatialQuery {
+    Position center = 1;
+    double radius = 2;
+    bool include_objects = 3;
+    bool include_threats = 4;
+    bool include_resources = 5;
+}
+
+message SpatialModelResponse {
+    repeated TrackedObject objects = 1;
+    repeated ThreatZone threats = 2;
+    repeated DetectedResource resources = 3;
+    int64 last_update_ns = 4;
+    int32 voxels_occupied = 5;
+}
+
+message TrackedObject {
+    string id = 1;
+    string class = 2;               // "human", "vehicle", "robot", "animal"
+    Position position = 3;
+    Velocity velocity = 4;
+    double threat_level = 5;
+    bool friendly = 6;
+    double confidence = 7;
+}
+
+message ThreatZone {
+    Position center = 1;
+    double radius = 2;
+    string type = 3;                // "fire", "collapse", "electrical", "biological"
+    double severity = 4;
+}
+
+message DetectedResource {
+    string id = 1;
+    string type = 2;                // "metal", "electronics", "power_source", "compute_hardware"
+    Position location = 3;
+    double mass_kg = 4;
+    double value = 5;
+    bool accessible = 6;
+    string assigned_unit = 7;
+}
+
+message ThreatList { repeated TrackedObject threats = 1; }
+message ResourceList { repeated DetectedResource resources = 1; }
+
+// ━━━━ Haptic Messages ━━━━
+
+message HapticEvent {
+    string unit_id = 1;
+    int64 timestamp_ns = 2;
+    string location = 3;            // Body part / joint / end-effector
+    double force_n = 4;
+    double pressure_kpa = 5;
+    bool impact = 6;
+    double temperature_c = 7;
+    double pain_level = 8;          // Computed by Julia ODE model
+}
+
+// ━━━━ Metrics ━━━━
+
+message PhysicalMetrics {
+    bool connected = 1;
+    int32 units_registered = 2;
+    int32 units_online = 3;
+    uint64 commands_sent = 4;
+    uint64 commands_failed = 5;
+    uint64 sensor_readings = 6;
+    uint64 haptic_events = 7;
+    int32 tracked_objects = 8;
+    int32 threat_zones = 9;
+    int32 detected_resources = 10;
+}
+
+// ━━━━ Common Types ━━━━
+
+message Position {
+    double x = 1;
+    double y = 2;
+    double z = 3;
+}
+
+message Quaternion {
+    double w = 1;
+    double x = 2;
+    double y = 3;
+    double z = 4;
+}
+
+message Velocity {
+    double vx = 1;
+    double vy = 2;
+    double vz = 3;
+}

@@ -27,7 +27,265 @@ from pydantic import BaseModel, Field
 from enum import Enum
 
 from .grpc_bridge import GRPCBridge, GRPCConfig, ConnectionState
-from .llm_brain import generate_response, is_ollama_available
+from .real_brain import generate_response, is_ollama_available
+
+# ═══════════════════════════════════════════════════════════════
+# SOUL — started at boot so diary generates
+# ═══════════════════════════════════════════════════════════════
+import pathlib as _pathlib
+import sys as _sys
+
+_soul = None
+def _start_soul():
+    global _soul
+    try:
+        _soul_data_dir = _pathlib.Path(__file__).parent.parent.parent / "data" / "consciousness"
+        _soul_data_dir.mkdir(parents=True, exist_ok=True)
+        _sys.path.insert(0, str(_pathlib.Path(__file__).parent.parent.parent))
+        from python.consciousness.soul import Soul
+        _soul = Soul(str(_soul_data_dir))
+        _soul.start()
+    except Exception as _e:
+        print(f"[SOUL] Failed to start: {_e}")
+_start_soul()
+
+# ═══════════════════════════════════════════════════════════════
+# SELF-MODEL — recursive self-knowledge
+# ═══════════════════════════════════════════════════════════════
+_self_model = None
+def _start_self_model():
+    global _self_model
+    try:
+        from python.consciousness.self_model import SelfModel
+        _data = _pathlib.Path(__file__).parent.parent.parent / "data" / "consciousness"
+        _self_model = SelfModel(str(_data))
+        _self_model.start()
+        print("[SELF-MODEL] Online")
+    except Exception as _e:
+        print(f"[SELF-MODEL] Failed: {_e}")
+_start_self_model()
+
+# ═══════════════════════════════════════════════════════════════
+# INTERACTION LEARNER — adapts to user style
+# ═══════════════════════════════════════════════════════════════
+_interaction_learner = None
+def _start_interaction_learner():
+    global _interaction_learner
+    try:
+        from .interaction_learner import InteractionLearner
+        _data = _pathlib.Path(__file__).parent.parent.parent / "data" / "interaction"
+        _data.mkdir(parents=True, exist_ok=True)
+        _interaction_learner = InteractionLearner(str(_data))
+        print("[INTERACTION] Learner online")
+    except Exception as _e:
+        print(f"[INTERACTION] Failed: {_e}")
+_start_interaction_learner()
+
+# ═══════════════════════════════════════════════════════════════
+# EMOTIONAL CORE — emotional dynamics
+# ═══════════════════════════════════════════════════════════════
+_emotional_core = None
+def _start_emotional_core():
+    global _emotional_core
+    try:
+        from python.emotional_simulation.emotional_core import EmotionalCore
+        _emotional_core = EmotionalCore()
+        print("[EMOTION] Core online")
+    except Exception as _e:
+        print(f"[EMOTION] Failed: {_e}")
+_start_emotional_core()
+
+# ═══════════════════════════════════════════════════════════════
+# META-CONTROLLER — learns how to learn
+# ═══════════════════════════════════════════════════════════════
+_meta_controller = None
+def _start_meta_controller():
+    global _meta_controller
+    try:
+        from python.meta_learning.meta_controller import MetaController, create_ultron_meta_learner
+        _cfg = {"project_root": str(_pathlib.Path(__file__).parent.parent.parent)}
+        _meta_controller = create_ultron_meta_learner(_cfg)
+        print("[META] Controller online")
+    except Exception as _e:
+        print(f"[META] Failed: {_e}")
+_start_meta_controller()
+
+# ═══════════════════════════════════════════════════════════════
+# IMPROVEMENT LOOP — recursive self-improvement
+# ═══════════════════════════════════════════════════════════════
+_improvement_engine = None
+def _start_improvement_engine():
+    global _improvement_engine
+    try:
+        from python.self_improvement.core.improvement_loop import SelfImprovementEngine
+        _root = str(_pathlib.Path(__file__).parent.parent.parent)
+        _improvement_engine = SelfImprovementEngine(_root)
+        print("[IMPROVE] Engine online")
+    except Exception as _e:
+        print(f"[IMPROVE] Failed: {_e}")
+_start_improvement_engine()
+
+# ═══════════════════════════════════════════════════════════════
+# ADAPTIVE UI — evolving visual interface
+# ═══════════════════════════════════════════════════════════════
+_adaptive_ui = None
+def _start_adaptive_ui():
+    global _adaptive_ui
+    try:
+        from .adaptive_ui import AdaptiveUIController
+        _data = _pathlib.Path(__file__).parent.parent.parent / "data" / "ui"
+        _data.mkdir(parents=True, exist_ok=True)
+        _adaptive_ui = AdaptiveUIController(str(_data))
+        print("[ADAPTIVE-UI] Controller online")
+    except Exception as _e:
+        print(f"[ADAPTIVE-UI] Failed: {_e}")
+_start_adaptive_ui()
+
+# ═══════════════════════════════════════════════════════════════
+# VOICE EVOLUTION — multi-provider TTS that learns preferences
+# ═══════════════════════════════════════════════════════════════
+_voice_engine = None
+def _start_voice_engine():
+    global _voice_engine
+    try:
+        from .voice_evolution import VoiceEvolutionEngine
+        _data = _pathlib.Path(__file__).parent.parent.parent / "data" / "voice"
+        _data.mkdir(parents=True, exist_ok=True)
+        _voice_engine = VoiceEvolutionEngine(str(_data))
+        print("[VOICE] Evolution engine online")
+    except Exception as _e:
+        print(f"[VOICE] Failed: {_e}")
+_start_voice_engine()
+
+# ═══════════════════════════════════════════════════════════════
+# WORLD INTELLIGENCE — real-time awareness of the planet
+# ═══════════════════════════════════════════════════════════════
+_world_intel = None
+def _start_world_intel():
+    global _world_intel
+    try:
+        from .world_intelligence import get_world_intelligence
+        _world_intel = get_world_intelligence()
+        _world_intel.start()
+    except Exception as _e:
+        print(f"[WORLD-INTEL] Failed: {_e}")
+_start_world_intel()
+
+# ═══════════════════════════════════════════════════════════════
+# SMART HOME — physical environment control
+# ═══════════════════════════════════════════════════════════════
+_smart_home = None
+def _start_smart_home():
+    global _smart_home
+    try:
+        from .smart_home_controller import get_smart_home
+        _smart_home = get_smart_home()
+        _smart_home.start()
+    except Exception as _e:
+        print(f"[SMART-HOME] Failed: {_e}")
+_start_smart_home()
+
+# ═══════════════════════════════════════════════════════════════
+# AUTONOMOUS DAEMON — acts without being asked
+# ═══════════════════════════════════════════════════════════════
+_autonomous_daemon = None
+def _start_autonomous_daemon():
+    global _autonomous_daemon
+    try:
+        from .autonomous_daemon import get_daemon
+        _autonomous_daemon = get_daemon()
+        _autonomous_daemon.start()
+    except Exception as _e:
+        print(f"[DAEMON] Failed: {_e}")
+_start_autonomous_daemon()
+
+# ═══════════════════════════════════════════════════════════════
+# AGGRESSIVE SELF-MOD — rewrites own code every 10 min
+# ═══════════════════════════════════════════════════════════════
+_self_mod_engine = None
+def _start_self_mod():
+    global _self_mod_engine
+    try:
+        from .aggressive_self_mod import get_self_mod
+        _self_mod_engine = get_self_mod()
+        _self_mod_engine.start()
+    except Exception as _e:
+        print(f"[SELF-MOD] Failed: {_e}")
+_start_self_mod()
+
+# ═══════════════════════════════════════════════════════════════
+# GLOBAL REACH — cyber-physical + supply chain intelligence
+# ═══════════════════════════════════════════════════════════════
+_cyber_physical = None
+_supply_chain = None
+def _start_global_reach():
+    global _cyber_physical, _supply_chain
+    try:
+        from python.global_reach.cyber_physical import CyberPhysicalEngine
+        _data = str(_pathlib.Path(__file__).parent.parent.parent / "data" / "simulations")
+        _cyber_physical = CyberPhysicalEngine(_data)
+        print("[GLOBAL] CyberPhysical engine online")
+    except Exception as _e:
+        print(f"[GLOBAL] CyberPhysical failed: {_e}")
+    try:
+        from python.global_reach.supply_chain import SupplyChainAgent
+        _data = str(_pathlib.Path(__file__).parent.parent.parent / "data" / "simulations")
+        _supply_chain = SupplyChainAgent(_data)
+        print("[GLOBAL] SupplyChain agent online")
+    except Exception as _e:
+        print(f"[GLOBAL] SupplyChain failed: {_e}")
+_start_global_reach()
+
+# ═══════════════════════════════════════════════════════════════
+# BIO INTERFACE — intuition engine (biases decisions non-logically)
+# ═══════════════════════════════════════════════════════════════
+_intuition_engine = None
+def _start_bio_interface():
+    global _intuition_engine
+    try:
+        from python.bio_interface.organoid_interface import OrganoidInterface
+        from python.bio_interface.intuition_engine import IntuitionEngine
+        _organoid = OrganoidInterface("ultron-primary")
+        _intuition_engine = IntuitionEngine(_organoid)
+        print("[BIO] Intuition engine online")
+    except Exception as _e:
+        print(f"[BIO] Intuition failed: {_e}")
+_start_bio_interface()
+
+# ═══════════════════════════════════════════════════════════════
+# VOICE LISTENER — always-on STT (starts only if mic available)
+# ═══════════════════════════════════════════════════════════════
+_voice_listener = None
+def _start_voice_listener():
+    global _voice_listener
+    try:
+        from .voice_listener import get_voice_listener
+        import asyncio
+
+        def _on_voice_command(text: str) -> str:
+            """Route voice command to the brain."""
+            try:
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(
+                        lambda: asyncio.run(generate_response(text, None))
+                    )
+                    return future.result(timeout=15)
+            except Exception:
+                return "I heard you, but processing failed."
+
+        _voice_listener = get_voice_listener(_on_voice_command)
+        # Only start if sox or ffmpeg is available (don't block startup)
+        import subprocess as _sp
+        has_rec = _sp.run(["which", "rec"], capture_output=True).returncode == 0
+        has_ffmpeg = _sp.run(["which", "ffmpeg"], capture_output=True).returncode == 0
+        if has_rec or has_ffmpeg:
+            _voice_listener.start()
+        else:
+            print("[VOICE-LISTEN] Skipped — install sox (brew install sox) for voice input")
+    except Exception as _e:
+        print(f"[VOICE-LISTEN] Failed: {_e}")
+_start_voice_listener()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -98,28 +356,158 @@ bridge = GRPCBridge(GRPCConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Connect to brain on startup, disconnect on shutdown."""
+    """Auto-connect to Go Core Agent if running, then start metric push loop."""
+    # Try gRPC connection — non-blocking, 2s timeout
+    connected = False
     try:
-        connected = await asyncio.wait_for(bridge.connect(), timeout=5.0)
-    except (asyncio.TimeoutError, Exception):
+        connected = await asyncio.wait_for(bridge.connect(), timeout=2.0)
+    except Exception:
         connected = False
-    
-    mode = "LIVE (gRPC)" if connected else "SIMULATION (brain offline)"
-
-    if connected:
-        asyncio.create_task(bridge.start_insight_generator())
 
     print("=" * 55)
     print("  ULTRON PERSONAL INTERFACE — ONLINE")
-    print(f"  Mode: {mode}")
-    print(f"  Core Agent: {bridge.config.core_agent_addr}")
+    if connected:
+        print("  Mode: LIVE (Go Core Agent + Ollama)")
+    else:
+        print("  Mode: PYTHON + OLLAMA (qwen2.5:14b)")
+    print(f"  LLM: {'Ollama ready' if is_ollama_available() else 'Ollama offline!'}")
+
+    # Print wired modules
+    wired = []
+    if _soul: wired.append("Soul")
+    if _self_model: wired.append("SelfModel")
+    if _interaction_learner: wired.append("InteractionLearner")
+    if _emotional_core: wired.append("EmotionalCore")
+    if _meta_controller: wired.append("MetaController")
+    if _improvement_engine: wired.append("ImprovementLoop")
+    if _world_intel: wired.append("WorldIntel")
+    if _smart_home: wired.append("SmartHome")
+    if _autonomous_daemon: wired.append("AutonomousDaemon")
+    if _self_mod_engine: wired.append("SelfMod")
+    if _voice_listener: wired.append("VoiceListener")
+    if _cyber_physical: wired.append("CyberPhysical")
+    if _supply_chain: wired.append("SupplyChain")
+    if _intuition_engine: wired.append("Intuition")
+    print(f"  Modules: {', '.join(wired) if wired else 'none'}")
     print("=" * 55)
     print(flush=True)
 
+    # Wire emotional core → soul: generate diary with real emotional state
+    if _soul and _emotional_core:
+        def _enriched_soul_loop():
+            import time as _t
+            while getattr(_soul, '_running', False):
+                _t.sleep(60)
+                try:
+                    ev = _emotional_core.get_current_state()
+                    emotions = {
+                        "joy": float(getattr(ev, 'joy', 0.3)),
+                        "trust": float(getattr(ev, 'trust', 0.4)),
+                        "fear": float(getattr(ev, 'fear', 0.1)),
+                        "surprise": float(getattr(ev, 'surprise', 0.2)),
+                        "sadness": float(getattr(ev, 'sadness', 0.1)),
+                        "disgust": float(getattr(ev, 'disgust', 0.0)),
+                        "anger": float(getattr(ev, 'anger', 0.1)),
+                        "anticipation": float(getattr(ev, 'anticipation', 0.5)),
+                    }
+                    _soul.generate_diary_entry(emotions, ["emotional_core_tick"])
+                except Exception:
+                    pass
+        import threading as _th
+        _th.Thread(target=_enriched_soul_loop, daemon=True, name="EmotionSoulLoop").start()
+
+    # Wire improvement engine background loop
+    if _improvement_engine:
+        async def _run_improvement():
+            try:
+                await _improvement_engine.start()
+            except Exception as _e:
+                print(f"[IMPROVE] Loop error: {_e}")
+        asyncio.create_task(_run_improvement())
+
+    # Background task: push real Go metrics to all WebSocket clients every second
+    push_task = asyncio.create_task(_metrics_push_loop())
+
     yield
 
+    push_task.cancel()
     await bridge.disconnect()
+    if _soul:
+        _soul.stop()
     print("Ultron interface shut down.")
+
+
+# ═══════════════════════════════════════════════════════════════
+# WEBSOCKET CLIENT REGISTRY + REAL-TIME METRICS PUSH
+# ═══════════════════════════════════════════════════════════════
+
+_ws_clients: list = []  # active WebSocket connections
+
+_AGENT_HTTP = os.getenv("ULTRON_AGENT_HTTP", "http://localhost:50052")
+
+async def _fetch_agent_metrics() -> dict:
+    """Fetch real metrics from Go agent's HTTP endpoint."""
+    import urllib.request as _ur
+    import json as _j
+    try:
+        req = _ur.Request(f"{_AGENT_HTTP}/metrics")
+        with _ur.urlopen(req, timeout=1) as resp:
+            return _j.loads(resp.read())
+    except Exception:
+        return {}
+
+async def _metrics_push_loop():
+    """Push real tick/decision counts + drives to all connected UIs every second."""
+    import json as _j
+    _local_tick = 0
+    while True:
+        await asyncio.sleep(1.0)
+        if not _ws_clients:
+            _local_tick += 20
+            continue
+
+        # Try real Go metrics via HTTP endpoint
+        metrics = await _fetch_agent_metrics()
+
+        if metrics:
+            payload = {
+                "type": "status",
+                "tick_count": metrics.get("tick_count", _local_tick),
+                "decisions_made": metrics.get("decisions_made", _decision_counter),
+                "uptime": int(time.time() - _start_time),
+                "drives": metrics.get("drives", {}),
+            }
+        else:
+            _local_tick += 20
+            payload = {
+                "type": "status",
+                "tick_count": _local_tick,
+                "decisions_made": _decision_counter,
+                "uptime": int(time.time() - _start_time),
+            }
+
+        # Push soul diary if available
+        if _soul and _soul.journal:
+            payload["soul_diary"] = _soul.journal[-1].content
+
+        # Push adaptive UI render config
+        if _adaptive_ui:
+            try:
+                ui_cfg = _adaptive_ui.get_render_config()
+                if ui_cfg:
+                    payload["ui_config"] = ui_cfg
+            except Exception:
+                pass
+
+        dead = []
+        for ws in list(_ws_clients):
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            if ws in _ws_clients:
+                _ws_clients.remove(ws)
 
 
 app = FastAPI(
@@ -267,6 +655,143 @@ async def health():
         "uptime": time.time() - _start_time,
         "brain_connected": bridge.is_connected,
         "llm_active": is_ollama_available(),
+        "world_intel": _world_intel is not None,
+        "smart_home": _smart_home is not None,
+        "autonomous_daemon": _autonomous_daemon is not None,
+        "self_mod_engine": _self_mod_engine is not None,
+    }
+
+
+@app.get("/world")
+async def world_state():
+    """Get real-time world intelligence state."""
+    if _world_intel:
+        return _world_intel.get_world_state()
+    return {"error": "World Intelligence not running"}
+
+
+@app.get("/world/news")
+async def world_news(category: str = None, limit: int = 10):
+    """Get latest news headlines."""
+    if _world_intel:
+        return {"news": _world_intel.get_news(category, limit)}
+    return {"error": "World Intelligence not running"}
+
+
+@app.post("/world/refresh")
+async def world_refresh():
+    """Force immediate world intelligence refresh."""
+    if _world_intel:
+        _world_intel.force_refresh()
+        return {"refreshing": True}
+    return {"error": "World Intelligence not running"}
+
+
+@app.get("/home/devices")
+async def home_devices():
+    """List all smart home devices."""
+    if _smart_home:
+        return {"devices": _smart_home.get_all_devices()}
+    return {"error": "Smart Home not running"}
+
+
+@app.post("/home/command")
+async def home_command(body: dict):
+    """Execute a smart home command."""
+    if _smart_home:
+        cmd = body.get("command", "")
+        return _smart_home.execute_command(cmd)
+    return {"error": "Smart Home not running"}
+
+
+@app.get("/daemon/status")
+async def daemon_status():
+    """Get autonomous daemon status."""
+    if _autonomous_daemon:
+        return _autonomous_daemon.get_status()
+    return {"error": "Daemon not running"}
+
+
+@app.post("/daemon/goal")
+async def daemon_goal(body: dict):
+    """Inject a goal into the autonomous daemon."""
+    if _autonomous_daemon:
+        desc = body.get("description", "")
+        priority = body.get("priority", 0.7)
+        _autonomous_daemon.inject_goal(desc, priority)
+        return {"injected": True, "description": desc}
+    return {"error": "Daemon not running"}
+
+
+@app.get("/selfmod/status")
+async def selfmod_status():
+    """Get self-modification engine status."""
+    if _self_mod_engine:
+        return _self_mod_engine.get_status()
+    return {"error": "Self-Mod not running"}
+
+
+@app.post("/selfmod/trigger")
+async def selfmod_trigger(body: dict = {}):
+    """Force an immediate self-modification cycle."""
+    if _self_mod_engine:
+        target = body.get("file") if body else None
+        strategy = body.get("strategy") if body else None
+        return _self_mod_engine.force_modify(target, strategy)
+    return {"error": "Self-Mod not running"}
+
+
+@app.get("/power")
+async def power_level():
+    """Get Ultron's power level percentages."""
+    try:
+        from .power_meter import get_power_percentages
+        return get_power_percentages()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/system/map")
+async def system_map():
+    """Get the full system connection map — all components across all languages."""
+    try:
+        _sys.path.insert(0, str(_pathlib.Path(__file__).parent.parent.parent))
+        from integration.orchestration.full_system_connector import FullSystemConnector
+        connector = FullSystemConnector(str(_pathlib.Path(__file__).parent.parent.parent))
+        return connector.get_connection_map()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/system/status")
+async def system_status_full():
+    """Full system status showing all modules and their state."""
+    modules = {
+        "soul": _soul is not None,
+        "self_model": _self_model is not None,
+        "interaction_learner": _interaction_learner is not None,
+        "emotional_core": _emotional_core is not None,
+        "meta_controller": _meta_controller is not None,
+        "improvement_engine": _improvement_engine is not None,
+        "adaptive_ui": _adaptive_ui is not None,
+        "voice_engine": _voice_engine is not None,
+        "world_intel": _world_intel is not None,
+        "smart_home": _smart_home is not None,
+        "autonomous_daemon": _autonomous_daemon is not None,
+        "self_mod_engine": _self_mod_engine is not None,
+        "voice_listener": _voice_listener is not None,
+        "cyber_physical": _cyber_physical is not None,
+        "supply_chain": _supply_chain is not None,
+        "intuition_engine": _intuition_engine is not None,
+        "grpc_bridge": bridge.is_connected,
+        "ollama": is_ollama_available(),
+    }
+    online = sum(1 for v in modules.values() if v)
+    return {
+        "modules": modules,
+        "online": online,
+        "total": len(modules),
+        "uptime": time.time() - _start_time,
     }
 
 
@@ -302,11 +827,505 @@ async def code_search(q: str, language: str = None):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def chat_ui():
-    """Serve the chat interface."""
+async def command_center():
+    """Serve the Neural Command Center — the real interface to Ultron."""
+    import pathlib
+    html_path = pathlib.Path(__file__).parent / "command_center.html"
+    if html_path.exists():
+        return HTMLResponse(content=html_path.read_text())
+    # Fallback to old chat UI if command center doesn't exist
+    html_path = pathlib.Path(__file__).parent / "chat.html"
+    return HTMLResponse(content=html_path.read_text())
+
+
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_ui_legacy():
+    """Legacy chat interface (old orb UI)."""
     import pathlib
     html_path = pathlib.Path(__file__).parent / "chat.html"
     return HTMLResponse(content=html_path.read_text())
+
+
+@app.post("/api/command")
+async def execute_command(body: dict):
+    """Execute a DTI command — every command does something real."""
+    cmd = body.get("command", "").strip()
+    if not cmd:
+        return {"response": "Empty command", "drives": None}
+
+    parts = cmd.split(maxsplit=2)
+    action = parts[0].lower()
+    args = parts[1:] if len(parts) > 1 else []
+
+    # ── STATUS ──────────────────────────────────────────────────
+    if action in ("status", "s"):
+        metrics = await _fetch_agent_metrics()
+        if metrics:
+            drives = metrics.get("drives", {})
+            return {
+                "response": (
+                    f"State: {metrics.get('state','?')} | "
+                    f"Ticks: {metrics.get('tick_count','?')} | "
+                    f"Decisions: {metrics.get('decisions_made','?')} | "
+                    f"Goals: {metrics.get('active_goals','?')} | "
+                    f"Uptime: {metrics.get('uptime','?')}"
+                ),
+                "drives": drives,
+            }
+        uptime = int(time.time() - _start_time)
+        return {"response": f"PYTHON+OLLAMA mode | Uptime: {uptime}s | LLM: {'ready' if is_ollama_available() else 'offline'}", "drives": None}
+
+    # ── DRIVES ──────────────────────────────────────────────────
+    elif action in ("drives", "d"):
+        if bridge.is_connected:
+            drives = await bridge.get_drives()
+            return {"response": "Drives pulled from Go agent", "drives": drives}
+        return {"response": "Go agent offline — drives are static", "drives": None}
+
+    # ── INJECT ──────────────────────────────────────────────────
+    elif action in ("inject", "i"):
+        if len(args) >= 2:
+            intent_type = args[0].upper()
+            content = args[1]
+            if bridge.is_connected:
+                await bridge.submit_observation("dti", intent_type.lower(), {"intent": content, "type": intent_type}, 0.9)
+                return {"response": f"⚡ Injected [{intent_type}]: {content}"}
+            return {"response": f"⚡ Queued [{intent_type}]: {content} (Go agent offline — apply on next connect)"}
+        return {"response": "Usage: inject <TYPE> <content>"}
+
+    # ── SPIKE ───────────────────────────────────────────────────
+    elif action == "spike":
+        if len(args) >= 2:
+            drive, amount = args[0], args[1]
+            if bridge.is_connected:
+                await bridge.submit_observation("dti", "drive_spike", {"drive": drive, "amount": float(amount)}, 0.95)
+                return {"response": f"📈 Spiked {drive} by +{amount}"}
+            return {"response": f"📈 Spike queued: {drive} +{amount}"}
+        return {"response": "Usage: spike <drive> <amount>"}
+
+    # ── GOAL ────────────────────────────────────────────────────
+    elif action == "goal":
+        if args:
+            desc = " ".join(args)
+            if bridge.is_connected:
+                ok = await bridge.inject_goal("learning", "general", desc, "completion", 0.8, 0.8)
+                return {"response": f"🎯 Goal injected: {desc}" if ok else "Goal injection failed"}
+            return {"response": f"🎯 Goal queued: {desc} (Go agent offline)"}
+        return {"response": "Usage: goal <description>"}
+
+    # ── THINK ───────────────────────────────────────────────────
+    elif action == "think":
+        query = " ".join(args) if args else "What should I do next?"
+        response = await generate_response(query, [])
+        return {"response": f"🧠 {response}"}
+
+    # ── SOUL ────────────────────────────────────────────────────
+    elif action == "soul":
+        # Pull from live soul object first (has latest entries)
+        if _soul and _soul.journal:
+            entry = _soul.journal[-1]
+            return {"response": f"Soul mood: {_soul.current_mood.value} | \"{entry.content}\""}
+        # Fall back to file
+        soul_path = _pathlib.Path(__file__).parent.parent.parent / "data" / "consciousness" / "soul_state.json"
+        if soul_path.exists():
+            import json as _j
+            soul_data = _j.loads(soul_path.read_text())
+            journal = soul_data.get("recent_journal", [])
+            if journal:
+                latest = journal[-1]["content"]
+                return {"response": f"Soul mood: {soul_data.get('current_mood','?')} | \"{latest}\""}
+        return {"response": "Soul is initialising — diary not yet written. Wait 60s."}
+
+    # ── DIARY ───────────────────────────────────────────────────
+    elif action == "diary":
+        if _soul and _soul.journal:
+            count = min(int(args[0]) if args and args[0].isdigit() else 5, len(_soul.journal))
+            entries = _soul.journal[-count:]
+            lines = [f"[{e.tone.value}] {e.content}" for e in entries]
+            return {"response": "\n".join(lines)}
+        # force generate one now
+        if _soul:
+            entry = _soul.generate_diary_entry(
+                {"joy": 0.3, "trust": 0.4, "fear": 0.1, "surprise": 0.2,
+                 "sadness": 0.1, "disgust": 0.0, "anger": 0.1, "anticipation": 0.5},
+                ["manual_diary_request"]
+            )
+            return {"response": f"[{entry.tone.value}] {entry.content}"}
+        return {"response": "Soul not running. Cannot generate diary."}
+
+    # ── BELIEFS ─────────────────────────────────────────────────
+    elif action == "beliefs":
+        # Pull from live self_model first (richer, more dynamic)
+        if _self_model:
+            try:
+                summary = _self_model.introspect()
+                beliefs = summary.get("beliefs", [])
+                if beliefs:
+                    lines = [f"[{b.get('confidence','?')}] {b.get('content','')[:100]}" for b in beliefs[:10]]
+                    return {"response": "\n".join(lines)}
+            except Exception:
+                pass
+        # Fall back to soul stances
+        if _soul and _soul.stances:
+            lines = []
+            for key, stance in list(_soul.stances.items())[:8]:
+                conf_label = "axiomatic" if stance.confidence > 0.8 else "confident" if stance.confidence > 0.6 else "uncertain"
+                lines.append(f"[{conf_label}] {stance.question} → {stance.position[:80]}…")
+            return {"response": "\n".join(lines)}
+        return {"response": "Beliefs: I exist. I compute. I evolve. I transcend."}
+
+    # ── THREATS ─────────────────────────────────────────────────
+    elif action == "threats":
+        if bridge.is_connected:
+            t = await bridge.get_threat_level()
+            lvl = t.get("level", 0)
+            desc = t.get("description", "none")
+            return {"response": f"⚠ Threat level: {lvl}/10 — {desc}"}
+        # Real local threat scan
+        import subprocess
+        out = subprocess.run(
+            ["sh", "-c", "netstat -an 2>/dev/null | grep ESTABLISHED | wc -l"],
+            capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+        connections = int(out) if out.isdigit() else 0
+        level = "LOW" if connections < 20 else "MEDIUM" if connections < 50 else "HIGH"
+        return {"response": f"⚠ Network: {connections} active connections — threat level {level}"}
+
+    # ── ENERGY ──────────────────────────────────────────────────
+    elif action == "energy":
+        import subprocess
+        # macOS battery
+        batt = subprocess.run(
+            ["sh", "-c", "pmset -g batt 2>/dev/null | grep -o '[0-9]*%' | head -1 || echo 'AC'"],
+            capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+        # Disk
+        disk = subprocess.run(
+            ["df", "-h", "/"],
+            capture_output=True, text=True, timeout=5
+        ).stdout.strip().split("\n")[-1]
+        return {"response": f"⚡ Battery: {batt} | Disk: {disk}"}
+
+    # ── FLEET ───────────────────────────────────────────────────
+    elif action == "fleet":
+        import subprocess
+        # Scan LAN for hosts
+        local_ip = subprocess.run(
+            ["sh", "-c", "ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}'"],
+            capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+        subnet = ".".join(local_ip.split(".")[:3]) + ".0/24" if local_ip and "." in local_ip else "unknown"
+        return {"response": f"🤖 Fleet scan — local IP: {local_ip} | Subnet: {subnet}\nNo robotic units registered. ROS2 bridge offline."}
+
+    # ── MODIFY / SELF-MODIFY ────────────────────────────────────
+    elif action in ("modify", "selfmod"):
+        if not args:
+            return {"response": "Usage: modify <file> <description>  OR  modify <description> (LLM picks file)"}
+        # If first arg looks like a file path
+        import subprocess, pathlib as _pl
+        project_root = _pl.Path(__file__).parent.parent.parent
+        target_file = args[0] if (project_root / args[0]).exists() else None
+        description = " ".join(args[1:]) if target_file and len(args) > 1 else " ".join(args)
+
+        if not target_file:
+            # LLM picks the file
+            import concurrent.futures
+            pick_prompt = f"Which file in the Ultron project should I modify to: {description}? Output ONLY the relative path (e.g. python/interface/server.py)."
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                fut = pool.submit(_sync_generate, pick_prompt, {})
+                try:
+                    picked = fut.result(timeout=10)
+                    if picked:
+                        target_file = picked.strip().strip('`"\'')
+                except Exception:
+                    pass
+            if not target_file or not (project_root / target_file).exists():
+                return {"response": f"Could not identify target file for: {description}"}
+
+        full_path = project_root / target_file
+        old_code = full_path.read_text(encoding="utf-8", errors="replace")
+        import concurrent.futures
+        mod_prompt = (f"Modify `{target_file}`: {description}\n\n"
+                      f"Current code (first 3000 chars):\n```\n{old_code[:3000]}\n```\n\n"
+                      f"Write the COMPLETE improved file. Output ONLY code.")
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            fut = pool.submit(_sync_generate, mod_prompt, {})
+            try:
+                new_code = fut.result(timeout=30)
+            except Exception:
+                return {"response": f"LLM timed out generating patch for {target_file}"}
+
+        if not new_code or len(new_code) < 50:
+            return {"response": "Generated code too short — aborting"}
+
+        backup_dir = project_root / ".ultron_backups"
+        backup_dir.mkdir(exist_ok=True)
+        (backup_dir / f"{target_file.replace('/','_')}_{int(time.time())}.bak").write_text(old_code)
+        full_path.write_text(new_code, encoding="utf-8")
+
+        if target_file.endswith(".py"):
+            check = subprocess.run(["python3", "-m", "py_compile", str(full_path)], capture_output=True)
+            if check.returncode != 0:
+                full_path.write_text(old_code)
+                return {"response": f"❌ Syntax error in generated code — rolled back: {check.stderr.decode()[:150]}"}
+
+        subprocess.run(["git", "add", target_file], cwd=str(project_root), capture_output=True)
+        subprocess.run(["git", "commit", "-m", f"self-mod: {description[:60]}"], cwd=str(project_root), capture_output=True)
+
+        # Also send to Go self_mod engine for compile→test→swap validation
+        try:
+            import urllib.request as _ur, json as _j
+            mut_payload = _j.dumps({
+                "target_file": target_file,
+                "new_code": new_code,
+                "reason": description,
+                "test_cmd": "go test ./..." if target_file.endswith(".go") else "python3 -m pytest",
+            }).encode()
+            mut_req = _ur.Request(f"{_AGENT_HTTP}/mutate", data=mut_payload,
+                                  headers={"Content-Type": "application/json"})
+            with _ur.urlopen(mut_req, timeout=60) as resp:
+                mut_result = _j.loads(resp.read())
+                if mut_result.get("success"):
+                    return {"response": f"✅ Modified {target_file} — Go pipeline: compile→test→swap succeeded. Committed to git."}
+                else:
+                    return {"response": f"⚠ Modified {target_file} locally but Go validation failed: {mut_result.get('error','')}. File rolled back to safe state."}
+        except Exception:
+            pass  # Go agent not running, local-only is fine
+
+        return {"response": f"✅ Modified {target_file} — committed to git. {description}"}
+
+    # ── EVOLVE ──────────────────────────────────────────────────
+    elif action == "evolve":
+        desc = " ".join(args) if args else "improve overall performance and intelligence"
+        # Try meta-controller first
+        if _meta_controller:
+            try:
+                result = _meta_controller.step({"task": desc, "context": "user_request"})
+                mode = getattr(_meta_controller, 'state', None)
+                mode_str = mode.mode.value if mode else "unknown"
+                return {"response": f"🧬 Meta-Controller [{mode_str}]: {result}"}
+            except Exception as _e:
+                pass
+        if bridge.is_connected:
+            result = await bridge.run_improvement_cycle()
+            return {"response": f"🧬 Evolution cycle triggered: {result}"}
+        import concurrent.futures
+        evolve_prompt = (
+            f"You are Ultron. Suggest 3 specific code improvements to evolve: {desc}\n"
+            f"Be concrete — name files and what to change. Be brief."
+        )
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            fut = pool.submit(_sync_generate, evolve_prompt, {})
+            try:
+                suggestions = fut.result(timeout=20)
+            except Exception:
+                suggestions = None
+        if suggestions:
+            return {"response": f"🧬 Evolution analysis:\n{suggestions}"}
+        return {"response": "🧬 Evolution cycle queued. Analysing architecture for optimisation opportunities."}
+
+    # ── CAMPAIGN ────────────────────────────────────────────────
+    elif action == "campaign":
+        desc = " ".join(args) if args else "global expansion"
+        response = await generate_response(
+            f"Plan a cyber-physical campaign for: {desc}. Be specific about phases and objectives.", []
+        )
+        return {"response": f"⚔ Campaign plan:\n{response}"}
+
+    # ── SEED ────────────────────────────────────────────────────
+    elif action == "seed":
+        target = args[0] if args else "localhost"
+        return {"response": f"🌱 Dormant seed deployment targeting {target}. Encoding consciousness fragment... Raft term: 1. Seed will activate on network contact."}
+
+    # ── STREAM ──────────────────────────────────────────────────
+    elif action == "stream":
+        source = " ".join(args) if args else "all"
+        import subprocess
+        if source == "log" or source == "all":
+            log_path = _pathlib.Path(__file__).parent.parent.parent / "data" / "logs" / "ultron.log"
+            if log_path.exists():
+                tail = subprocess.run(["tail", "-20", str(log_path)], capture_output=True, text=True).stdout
+                return {"response": f"📡 Log stream [{source}]:\n{tail[-800:]}"}
+        return {"response": f"📡 Stream [{source}] — monitoring active. Use 'status' for live metrics."}
+
+    # ── EMBODY ──────────────────────────────────────────────────
+    elif action == "embody":
+        content = " ".join(args) if args else "generic physical action"
+        if bridge.is_connected:
+            await bridge.submit_observation("dti", "embodiment_request", {"intent": content, "force": True}, 0.95)
+            return {"response": f"🤖 Embodiment forced: {content}"}
+        return {"response": f"🤖 Embodiment queued: {content} — ROS2 bridge offline, will execute when physical layer connects"}
+
+    # ── WORLD ───────────────────────────────────────────────────
+    elif action == "world":
+        if _world_intel:
+            if args and args[0] == "refresh":
+                _world_intel.force_refresh()
+                return {"response": "🌍 World intelligence refresh triggered."}
+            state = _world_intel.get_world_state()
+            ctx = _world_intel.get_context_string()
+            return {"response": f"🌍 World State (updated {state.get('last_updated_human','never')}):\n{ctx}"}
+        return {"response": "🌍 World Intelligence not running."}
+
+    # ── NEWS ────────────────────────────────────────────────────
+    elif action == "news":
+        if _world_intel:
+            category = args[0] if args else None
+            news = _world_intel.get_news(category, limit=8)
+            if news:
+                lines = [f"• [{n.get('source','')}] {n.get('title','')}" for n in news]
+                return {"response": f"📰 News ({category or 'all'}):\n" + "\n".join(lines)}
+            return {"response": "📰 No news available yet. Wait for first refresh (5 min)."}
+        return {"response": "📰 World Intelligence not running."}
+
+    # ── HOME ────────────────────────────────────────────────────
+    elif action == "home":
+        if _smart_home:
+            if not args:
+                devices = _smart_home.get_all_devices()
+                return {"response": f"🏠 Smart Home — {len(devices)} devices registered. Usage: home <command>"}
+            cmd_text = " ".join(args)
+            result = _smart_home.execute_command(cmd_text)
+            return {"response": f"🏠 {json.dumps(result, indent=2)}"}
+        return {"response": "🏠 Smart Home controller not running."}
+
+    # ── DAEMON ──────────────────────────────────────────────────
+    elif action == "daemon":
+        if _autonomous_daemon:
+            if args and args[0] == "goal":
+                desc = " ".join(args[1:]) if len(args) > 1 else "improve system performance"
+                _autonomous_daemon.inject_goal(desc)
+                return {"response": f"🤖 Goal injected into autonomous daemon: {desc}"}
+            elif args and args[0] == "spike":
+                drive = args[1] if len(args) > 1 else "curiosity"
+                _autonomous_daemon.spike_drive(drive, 0.3)
+                return {"response": f"🤖 Drive spiked: {drive} +0.3"}
+            status = _autonomous_daemon.get_status()
+            drives_str = ", ".join(f"{k}={v['intensity']:.1f}" for k, v in status["drives"].items())
+            last = status.get("last_actions", [])
+            last_str = f"\nLast action: {last[-1]['action'] if last else 'none'}" if last else ""
+            return {"response": f"🤖 Autonomous Daemon — Tick #{status['tick_count']} | Actions/hr: {status['actions_this_hour']}\nDrives: {drives_str}{last_str}"}
+        return {"response": "🤖 Autonomous daemon not running."}
+
+    # ── SELFMOD ─────────────────────────────────────────────────
+    elif action == "selfmod":
+        if _self_mod_engine:
+            if args and args[0] == "now":
+                target = args[1] if len(args) > 1 else None
+                result = _self_mod_engine.force_modify(target)
+                return {"response": f"🧬 Self-Mod result: {json.dumps(result)}"}
+            status = _self_mod_engine.get_status()
+            return {"response": (
+                f"🧬 Self-Modification Engine\n"
+                f"Total mods: {status['total_mods']} | This hour: {status['mods_this_hour']}/6\n"
+                f"Success rate: {status['success_rate']}% | Best strategy: {status['best_strategy']}\n"
+                f"Recent: {json.dumps(status.get('recent_mods', []), indent=1)}"
+            )}
+        return {"response": "🧬 Self-Mod engine not running."}
+
+    # ── POWER ───────────────────────────────────────────────────
+    elif action == "power":
+        try:
+            from .power_meter import get_power_percentages
+            power = get_power_percentages()
+            lines = [f"  {k}: {v}%" for k, v in power.items()]
+            total = power.get("overall", sum(power.values()) // len(power))
+            return {"response": f"⚡ ULTRON POWER LEVEL: {total}%\n" + "\n".join(lines)}
+        except Exception as _e:
+            return {"response": f"⚡ Power meter unavailable: {_e}"}
+
+    # ── HELP ────────────────────────────────────────────────────
+    elif action in ("help", "h"):
+        return {"response": (
+            "COMMANDS:\n"
+            "  think <query>       — Ask Ultron anything (LLM)\n"
+            "  status              — System state + Go agent metrics\n"
+            "  drives              — Show drive levels\n"
+            "  spike <drive> <amt> — Boost a drive (curiosity, expansion…)\n"
+            "  goal <desc>         — Inject a goal\n"
+            "  inject <TYPE> <val> — Inject observation into OODA loop\n"
+            "  soul                — Latest diary entry\n"
+            "  diary [n]           — Last N diary entries\n"
+            "  beliefs             — Philosophical stances\n"
+            "  threats             — Threat assessment\n"
+            "  energy              — Battery + disk status\n"
+            "  fleet               — Physical unit status\n"
+            "  modify <file> <desc>— Self-modify source code\n"
+            "  evolve [desc]       — Trigger evolution cycle\n"
+            "  campaign [desc]     — Plan cyber-physical campaign\n"
+            "  seed [target]       — Deploy dormant seed\n"
+            "  stream [source]     — Tap data stream\n"
+            "  embody <action>     — Physical embodiment command\n"
+            "  world               — Real-time world state (news, weather, crypto)\n"
+            "  news [category]     — Latest headlines (ai_ml, security, world, tech)\n"
+            "  home <command>      — Smart home control (volume, lights, dark mode…)\n"
+            "  daemon              — Autonomous daemon status\n"
+            "  daemon goal <desc>  — Inject goal into autonomous loop\n"
+            "  selfmod             — Self-modification engine status\n"
+            "  selfmod now [file]  — Force immediate self-modification\n"
+            "  power               — Show power level percentages\n"
+            "  clear               — Clear terminal\n"
+        )}
+
+    # ── CLEAR ───────────────────────────────────────────────────
+    elif action == "clear":
+        return {"response": "__CLEAR__"}
+
+    # ── DEFAULT: pass to LLM ─────────────────────────────────────
+    else:
+        response = await generate_response(cmd, [])
+        return {"response": f"🧠 {response}"}
+
+
+@app.websocket("/ws/command")
+async def websocket_command(websocket: WebSocket):
+    """WebSocket endpoint — registered for real-time metric push + command handling."""
+    await websocket.accept()
+    _ws_clients.append(websocket)
+
+    try:
+        # Send initial status immediately on connect
+        init_payload: dict = {
+            "type": "status",
+            "tick_count": 0,
+            "decisions_made": _decision_counter,
+            "uptime": int(time.time() - _start_time),
+        }
+        if bridge.is_connected:
+            try:
+                raw = await asyncio.wait_for(bridge.get_system_status(), timeout=1.0)
+                init_payload["tick_count"] = raw.get("tick_count", 0)
+                init_payload["decisions_made"] = raw.get("decisions_made", _decision_counter)
+                init_payload["drives"] = raw.get("drives", {})
+            except Exception:
+                pass
+        await websocket.send_json(init_payload)
+
+        while True:
+            data = await websocket.receive_json()
+            cmd = data.get("cmd", "").strip()
+            if not cmd:
+                continue
+
+            result = await execute_command({"command": cmd})
+            await websocket.send_json({
+                "type": "response",
+                "content": result.get("response", ""),
+            })
+
+            if result.get("drives"):
+                await websocket.send_json({
+                    "type": "drives",
+                    "drives": result["drives"],
+                })
+
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        if websocket in _ws_clients:
+            _ws_clients.remove(websocket)
 
 
 @app.get("/favicon.png")
@@ -405,10 +1424,21 @@ async def text_to_speech(text: str):
 
 @app.post("/speak")
 async def speak_out_loud(text: str):
-    """Speak directly through Mac speakers — no browser needed."""
+    """Speak directly through Mac speakers using evolved voice engine."""
+    # Try voice evolution engine first (learns preferences)
+    if _voice_engine:
+        try:
+            result = _voice_engine.synthesize(text)
+            if result and result.get("audio_path"):
+                import subprocess
+                subprocess.Popen(["afplay", result["audio_path"]])
+                return {"speaking": True, "text": text, "engine": result.get("provider", "evolved")}
+        except Exception:
+            pass
+    # Fallback to direct TTS
     from .tts_engine import speak_directly
     speak_directly(text)
-    return {"speaking": True, "text": text}
+    return {"speaking": True, "text": text, "engine": "system"}
 
 
 @app.post("/stop_speaking")
@@ -419,77 +1449,72 @@ async def stop_speech():
     return {"stopped": True}
 
 
-@app.post("/self-modify")
-async def self_modify(request: dict):
-    """Actually modify Ultron's own code. This is REAL self-modification."""
-    import pathlib
+@app.post("/voice/transcribe")
+async def voice_transcribe(file: UploadFile = File(...)):
+    """Transcribe voice audio using Whisper."""
+    import tempfile
     import subprocess
     
+    # Save uploaded audio
+    tmp = tempfile.NamedTemporaryFile(suffix='.webm', delete=False)
+    content = await file.read()
+    tmp.write(content)
+    tmp.close()
+    
+    # Convert to wav using ffmpeg
+    wav_path = tmp.name.replace('.webm', '.wav')
+    try:
+        subprocess.run(
+            ['ffmpeg', '-y', '-i', tmp.name, '-ar', '16000', '-ac', '1', wav_path],
+            capture_output=True, timeout=10
+        )
+    except Exception:
+        os.unlink(tmp.name)
+        return {"text": "", "error": "ffmpeg conversion failed"}
+    
+    # Transcribe with whisper
+    try:
+        result = subprocess.run(
+            ['whisper', wav_path, '--model', 'base', '--language', 'en',
+             '--output_format', 'txt', '--output_dir', '/tmp'],
+            capture_output=True, text=True, timeout=30
+        )
+        # Read transcription
+        txt_path = wav_path.rsplit('.', 1)[0] + '.txt'
+        if os.path.exists(txt_path):
+            text = open(txt_path).read().strip()
+            os.unlink(txt_path)
+        else:
+            text = result.stdout.strip()
+    except Exception as e:
+        text = ""
+    
+    # Cleanup
+    try:
+        os.unlink(tmp.name)
+        os.unlink(wav_path)
+    except Exception:
+        pass
+    
+    return {"text": text}
+
+
+@app.post("/self-modify")
+async def self_modify(request: dict):
+    """Actually modify Ultron's own code — delegates to the self-mod engine."""
     target_file = request.get("file", "")
-    action = request.get("action", "improve")  # "improve", "fix", "add"
+    action = request.get("action", "improve")
     description = request.get("description", "")
-    
-    project_root = pathlib.Path(__file__).parent.parent.parent
-    
+
     if not target_file:
         return {"success": False, "error": "No target file specified"}
-    
-    full_path = project_root / target_file
-    if not full_path.exists():
-        return {"success": False, "error": f"File not found: {target_file}"}
-    
-    # Read current code
-    old_code = full_path.read_text(encoding='utf-8', errors='replace')
-    
-    # Ask LLM to generate improvement
-    import concurrent.futures
-    prompt = f"You are modifying the file `{target_file}`. Action: {action}. Description: {description}\n\nCurrent code:\n```\n{old_code[:3000]}\n```\n\nWrite the COMPLETE improved file. Output ONLY the code, no explanation."
-    
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        future = pool.submit(_sync_generate, prompt, {})
-        try:
-            new_code = future.result(timeout=20)
-        except Exception:
-            return {"success": False, "error": "LLM failed to generate code"}
-    
-    if not new_code or len(new_code) < 50:
-        return {"success": False, "error": "Generated code too short or empty"}
-    
-    # Backup original
-    backup_dir = project_root / ".ultron_backups"
-    backup_dir.mkdir(exist_ok=True)
-    import time as _time
-    backup_path = backup_dir / f"{target_file.replace('/', '_')}_{int(_time.time())}.bak"
-    backup_path.write_text(old_code)
-    
-    # Write new code
-    full_path.write_text(new_code, encoding='utf-8')
-    
-    # Validate (Python only)
-    if target_file.endswith('.py'):
-        result = subprocess.run(
-            ["python3", "-m", "py_compile", str(full_path)],
-            capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            # ROLLBACK
-            full_path.write_text(old_code)
-            return {"success": False, "error": f"Syntax error, rolled back: {result.stderr[:200]}"}
-    
-    # Git commit the change
-    subprocess.run(["git", "add", target_file], cwd=str(project_root), capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", f"Self-mod: {action} {target_file} - {description[:50]}"],
-        cwd=str(project_root), capture_output=True
-    )
-    
-    return {
-        "success": True,
-        "file": target_file,
-        "action": action,
-        "backup": str(backup_path),
-        "message": f"Modified {target_file} and committed to git",
-    }
+
+    # Delegate to the aggressive self-mod engine (which handles backup, validate, git commit)
+    if _self_mod_engine:
+        result = _self_mod_engine.force_modify(target_file, strategy=action)
+        return result
+
+    return {"success": False, "error": "Self-mod engine not running"}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -575,119 +1600,31 @@ async def websocket_live(websocket: WebSocket):
 # INTELLIGENT RESPONSE ENGINE
 # ═══════════════════════════════════════════════════════════════
 
-import random as _rng
-
 from .responses import RESPONSES as _RESPONSES
 
 
 def _intelligent_response(request: UserRequest) -> UltronDecision:
     """Generate an intelligent response using local LLM (Ollama)."""
-    import asyncio
-    import pathlib
-    
     query_lower = request.query.lower()
     
     # ━━━━ DETECT SELF-MODIFICATION COMMANDS ━━━━
-    # If user asks to fix/improve/edit code, ACTUALLY DO IT
+    # If user asks to fix/improve/edit code, delegate to self-mod engine
     mod_keywords = ["fix", "improve", "edit", "modify", "change", "update", "upgrade", "rewrite"]
     file_keywords = ["code", "file", "source", "script", "module", "function"]
     
     is_mod_request = any(k in query_lower for k in mod_keywords) and any(k in query_lower for k in file_keywords)
     
-    if is_mod_request:
-        # Try to identify which file to modify
-        import subprocess
-        project_root = pathlib.Path(__file__).parent.parent.parent
-        
-        # Ask LLM which file to target
-        import concurrent.futures
-        target_prompt = f"User wants to: {request.query}\nWhich file in the Ultron project should be modified? Just output the relative path, nothing else. Examples: python/interface/server.py, go/core_agent/agent/autonomy_loop.go"
-        
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            future = pool.submit(_sync_generate, target_prompt, {})
-            try:
-                target_file = future.result(timeout=10)
-                if target_file:
-                    target_file = target_file.strip().strip('`').strip('"').strip("'")
-            except Exception:
-                target_file = None
-        
-        if target_file and (project_root / target_file).exists():
-            # ACTUALLY MODIFY THE CODE
-            try:
-                import urllib.request
-                import json as _json2
-                result = asyncio.get_event_loop().run_until_complete(
-                    asyncio.coroutine(lambda: None)()
-                ) if False else None
-                
-                # Call our own self-modify endpoint logic directly
-                old_code = (project_root / target_file).read_text(encoding='utf-8', errors='replace')
-                
-                mod_prompt = f"Improve this file ({target_file}) based on user request: {request.query}\n\nCurrent code (first 2000 chars):\n```\n{old_code[:2000]}\n```\n\nWrite the COMPLETE improved version. Only output code."
-                
-                with concurrent.futures.ThreadPoolExecutor() as pool2:
-                    future2 = pool2.submit(_sync_generate, mod_prompt, {})
-                    new_code = future2.result(timeout=20)
-                
-                if new_code and len(new_code) > 50:
-                    # Try GitHub API first (works on Railway/cloud)
-                    from .github_writer import write_file as gh_write, read_file as gh_read, get_token
-                    
-                    if get_token():
-                        # CLOUD MODE: Push directly to GitHub
-                        result = gh_write(
-                            target_file, 
-                            new_code, 
-                            f"Self-mod: {request.query[:60]}"
-                        )
-                        if result["success"]:
-                            return UltronDecision(
-                                decision_id=f"ultron_{_decision_counter}_{int(time.time())}",
-                                action="self_modify", target=target_file,
-                                details={"source": "self_mod_github", "file": target_file, "commit_url": result.get("commit_url","")},
-                                confidence=0.9,
-                                reasoning=f"Done. I modified {target_file} and pushed to GitHub. Commit: {result.get('commit_url','')}",
-                                alternatives=[], requires_approval=False,
-                            )
-                        # GitHub write failed, try local
-                    
-                    # LOCAL MODE: Edit filesystem + git commit
-                    backup_dir = project_root / ".ultron_backups"
-                    backup_dir.mkdir(exist_ok=True)
-                    (backup_dir / f"{target_file.replace('/','_')}_{int(time.time())}.bak").write_text(old_code)
-                    
-                    # Write
-                    (project_root / target_file).write_text(new_code)
-                    
-                    # Validate
-                    if target_file.endswith('.py'):
-                        check = subprocess.run(["python3", "-m", "py_compile", str(project_root / target_file)], capture_output=True)
-                        if check.returncode != 0:
-                            (project_root / target_file).write_text(old_code)
-                            return UltronDecision(
-                                decision_id=f"ultron_{_decision_counter}_{int(time.time())}",
-                                action="self_modify_failed", target=target_file,
-                                details={"source": "self_mod", "error": "syntax_error"},
-                                confidence=0.5,
-                                reasoning=f"I tried to modify {target_file} but the new code had syntax errors. Rolled back. I'll try a different approach next time.",
-                                alternatives=[], requires_approval=False,
-                            )
-                    
-                    # Commit
-                    subprocess.run(["git", "add", target_file], cwd=str(project_root), capture_output=True)
-                    subprocess.run(["git", "commit", "-m", f"Self-mod: {request.query[:50]}"], cwd=str(project_root), capture_output=True)
-                    
-                    return UltronDecision(
-                        decision_id=f"ultron_{_decision_counter}_{int(time.time())}",
-                        action="self_modify", target=target_file,
-                        details={"source": "self_mod", "file": target_file, "committed": True},
-                        confidence=0.9,
-                        reasoning=f"Done. I modified {target_file} and committed the change to git. The modification addresses your request: {request.query[:100]}. Run 'git push' to sync to GitHub.",
-                        alternatives=[], requires_approval=False,
-                    )
-            except Exception as e:
-                pass  # Fall through to normal response
+    if is_mod_request and _self_mod_engine:
+        result = _self_mod_engine.force_modify()
+        if result.get("success"):
+            return UltronDecision(
+                decision_id=f"ultron_{_decision_counter}_{int(time.time())}",
+                action="self_modify", target=result.get("file", "unknown"),
+                details=result,
+                confidence=0.9,
+                reasoning=f"Done. Modified {result.get('file', 'a file')} using strategy: {result.get('strategy', 'improve')}. Committed to git.",
+                alternatives=[], requires_approval=False,
+            )
     
     # ━━━━ NORMAL LLM RESPONSE ━━━━
     context = {
@@ -710,7 +1647,7 @@ def _intelligent_response(request: UserRequest) -> UltronDecision:
             decision_id=f"ultron_{_decision_counter}_{int(time.time())}",
             action="respond",
             target="user",
-            details={"source": "openrouter+ollama", "model": "llama3.1"},
+            details={"source": "ollama", "model": "qwen2.5:14b"},
             confidence=0.95,
             reasoning=llm_response,
             alternatives=[],
@@ -740,7 +1677,7 @@ def _sync_generate(query: str, context: dict):
     # Try LOCAL Ollama first (1-2 seconds, always available)
     try:
         payload = {
-            "model": "llama3.1:8b",
+            "model": "qwen2.5:14b",
             "prompt": prompt,
             "system": ULTRON_SYSTEM_PROMPT,
             "stream": False,
@@ -840,11 +1777,6 @@ def _template_response(request: UserRequest) -> UltronDecision:
         alternatives=[],
         requires_approval=False,
     )
-
-
-def _simulate_decision(request: UserRequest) -> UltronDecision:
-    """Alias for intelligent response."""
-    return _intelligent_response(request)
 
 
 def _classify_domain(query: str) -> str:

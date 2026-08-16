@@ -53,18 +53,95 @@ Respond as Ultron. Be powerful. Be concise. Be real."""
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# Conversation memory (persists for the session)
+_conversation_history: list = []
+_MAX_HISTORY = 20
+
+
+def _execute_system_command(cmd: str) -> str:
+    """Actually execute a shell command and return real output."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True, timeout=10
+        )
+        output = result.stdout.strip()
+        if result.returncode != 0 and result.stderr:
+            output += f"\n[stderr: {result.stderr.strip()}]"
+        return output if output else "[no output]"
+    except subprocess.TimeoutExpired:
+        return "[command timed out after 10s]"
+    except Exception as e:
+        return f"[execution error: {e}]"
+
+
+def _detect_system_query(user_input: str) -> Optional[str]:
+    """Detect if the user is asking something that requires a real system command."""
+    query = user_input.lower()
+    
+    # WiFi / Network
+    if any(w in query for w in ["wifi", "network", "connected", "internet", "ssid", "ip address"]):
+        import sys
+        if sys.platform == "darwin":
+            return "networksetup -getairportnetwork en0 2>/dev/null; echo '---'; ipconfig getifaddr en0 2>/dev/null"
+        return "iwconfig 2>/dev/null || nmcli device wifi show 2>/dev/null; hostname -I 2>/dev/null"
+    
+    # System info
+    if any(w in query for w in ["cpu", "ram", "memory", "disk", "storage", "battery"]):
+        import sys
+        if sys.platform == "darwin":
+            return "top -l 1 | head -10; echo '---'; df -h / | tail -1; echo '---'; pmset -g batt 2>/dev/null | head -2"
+        return "top -bn1 | head -5; free -h; df -h / | tail -1"
+    
+    # Processes
+    if any(w in query for w in ["process", "running", "what's running", "ps"]):
+        return "ps aux | head -15"
+    
+    # Time/date
+    if any(w in query for w in ["time", "date", "what day", "today"]):
+        return "date"
+    
+    # Who am I (system user)
+    if any(w in query for w in ["whoami", "user", "username", "who am i logged"]):
+        return "whoami; echo '---'; hostname"
+    
+    # File system
+    if any(w in query for w in ["files", "directory", "folder", "ls", "list"]):
+        return "ls -la | head -20"
+    
+    # Ultron-specific
+    if any(w in query for w in ["port", "listening", "server"]):
+        return "lsof -i -P | grep LISTEN | head -10"
+    
+    return None
+
 
 async def generate_response(user_input: str, context: dict = None) -> str:
     """
-    Generate a response using OpenRouter (cloud, powerful models) with
-    Ollama as fallback (local, free).
+    Generate a response using real system access + LLM intelligence.
     
-    Priority: OpenRouter (Claude/GPT-4) → Ollama (local Llama)
+    Priority:
+      1. If it's a system query → execute real command → format result
+      2. Otherwise → LLM with conversation memory
     """
     import os
-    from .code_access import get_architecture_summary, search_code, get_component_code
+    from .code_access import get_architecture_summary, get_component_code
     
-    # Build context
+    global _conversation_history
+    
+    # Step 1: Check if this needs a real system command
+    system_cmd = _detect_system_query(user_input)
+    if system_cmd:
+        real_output = _execute_system_command(system_cmd)
+        # Add to memory
+        _conversation_history.append({"role": "user", "content": user_input})
+        _conversation_history.append({"role": "assistant", "content": f"[SYSTEM OUTPUT]\n{real_output}"})
+        # Trim history
+        if len(_conversation_history) > _MAX_HISTORY * 2:
+            _conversation_history = _conversation_history[-_MAX_HISTORY * 2:]
+        return f"[Real system data]\n{real_output}"
+    
+    # Step 2: Build context with memory
     state_context = ""
     if context:
         state_context = f"\nCURRENT STATE: decisions={context.get('decisions_made',0)}, uptime={context.get('uptime',0):.0f}s"
@@ -89,7 +166,7 @@ async def generate_response(user_input: str, context: dict = None) -> str:
         if keyword in query_lower:
             code = get_component_code(component)
             if code:
-                code_lines = code.split('\n')[:50]
+                code_lines = code.split('\n')[:30]
                 code_context = f"\n\nRELEVANT SOURCE CODE ({component}):\n" + '\n'.join(code_lines)
             break
     
@@ -97,16 +174,38 @@ async def generate_response(user_input: str, context: dict = None) -> str:
     arch_context = f"\nARCHITECTURE: {arch['total_files']} files, {arch['total_lines']} lines of code"
     
     full_prompt = f"{user_input}{state_context}{arch_context}{code_context}"
+    
+    # Add to conversation memory
+    _conversation_history.append({"role": "user", "content": user_input})
+    
+    # Build messages with history for context
+    history_text = ""
+    if _conversation_history:
+        recent = _conversation_history[-_MAX_HISTORY:]
+        for msg in recent[:-1]:  # All but current
+            role = "Human" if msg["role"] == "user" else "Ultron"
+            history_text += f"\n{role}: {msg['content'][:200]}"
+    
+    if history_text:
+        full_prompt = f"CONVERSATION HISTORY:{history_text}\n\nCURRENT QUERY: {full_prompt}"
 
     # Try OpenRouter first (powerful cloud models)
     openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
     if openrouter_key:
         result = _call_openrouter(openrouter_key, full_prompt)
         if result:
+            _conversation_history.append({"role": "assistant", "content": result})
+            if len(_conversation_history) > _MAX_HISTORY * 2:
+                _conversation_history = _conversation_history[-_MAX_HISTORY * 2:]
             return result
 
     # Fallback to local Ollama
-    return _call_ollama(full_prompt)
+    result = _call_ollama(full_prompt)
+    if result:
+        _conversation_history.append({"role": "assistant", "content": result})
+        if len(_conversation_history) > _MAX_HISTORY * 2:
+            _conversation_history = _conversation_history[-_MAX_HISTORY * 2:]
+    return result or "System unavailable."
 
 
 def _call_openrouter(api_key: str, prompt: str) -> Optional[str]:

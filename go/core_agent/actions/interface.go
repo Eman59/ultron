@@ -269,6 +269,27 @@ func NewActionInterface(logger *zap.SugaredLogger) *ActionInterface {
 	return ai
 }
 
+// SetWebHandler wires a WebHandler implementation.
+func (ai *ActionInterface) SetWebHandler(h WebHandler) {
+	ai.mu.Lock()
+	defer ai.mu.Unlock()
+	ai.webHandler = h
+}
+
+// SetCloudHandler wires a CloudHandler implementation.
+func (ai *ActionInterface) SetCloudHandler(h CloudHandler) {
+	ai.mu.Lock()
+	defer ai.mu.Unlock()
+	ai.cloudHandler = h
+}
+
+// SetIoTHandler wires an IoTHandler implementation.
+func (ai *ActionInterface) SetIoTHandler(h IoTHandler) {
+	ai.mu.Lock()
+	defer ai.mu.Unlock()
+	ai.iotHandler = h
+}
+
 // Execute performs an action through the appropriate handler.
 func (ai *ActionInterface) Execute(ctx context.Context, req ActionRequest) *ActionResponse {
 	start := time.Now()

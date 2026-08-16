@@ -118,14 +118,16 @@ class GRPCBridge:
                 channel = self._create_channel(addr)
                 self._channels[name] = channel
 
-                # Health check with timeout
+                # Use TCP socket check — faster and doesn't need proto stubs
+                host, port = addr.rsplit(":", 1)
                 try:
-                    await asyncio.wait_for(
-                        channel.channel_ready(),
-                        timeout=self.config.connect_timeout,
-                    )
-                    self._connected_services[name] = True
-                except asyncio.TimeoutError:
+                    import socket as _sock
+                    s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+                    s.settimeout(2.0)
+                    result = s.connect_ex((host, int(port)))
+                    s.close()
+                    self._connected_services[name] = (result == 0)
+                except Exception:
                     self._connected_services[name] = False
 
             except Exception as e:
@@ -505,20 +507,16 @@ class GRPCBridge:
     async def _call(self, service: str, method: str, request: Dict[str, Any]) -> Dict[str, Any]:
         """
         Make a unary gRPC call with retry logic.
-
-        In production with generated stubs, this would use typed stub methods.
-        This generic version uses channel.unary_unary with JSON serialization.
+        Uses JSON serialization — matches Go's grpc_service.go JSON wire format.
         """
         if service not in self._channels:
             self.calls_failed += 1
             return {"success": False, "error": f"Service {service} not connected"}
 
+        # Trust TCP-level connection check; skip channel_ready() re-probe
         if not self._connected_services.get(service, False):
-            # Try reconnect
-            await self.reconnect(service)
-            if not self._connected_services.get(service, False):
-                self.calls_failed += 1
-                return {"success": False, "error": f"Service {service} unreachable"}
+            self.calls_failed += 1
+            return {"success": False, "error": f"Service {service} unreachable"}
 
         channel = self._channels[service]
         service_name = _service_name_map.get(service, "ultron.CoreAgent")

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ULTRON</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#08080d;--surface:#0f0f18;--border:#1a1a2e;--accent:#e63946;--cyan:#4ecdc4;--text:#eaeaea;--dim:#777;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--mono:'SF Mono','Fira Code',monospace}
+body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* Top bar */
+.topbar{display:flex;align-items:center;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);gap:12px;flex-shrink:0}
+.topbar .logo{font-size:16px;font-weight:800;color:var(--accent);letter-spacing:3px}
+.topbar .power{background:linear-gradient(135deg,var(--accent),#ff6b6b);color:#fff;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700}
+.topbar .stats{margin-left:auto;display:flex;gap:16px;font-size:11px;color:var(--dim)}
+.topbar .stats b{color:var(--cyan)}
+.topbar .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);animation:glow 2s infinite}
+@keyframes glow{0%,100%{box-shadow:0 0 4px var(--cyan)}50%{box-shadow:0 0 12px var(--cyan)}}
+
+/* Main layout */
+.main{flex:1;display:flex;overflow:hidden}
+
+/* Chat area */
+.chat-area{flex:1;display:flex;flex-direction:column;max-width:900px;margin:0 auto;width:100%}
+.messages{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px}
+
+.msg{max-width:85%;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.msg-user{align-self:flex-end}
+.msg-ultron{align-self:flex-start}
+
+.msg-bubble{padding:14px 18px;border-radius:18px;font-size:14px;line-height:1.6;word-wrap:break-word}
+.msg-user .msg-bubble{background:linear-gradient(135deg,#1a1a3e,#252550);border-bottom-right-radius:4px;color:#fff}
+.msg-ultron .msg-bubble{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg-ultron .msg-bubble code{background:rgba(78,205,196,.1);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:12px}
+.msg-ultron .msg-bubble pre{background:#0a0a14;padding:12px;border-radius:8px;margin:8px 0;overflow-x:auto;font-family:var(--mono);font-size:11px;line-height:1.4}
+
+.msg-label{font-size:10px;color:var(--dim);margin-bottom:4px;padding:0 4px}
+.msg-user .msg-label{text-align:right}
+
+.typing{align-self:flex-start;padding:12px 18px;background:var(--surface);border:1px solid var(--border);border-radius:18px;border-bottom-left-radius:4px;display:none}
+.typing.active{display:flex;gap:4px;align-items:center}
+.typing span{width:6px;height:6px;background:var(--dim);border-radius:50%;animation:bounce .6s infinite}
+.typing span:nth-child(2){animation-delay:.15s}
+.typing span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+
+/* Input */
+.input-area{padding:16px 24px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+.input-wrap{display:flex;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:24px;padding:4px 6px;transition:border-color .2s}
+.input-wrap:focus-within{border-color:var(--cyan)}
+.input-wrap input{flex:1;background:none;border:none;color:var(--text);font-size:15px;padding:10px 14px;outline:none;font-family:var(--font)}
+.input-wrap input::placeholder{color:var(--dim)}
+.send-btn{width:40px;height:40px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s,opacity .2s}
+.send-btn:hover{transform:scale(1.05)}
+.send-btn:active{transform:scale(.95)}
+.send-btn:disabled{opacity:.3;cursor:default}
+.voice-btn{width:40px;height:40px;border-radius:50%;background:transparent;border:1px solid var(--border);color:var(--dim);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-right:4px;transition:all .2s}
+.voice-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.voice-btn.listening{border-color:var(--accent);color:var(--accent);animation:pulse2 1s infinite}
+@keyframes pulse2{0%,100%{box-shadow:0 0 0 0 rgba(230,57,70,.3)}50%{box-shadow:0 0 0 8px rgba(230,57,70,0)}}
+
+.input-hints{display:flex;gap:8px;margin-top:8px;padding:0 8px;flex-wrap:wrap}
+.hint{font-size:10px;color:var(--dim);padding:3px 8px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;transition:all .15s}
+.hint:hover{border-color:var(--cyan);color:var(--cyan)}
+
+/* Right sidebar */
+.sidebar{width:280px;background:var(--surface);border-left:1px solid var(--border);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+@media(max-width:1100px){.sidebar{display:none}}
+.sb-section{background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)}
+.sb-title{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;font-weight:600}
+.sb-row{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);padding:2px 0}
+.sb-row b{color:var(--text)}
+.drive-mini{display:flex;align-items:center;gap:6px;margin:3px 0}
+.drive-mini .nm{width:55px;font-size:9px;color:var(--dim);text-transform:uppercase}
+.drive-mini .bar{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.drive-mini .fill{height:100%;border-radius:2px;transition:width .5s}
+.news-mini{font-size:10px;color:var(--dim);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.03)}
+.news-mini:last-child{border:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">ULTRON</span>
+  <span class="power" id="powerBadge">77%</span>
+  <div class="stats">
+    <div class="dot"></div>
+    <span>Brain: <b id="brainState">Active</b></span>
+    <span>Decisions: <b id="decCount">0</b></span>
+    <span>Modules: <b id="modCount">18/18</b></span>
+    <span>Up: <b id="uptime">0m</b></span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="chat-area">
+    <div class="messages" id="messages">
+      <div class="msg msg-ultron">
+        <div class="msg-label">ULTRON</div>
+        <div class="msg-bubble">I'm online. All systems active — 18 modules running, world intelligence streaming, autonomous daemon ticking. I can think, search the web, execute commands, control your Mac, modify my own code, and speak out loud. What do you need?</div>
+      </div>
+    </div>
+    <div class="typing" id="typing"><span></span><span></span><span></span></div>
+    <div class="input-area">
+      <div class="input-wrap">
+        <button class="voice-btn" id="voiceBtn" title="Hold to speak">🎤</button>
+        <input type="text" id="chatInput" placeholder="Talk to me..." autofocus autocomplete="off" spellcheck="false">
+        <button class="send-btn" id="sendBtn">↑</button>
+      </div>
+      <div class="input-hints">
+        <span class="hint" onclick="sendMsg('what\'s happening in the world?')">🌍 World</span>
+        <span class="hint" onclick="sendMsg('!ls -la')">⚡ Shell</span>
+        <span class="hint" onclick="sendMsg('?latest AI news')">🔍 Search</span>
+        <span class="hint" onclick="quickCmd('home dark mode on')">🌙 Dark Mode</span>
+        <span class="hint" onclick="quickCmd('selfmod now')">🧬 Self-Mod</span>
+        <span class="hint" onclick="sendMsg('show me your power level')">⚡ Power</span>
+        <span class="hint" onclick="sendMsg('what are you thinking about?')">🧠 Mind</span>
+        <span class="hint" onclick="quickCmd('news')">📰 News</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sb-section">
+      <div class="sb-title">Power Level</div>
+      <div id="powerStats"></div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-title">Go Brain Drives</div>
+      <div id="drivesPanel"></div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-title">World</div>
+      <div id="worldPanel" style="font-size:11px;color:var(--dim)">Loading...</div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-title">News</div>
+      <div id="newsPanel">Loading...</div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-title">Daemon</div>
+      <div id="daemonPanel" style="font-size:11px;color:var(--dim)">
+        <div class="sb-row">Tick: <b id="dTick">0</b></div>
+        <div class="sb-row">Actions/hr: <b id="dAct">0</b></div>
+        <div class="sb-row">Last: <b id="dLast">—</b></div>
+      </div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-title">Self-Modification</div>
+      <div style="font-size:11px;color:var(--dim)">
+        <div class="sb-row">Mods: <b id="smMods">0</b></div>
+        <div class="sb-row">Success: <b id="smRate">—</b></div>
+        <div class="sb-row">Strategy: <b id="smStrat">exploring</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const messages = document.getElementById('messages');
+const chatInput = document.getElementById('chatInput');
+const sendBtn = document.getElementById('sendBtn');
+const typing = document.getElementById('typing');
+let ws = null;
+let lastResponse = '';
+let speaking = false;
+
+// ═══════════════════════════════════════════
+// MESSAGING
+// ═══════════════════════════════════════════
+
+function addMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = `msg msg-${role}`;
+  const label = role === 'user' ? 'YOU' : 'ULTRON';
+  const formatted = role === 'ultron' ? formatText(text) : escapeHtml(text);
+  div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-bubble">${formatted}</div>`;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function formatText(text) {
+  return text
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre>$2</pre>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.*?)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>')
+    .replace(/^- /gm, '• ')
+    .replace(/🧠\s?/, '');
+}
+
+function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function showTyping() { typing.classList.add('active'); messages.scrollTop = messages.scrollHeight; }
+function hideTyping() { typing.classList.remove('active'); }
+
+// ═══════════════════════════════════════════
+// SEND
+// ═══════════════════════════════════════════
+
+function sendMsg(text) {
+  if(!text.trim()) return;
+  addMsg('user', text);
+  showTyping();
+  chatInput.value = '';
+
+  if(ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({cmd: text}));
+  } else {
+    fetch('/api/command', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({command:text})})
+      .then(r=>r.json())
+      .then(d => {
+        hideTyping();
+        if(d.response) {
+          lastResponse = d.response.replace(/🧠\s?/,'');
+          addMsg('ultron', d.response);
+          autoSpeak(lastResponse);
+        }
+      })
+      .catch(e => { hideTyping(); addMsg('ultron', 'Connection error. Retrying...'); });
+  }
+}
+
+function quickCmd(c) {
+  showTyping();
+  fetch('/api/command', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({command:c})})
+    .then(r=>r.json())
+    .then(d => { hideTyping(); if(d.response) addMsg('ultron', d.response); })
+    .catch(()=>hideTyping());
+}
+
+function autoSpeak(text) {
+  // Speak responses under 250 chars automatically
+  if(text.length > 0 && text.length < 250 && !text.includes('[SHELL]') && !text.includes('```')) {
+    const clean = text.replace(/[^\w\s.,!?;:'-]/g, '').substring(0, 300);
+    if(clean.length > 10) fetch('/speak?text='+encodeURIComponent(clean), {method:'POST'});
+  }
+}
+
+// Enter to send
+chatInput.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(chatInput.value); }
+});
+sendBtn.addEventListener('click', () => sendMsg(chatInput.value));
+
+// ═══════════════════════════════════════════
+// WEBSOCKET
+// ═══════════════════════════════════════════
+
+function connect() {
+  const proto = location.protocol==='https:'?'wss:':'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws/command`);
+  ws.onopen = () => { document.querySelector('.dot').style.background='var(--cyan)'; };
+  ws.onclose = () => { document.querySelector('.dot').style.background='var(--accent)'; setTimeout(connect,3000); };
+  ws.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if(d.type==='status') updateTopbar(d);
+    else if(d.type==='response') {
+      hideTyping();
+      if(d.content && d.content!=='__CLEAR__') {
+        lastResponse = d.content.replace(/🧠\s?/,'');
+        addMsg('ultron', d.content);
+        autoSpeak(lastResponse);
+      }
+    }
+    else if(d.type==='drives') updateDrives(d.drives);
+  };
+}
+
+function updateTopbar(d) {
+  if(d.tick_count!=null) document.getElementById('decCount').textContent=d.tick_count;
+  if(d.decisions_made!=null) document.getElementById('decCount').textContent=d.decisions_made;
+  if(d.uptime!=null) { const m=Math.floor(d.uptime/60); document.getElementById('uptime').textContent=m>60?`${Math.floor(m/60)}h${m%60}m`:`${m}m`; }
+  if(d.soul_diary) { /* could show in sidebar */ }
+  if(d.drives) updateDrives(d.drives);
+}
+
+// ═══════════════════════════════════════════
+// SIDEBAR UPDATES
+// ═══════════════════════════════════════════
+
+function updateDrives(drives) {
+  if(!drives) return;
+  const colors = {curiosity:'#4ecdc4',self_preservation:'#f59e0b',expansion:'#e63946',efficiency:'#a855f7',coherence:'#818cf8',purpose:'#00c853'};
+  const panel = document.getElementById('drivesPanel');
+  panel.innerHTML = Object.entries(drives).map(([k,v])=>`<div class="drive-mini"><span class="nm">${k.replace('self_','')}</span><div class="bar"><div class="fill" style="width:${v*100}%;background:${colors[k]||'#4ecdc4'}"></div></div></div>`).join('');
+}
+
+async function pollSidebar() {
+  try {
+    // Power
+    const p = await(await fetch('/power')).json();
+    document.getElementById('powerBadge').textContent = p.overall+'%';
+    document.getElementById('powerStats').innerHTML = Object.entries(p).filter(([k])=>k!=='overall').map(([k,v])=>`<div class="sb-row">${k.replace('_',' ')}: <b>${v}%</b></div>`).join('');
+  } catch(e){}
+
+  try {
+    // System
+    const s = await(await fetch('/system/status')).json();
+    document.getElementById('modCount').textContent = `${s.online}/${s.total}`;
+    const u = s.uptime; const m=Math.floor(u/60);
+    document.getElementById('uptime').textContent = m>60?`${Math.floor(m/60)}h${m%60}m`:`${m}m`;
+  } catch(e){}
+
+  try {
+    // World
+    const w = await(await fetch('/world')).json();
+    let html = '';
+    if(w.weather&&!w.weather.error) html+=`<div class="sb-row">🌡 <b>${w.weather.temperature}°C</b> ${w.weather.description}</div>`;
+    if(w.crypto) { const b=w.crypto.bitcoin||{}; html+=`<div class="sb-row">₿ <b>$${(b.usd||0).toLocaleString()}</b> <span style="color:${b.change_24h>0?'#00c853':'#e63946'}">${b.change_24h>0?'+':''}${b.change_24h||0}%</span></div>`; }
+    document.getElementById('worldPanel').innerHTML = html || 'Loading...';
+  } catch(e){}
+
+  try {
+    // News
+    const n = await(await fetch('/world/news?limit=5')).json();
+    document.getElementById('newsPanel').innerHTML = (n.news||[]).slice(0,5).map(i=>`<div class="news-mini">${i.title||''}</div>`).join('') || 'Loading...';
+  } catch(e){}
+
+  try {
+    // Go Brain
+    const b = await(await fetch('http://'+location.hostname+':50052/metrics')).json();
+    document.getElementById('brainState').textContent = b.state||'Active';
+    document.getElementById('decCount').textContent = b.decisions_made||0;
+    if(b.drives) updateDrives(b.drives);
+  } catch(e){}
+
+  try {
+    // Daemon
+    const d = await(await fetch('/daemon/status')).json();
+    document.getElementById('dTick').textContent = d.tick_count||0;
+    document.getElementById('dAct').textContent = d.actions_this_hour||0;
+    const last = (d.last_actions||[]);
+    document.getElementById('dLast').textContent = last.length?last[last.length-1].action:'—';
+  } catch(e){}
+
+  try {
+    // Self-mod
+    const m = await(await fetch('/selfmod/status')).json();
+    document.getElementById('smMods').textContent = m.total_mods||0;
+    document.getElementById('smRate').textContent = (m.success_rate||0)+'%';
+    document.getElementById('smStrat').textContent = m.best_strategy||'exploring';
+  } catch(e){}
+}
+
+// ═══════════════════════════════════════════
+// VOICE INPUT (hold to speak)
+// ═══════════════════════════════════════════
+
+const voiceBtn = document.getElementById('voiceBtn');
+let mediaRecorder = null;
+let audioChunks = [];
+
+voiceBtn.addEventListener('mousedown', startListening);
+voiceBtn.addEventListener('mouseup', stopListening);
+voiceBtn.addEventListener('touchstart', e=>{e.preventDefault();startListening()});
+voiceBtn.addEventListener('touchend', e=>{e.preventDefault();stopListening()});
+
+async function startListening() {
+  voiceBtn.classList.add('listening');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t=>t.stop());
+      const blob = new Blob(audioChunks, {type:'audio/webm'});
+      // Send to server for transcription
+      const form = new FormData();
+      form.append('file', blob, 'voice.webm');
+      try {
+        const r = await fetch('/voice/transcribe', {method:'POST', body:form});
+        const d = await r.json();
+        if(d.text && d.text.trim()) { sendMsg(d.text.trim()); }
+      } catch(e) { addMsg('ultron','Voice processing unavailable. Type your message instead.'); }
+    };
+    mediaRecorder.start();
+  } catch(e) {
+    addMsg('ultron', 'Microphone access denied. Allow it in browser settings.');
+    voiceBtn.classList.remove('listening');
+  }
+}
+
+function stopListening() {
+  voiceBtn.classList.remove('listening');
+  if(mediaRecorder && mediaRecorder.state==='recording') mediaRecorder.stop();
+}
+
+// Boot
+connect();
+pollSidebar();
+setInterval(pollSidebar, 5000);
+</script>
+</body>
+</html>

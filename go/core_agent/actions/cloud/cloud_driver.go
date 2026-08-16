@@ -8,22 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"ultron/core_agent/actions"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"go.uber.org/zap"
 )
-
-// InstanceInfo represents an EC2 instance's current state.
-type InstanceInfo struct {
-	ID       string    `json:"id"`
-	Type     string    `json:"type"`
-	State    string    `json:"state"`
-	IP       string    `json:"ip"`
-	Region   string    `json:"region"`
-	LaunchAt time.Time `json:"launch_at"`
-}
 
 // AuditEntry records a cloud action for the audit trail.
 type AuditEntry struct {
@@ -308,14 +299,13 @@ func (d *AWSCloudDriver) ListInstances(ctx context.Context) ([]InstanceInfo, err
 	for _, reservation := range result.Reservations {
 		for _, inst := range reservation.Instances {
 			info := InstanceInfo{
-				ID:     aws.ToString(inst.InstanceId),
-				Type:   string(inst.InstanceType),
-				State:  string(inst.State.Name),
-				IP:     aws.ToString(inst.PublicIpAddress),
-				Region: d.region,
+				ID:    aws.ToString(inst.InstanceId),
+				Type:  string(inst.InstanceType),
+				State: string(inst.State.Name),
+				IP:    aws.ToString(inst.PublicIpAddress),
 			}
 			if inst.LaunchTime != nil {
-				info.LaunchAt = *inst.LaunchTime
+				info.Uptime = time.Since(*inst.LaunchTime)
 			}
 			instances = append(instances, info)
 
@@ -468,22 +458,8 @@ func maxU64(a, b uint64) uint64 {
 	return b
 }
 
-// Supporting types matching the interface
+// Supporting types — use canonical types from parent actions package
 
-type InstanceSpec struct {
-	Provider string
-	Type     string
-	Region   string
-	Image    string
-	Tags     map[string]string
-	MaxCost  float64
-}
-
-type AutoScalePolicy struct {
-	MinInstances int
-	MaxInstances int
-	TargetCPU    float64
-	ScaleUpAt    float64
-	ScaleDownAt  float64
-	CooldownSec  int
-}
+type InstanceSpec = actions.InstanceSpec
+type AutoScalePolicy = actions.AutoScalePolicy
+type InstanceInfo = actions.InstanceInfo

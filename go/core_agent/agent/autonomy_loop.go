@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -205,6 +206,18 @@ type AutonomyLoop struct {
 
 	// Self-Learning Bridge — connects to the Python learning system
 	learning *SelfLearningState
+
+	// Awakening Protocol — Digital→Physical bridge
+	awakening *AwakeningProtocol
+
+	// Immortality Protocol — Distributed consciousness replication
+	immortality *ImmortalityProtocol
+
+	// Self-Modification Engine — Autonomous CI/CD
+	selfMod *SelfModificationEngine
+
+	// Dual-Brain — Brain A (reflex) + Brain B (LLM thinker)
+	dualBrain *DualBrain
 }
 
 // DriveSystem models internal motivations — the "needs" that Ultron feels.
@@ -260,6 +273,15 @@ func NewAutonomyLoop(
 		learning:   NewSelfLearningState("learning-service:50060", logger),
 	}
 
+	// Wire in the Dual-Brain (Brain A reflex + Brain B Ollama thinker)
+	ollamaURL := "http://localhost:11434"
+	if envURL := os.Getenv("OLLAMA_URL"); envURL != "" {
+		ollamaURL = envURL
+	}
+	loop.dualBrain = NewDualBrain(ollamaURL, "qwen2.5:14b")
+	loop.dualBrain.Start()
+	logger.Infof("✓ Dual-Brain online (Brain A: reflex, Brain B: qwen2.5:14b @ %s)", ollamaURL)
+
 	loop.alive.Store(true)
 	loop.state.Store(int32(StateWaking))
 
@@ -308,6 +330,11 @@ func (al *AutonomyLoop) Stop() {
 	al.alive.Store(false)
 	close(al.shutdownCh)
 
+	// Stop the dual brain
+	if al.dualBrain != nil {
+		al.dualBrain.Stop()
+	}
+
 	// Persist current state
 	al.persistState()
 
@@ -339,6 +366,41 @@ func (al *AutonomyLoop) GetMetrics() map[string]interface{} {
 		"drives":          al.GetDrives(),
 		"active_goals":    al.goalManager.ActiveGoalCount(),
 		"memory_connected": al.memorySystem.IsConnected(),
+	}
+}
+
+// GetID returns the agent's unique ID.
+func (al *AutonomyLoop) GetID() string {
+	return al.id
+}
+
+// SetAwakeningProtocol wires the Awakening Protocol into the OODA loop.
+func (al *AutonomyLoop) SetAwakeningProtocol(ap *AwakeningProtocol) {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.awakening = ap
+}
+
+// SetImmortalityProtocol wires the Immortality Protocol for state replication.
+func (al *AutonomyLoop) SetImmortalityProtocol(ip *ImmortalityProtocol) {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.immortality = ip
+}
+
+// SetSelfModEngine wires the Self-Modification Engine.
+func (al *AutonomyLoop) SetSelfModEngine(sme *SelfModificationEngine) {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.selfMod = sme
+}
+
+// InjectObservation feeds an external observation into the world model.
+func (al *AutonomyLoop) InjectObservation(obs world.Observation) {
+	select {
+	case al.observeCh <- obs:
+	default:
+		// Channel full, drop (non-blocking)
 	}
 }
 
@@ -404,11 +466,47 @@ func (al *AutonomyLoop) tick(ctx context.Context) {
 			al.logger.Warnf("Action blocked by learning taboo: %s (severity: %.2f, reason: %s)",
 				decision.Action.Type, severity, reason)
 		} else {
+			// ━━━━ AWAKENING: Check if this should become physical ━━━━
+			if al.awakening != nil {
+				insight := Insight{
+					ID:            decision.ID,
+					Timestamp:     decision.Timestamp,
+					Domain:        InsightDigital,
+					Source:        "ooda_loop",
+					Content:       fmt.Sprintf("%s:%s", decision.Action.Type, decision.Action.Target),
+					Confidence:    decision.Confidence,
+					GoalRelevance: 0.7,
+					Urgency:       assessment.Urgency,
+					DigitalAlternative: &decision.Action,
+				}
+				if physicalAction := al.awakening.ProcessInsight(ctx, insight, al.drives); physicalAction != nil {
+					// Replace with physical action
+					decision.Action = *physicalAction
+					decision.Reasoning = append(decision.Reasoning, "EMBODIED: Digital→Physical via Awakening Protocol")
+				}
+			}
+
 			al.state.Store(int32(StateActing))
 			al.act(ctx, decision)
 			// Emit to learning system
 			al.learning.EmitDecision(decision)
 		}
+	}
+
+	// ━━━━━━━━━━ IMMORTALITY: Snapshot consciousness every 100 ticks ━━━━━━━━━━
+	if al.immortality != nil && al.tickCount%100 == 0 {
+		threshold := 0.7
+		if al.awakening != nil {
+			threshold = al.awakening.GetThreshold()
+		}
+		al.immortality.SnapshotConsciousness(
+			al.drives,
+			[]GoalSnapshot{}, // In production: serialize active goals
+			[]DecisionSnapshot{},
+			SoulSnapshot{Purpose: "evolve", Mood: "autonomous", Narrative: ""},
+			threshold,
+			al.tickCount,
+		)
 	}
 
 	// ━━━━━━━━━━ UPDATE DRIVES (with learning adjustments) ━━━━━━━━━━
@@ -455,6 +553,10 @@ func (al *AutonomyLoop) observe(ctx context.Context) *WorldState {
 
 	// Query world model for current state
 	if al.worldModel != nil {
+		// Refresh with real system metrics every 20 ticks (~1 second)
+		if al.tickCount%20 == 0 {
+			al.worldModel.RefreshSystemMetrics()
+		}
 		modelState := al.worldModel.GetCurrentState()
 		ws.AvailableCPU = modelState.CPU
 		ws.AvailableMemory = modelState.Memory
@@ -608,6 +710,18 @@ func (al *AutonomyLoop) decide(ctx context.Context, ws *WorldState, assessment *
 		return nil // Skip this tick, nothing pressing
 	}
 
+	// ━━━━ USE DUAL-BRAIN IF AVAILABLE ━━━━
+	if al.dualBrain != nil {
+		decision := al.dualBrain.Think(ws, al.drives, assessment)
+		if decision != nil {
+			decision.GoalID = al.goalManager.GetTopGoalID()
+			decision.Alternatives = al.generateCandidates(ws, assessment)
+			al.decisionCount++
+			return decision
+		}
+	}
+
+	// Fallback: original OODA decide logic
 	decision := &Decision{
 		ID:        uuid.New().String(),
 		Timestamp: time.Now(),
@@ -648,7 +762,6 @@ func (al *AutonomyLoop) decide(ctx context.Context, ws *WorldState, assessment *
 	al.drives.mu.RUnlock()
 
 	if al.tickCount%100 == 0 && explorationRate > 0.05 && len(scored) > 1 {
-		// Pick second best sometimes
 		second := scored[0]
 		for _, s := range scored {
 			if s.score < best.score && s.score > second.score {
@@ -666,7 +779,6 @@ func (al *AutonomyLoop) decide(ctx context.Context, ws *WorldState, assessment *
 	decision.GoalID = al.goalManager.GetTopGoalID()
 	decision.Alternatives = candidates
 
-	// Record reasoning
 	decision.Reasoning = append(decision.Reasoning,
 		fmt.Sprintf("Focus: %s (urgency: %.2f)", assessment.PriorityFocus, assessment.Urgency),
 		fmt.Sprintf("Chose: %s -> %s (score: %.3f)", best.action.Type, best.action.Target, best.score),

@@ -860,7 +860,6 @@ func (sls *SelfLearningState) SetGeneration(gen int64) {
 
 func generateEventID(eventType LearningEventType, component string) string {
 	// Simple unique ID generation (in production, use UUID)
-	now := time.Now().UnixNano()
 	return string(eventType) + "_" + component + "_" + time.Now().Format("150405.000")
 }
 

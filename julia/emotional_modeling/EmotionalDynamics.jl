@@ -708,3 +708,6 @@ function compute_emotional_entropy(trajectory::Matrix{Float64})
 end
 
 end # module
+
+# Include the Physical-Emotion Coupling module
+include("PhysicalEmotionCoupling.jl")

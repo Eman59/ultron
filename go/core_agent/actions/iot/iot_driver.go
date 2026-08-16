@@ -9,19 +9,13 @@ import (
 	"sync"
 	"time"
 
+	"ultron/core_agent/actions"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"go.uber.org/zap"
 )
 
-// DeviceInfo describes a known IoT device.
-type DeviceInfo struct {
-	ID       string    `json:"id"`
-	Name     string    `json:"name"`
-	Type     string    `json:"type"`
-	Protocol string    `json:"protocol"`
-	Online   bool      `json:"online"`
-	LastSeen time.Time `json:"last_seen"`
-}
+// DeviceInfo — alias to canonical type
+type DeviceInfo = actions.DeviceInfo
 
 // MQTTDriver implements IoTHandler using the Paho MQTT client.
 type MQTTDriver struct {

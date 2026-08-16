@@ -10,17 +10,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/playwright-community/playwright-go"
+	"ultron/core_agent/actions"
+	"github.com/mxschmitt/playwright-go"
 	"go.uber.org/zap"
 )
 
-// SearchResult matches the interface defined in actions/interface.go.
-type SearchResult struct {
-	Title   string  `json:"title"`
-	URL     string  `json:"url"`
-	Snippet string  `json:"snippet"`
-	Score   float64 `json:"score"`
-}
+// SearchResult — use canonical type from parent package
+type SearchResult = actions.SearchResult
 
 // ScrapedArticle is a structured news article.
 type ScrapedArticle struct {

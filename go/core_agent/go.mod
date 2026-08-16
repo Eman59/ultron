@@ -1,6 +1,6 @@
 module ultron/core_agent
 
-go 1.21
+go 1.22
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.24.0
@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.141.0
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/google/uuid v1.5.0
-	github.com/playwright-community/playwright-go v0.4702.0
+	github.com/mxschmitt/playwright-go v0.6201.0
 	go.uber.org/zap v1.26.0
 	google.golang.org/grpc v1.60.1
 )
@@ -25,14 +25,14 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.21.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.26.5 // indirect
 	github.com/aws/smithy-go v1.19.0 // indirect
-	github.com/deckarep/golang-set/v2 v2.6.0 // indirect
-	github.com/go-jose/go-jose/v3 v3.0.3 // indirect
+	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
+	github.com/go-jose/go-jose/v3 v3.0.5 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/gorilla/websocket v1.5.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
 	golang.org/x/net v0.20.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect

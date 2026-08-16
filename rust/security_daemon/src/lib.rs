@@ -18,6 +18,7 @@ pub mod threat_monitor;
 pub mod integrity;
 pub mod encryption;
 pub mod migration;
+pub mod quantum_secure;
 
 use std::collections::HashMap;
 use std::sync::Arc;

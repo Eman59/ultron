@@ -105,9 +105,8 @@ class PerformanceMonitor:
                 snapshot.error_rates[component] = 0.0
         
         # Calculate component scores (0-1, higher is better)
-        for component in set(list(snapshot.latencies.keys()) | 
-                           set(snapshot.error_rates.keys()) |
-                           set(snapshot.throughputs.keys())):
+        all_components = set(snapshot.latencies.keys()) | set(snapshot.error_rates.keys()) | set(snapshot.throughputs.keys())
+        for component in all_components:
             
             # Score based on: low latency + low error rate + high throughput
             latency_score = max(0, 1.0 - snapshot.latencies.get(component, 50.0) / 500.0)

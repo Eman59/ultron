@@ -368,6 +368,63 @@ class UnifiedLearningService:
         except Exception:
             self.voice = None
 
+        # ═══════════════════════════════════════════════════════════
+        # 13-16: NEW MODULES — Wired into the learning service
+        # ═══════════════════════════════════════════════════════════
+
+        # 13. Consciousness — Self-Model, Theory of Mind, Soul
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(self.project_root / "python"))
+            from consciousness import SelfModel, TheoryOfMind, Soul
+            
+            consciousness_dir = str(self.project_root / "data" / "consciousness")
+            self.self_model = SelfModel(data_dir=consciousness_dir)
+            self.theory_of_mind = TheoryOfMind(data_dir=consciousness_dir)
+            self.soul = Soul(data_dir=consciousness_dir, llm_client=self.brain)
+            self.soul.start()
+            print("[LearningService] ✓ Consciousness module LIVE (Self-Model + ToM + Soul)")
+        except Exception as e:
+            self.self_model = None
+            self.theory_of_mind = None
+            self.soul = None
+            print(f"[LearningService] ⚠ Consciousness module failed: {e}")
+
+        # 14. Global Reach — Supply Chain + Cyber-Physical Engine
+        try:
+            from global_reach import SupplyChainAgent, CyberPhysicalEngine
+            
+            global_reach_dir = str(self.project_root / "data" / "global_reach")
+            self.supply_chain = SupplyChainAgent(data_dir=global_reach_dir)
+            self.cyber_physical = CyberPhysicalEngine(data_dir=global_reach_dir)
+            print("[LearningService] ✓ Global Reach module LIVE (Supply Chain + Cyber-Physical)")
+        except Exception as e:
+            self.supply_chain = None
+            self.cyber_physical = None
+            print(f"[LearningService] ⚠ Global Reach module failed: {e}")
+
+        # 15. Energy Grid Controller
+        try:
+            from global_reach.energy_grid import EnergyGridController
+            
+            energy_dir = str(self.project_root / "data" / "energy")
+            self.energy_grid = EnergyGridController(data_dir=energy_dir)
+            print("[LearningService] ✓ Energy Grid LIVE")
+        except Exception as e:
+            self.energy_grid = None
+            print(f"[LearningService] ⚠ Energy Grid failed: {e}")
+
+        # 16. Universal Transfer Agent
+        try:
+            from meta_learning.transfer_agent import UniversalTransferAgent
+            
+            transfer_dir = str(self.project_root / "data" / "transfer")
+            self.transfer_agent = UniversalTransferAgent(data_dir=transfer_dir, llm_client=self.brain)
+            print("[LearningService] ✓ Transfer Agent LIVE")
+        except Exception as e:
+            self.transfer_agent = None
+            print(f"[LearningService] ⚠ Transfer Agent failed: {e}")
+
     # ═══════════════════════════════════════════════════════════════
     # SERVICE LIFECYCLE
     # ═══════════════════════════════════════════════════════════════
