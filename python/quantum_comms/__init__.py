@@ -18,3 +18,7 @@ __version__ = "0.1.0"
 from .qkd import QuantumKeyDistribution, BB84Protocol
 from .entanglement import EntanglementPair, QuantumChannel
 from .qrng import QuantumRandomGenerator
+
+def _validate_input(input_data):
+    if input_data is None or not input_data:
+        raise ValueError("Input cannot be empty or None")
