@@ -12,11 +12,11 @@ from pathlib import Path
 
 
 # Powerful deep male voice
-ULTRON_VOICE = "Daniel"  # Deep British male - most powerful sounding
-ULTRON_RATE = 170
+ULTRON_VOICE: str = "Daniel"  # Deep British male - most powerful sounding
+ULTRON_RATE: int = 170
 
 
-def synthesize(text: str, voice: str = None, rate: int = None) -> str:
+def synthesize(text: str, voice: str | None = None, rate: int | None = None) -> str:
     """
     Synthesize text to WAV using macOS native TTS.
     Returns path to WAV file.
@@ -24,19 +24,19 @@ def synthesize(text: str, voice: str = None, rate: int = None) -> str:
     voice = voice or ULTRON_VOICE
     rate = rate or ULTRON_RATE
 
-    output_dir = Path(tempfile.gettempdir()) / "ultron_tts"
+    output_dir: Path = Path(tempfile.gettempdir()) / "ultron_tts"
     output_dir.mkdir(exist_ok=True)
 
     # Clean old files
-    existing = sorted(output_dir.glob("*.wav"), key=os.path.getmtime)
+    existing: list[Path] = sorted(output_dir.glob("*.wav"), key=os.path.getmtime)
     for old in existing[:-10]:
         try:
             old.unlink()
         except Exception:
             pass
 
-    aiff_path = output_dir / f"ultron_{int(time.time()*1000)}.aiff"
-    wav_path = aiff_path.with_suffix('.wav')
+    aiff_path: Path = output_dir / f"ultron_{int(time.time() * 1000)}.aiff"
+    wav_path: Path = aiff_path.with_suffix('.wav')
 
     try:
         result = subprocess.run(
@@ -65,7 +65,7 @@ def synthesize(text: str, voice: str = None, rate: int = None) -> str:
     return ""
 
 
-def speak_directly(text: str, voice: str = None, rate: int = None):
+def speak_directly(text: str, voice: str | None = None, rate: int | None = None):
     """
     Speak directly through Mac speakers. No file, no browser.
     This is the most reliable method — uses macOS `say` command live.
@@ -84,6 +84,6 @@ def speak_directly(text: str, voice: str = None, rate: int = None):
     threading.Thread(target=_speak, daemon=True).start()
 
 
-def stop_speaking():
+def stop_speaking() -> None:
     """Kill any running say process."""
     subprocess.run(["killall", "say"], capture_output=True)
