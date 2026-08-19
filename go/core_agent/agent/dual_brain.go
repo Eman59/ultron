@@ -385,6 +385,11 @@ type BrainB struct {
 	completedJobs atomic.Int64
 	failedJobs    atomic.Int64
 
+	// Rate limiter — don't flood Ollama (max 1 request per 10s)
+	lastThought   time.Time
+	thoughtMu     sync.Mutex
+	minInterval   time.Duration
+
 	// Control
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -399,7 +404,8 @@ func NewBrainB(ollamaURL string, model string, resultChan chan ThoughtResult) *B
 		model:        model,
 		requestQueue: make(chan ThoughtRequest, 50),
 		resultChan:   resultChan,
-		numWorkers:   5, // 5 parallel thought threads
+		numWorkers:   2, // 2 parallel thought threads (was 5 — don't flood Ollama)
+		minInterval:  10 * time.Second, // at most 1 Ollama call per 10s
 		ctx:          ctx,
 		cancel:       cancel,
 	}
@@ -434,6 +440,22 @@ func (b *BrainB) thinkWorker(id int) {
 		case <-b.ctx.Done():
 			return
 		case req := <-b.requestQueue:
+			// Rate limit: ensure minimum interval between Ollama calls
+			b.thoughtMu.Lock()
+			since := time.Since(b.lastThought)
+			if since < b.minInterval {
+				wait := b.minInterval - since
+				b.thoughtMu.Unlock()
+				select {
+				case <-b.ctx.Done():
+					return
+				case <-time.After(wait):
+				}
+				b.thoughtMu.Lock()
+			}
+			b.lastThought = time.Now()
+			b.thoughtMu.Unlock()
+
 			b.activeJobs.Add(1)
 			result := b.processThought(req)
 			b.activeJobs.Add(-1)
@@ -443,7 +465,7 @@ func (b *BrainB) thinkWorker(id int) {
 				case b.resultChan <- *result:
 					b.completedJobs.Add(1)
 				default:
-					// Result channel full, drop (Brain A will re-request if needed)
+					// Result channel full, drop
 				}
 			} else {
 				b.failedJobs.Add(1)
@@ -515,8 +537,9 @@ func (b *BrainB) callLLM(system, prompt string) (string, error) {
 		"stream": false,
 		"options": map[string]interface{}{
 			"temperature":  0.4,
-			"num_predict":  200,
+			"num_predict":  80,  // short answers for autonomous decisions
 			"top_p":        0.9,
+			"num_ctx":      1024,
 		},
 	}
 
@@ -528,7 +551,7 @@ func (b *BrainB) callLLM(system, prompt string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 90 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

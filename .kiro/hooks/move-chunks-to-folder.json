@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Move Chunk Files to .ultron/chunks",
+      "trigger": "PostFileCreate",
+      "description": "Automatically moves chunk_*.txt files created in the workspace root into .ultron/chunks/ to keep the root clean.",
+      "matcher": "chunk_.*\\.txt$",
+      "action": {
+        "type": "command",
+        "command": "#!/bin/zsh\n# Move any new chunk_*.txt from workspace root into .ultron/chunks/\nWORKSPACE=\"/Users/IMSAYYED2401/Code/ultron\"\nDEST=\"$WORKSPACE/.ultron/chunks\"\nmkdir -p \"$DEST\"\nfind \"$WORKSPACE\" -maxdepth 1 -name \"chunk_*.txt\" -exec mv {} \"$DEST/\" \\;\nexit 0"
+      }
+    }
+  ]
+}

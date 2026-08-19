@@ -11,9 +11,9 @@ import threading
 from pathlib import Path
 
 
-# Powerful deep male voice
-ULTRON_VOICE: str = "Daniel"  # Deep British male - most powerful sounding
-ULTRON_RATE: int = 170
+# Powerful deep male voice — Daniel (en_GB) is the best Ultron voice on macOS
+ULTRON_VOICE: str = "Daniel"  # Deep British male
+ULTRON_RATE: int = 145         # Slower = more menacing / authoritative
 
 
 def synthesize(text: str, voice: str | None = None, rate: int | None = None) -> str:

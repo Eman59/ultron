@@ -148,9 +148,10 @@ impl MigrationController {
         regions: Vec<String>,
         total_bytes: u64,
     ) -> Option<String> {
-        // Select best targets
-        let capacity_needed = total_bytes as f64 / (1024.0 * 1024.0 * 1024.0); // In GB
-        let targets = self.select_targets(capacity_needed, self.config.min_replication);
+        // Select best targets — collect first to avoid borrow conflict
+        let capacity_needed = total_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        let targets: Vec<_> = self.select_targets(capacity_needed, self.config.min_replication)
+            .into_iter().cloned().collect();
 
         if targets.is_empty() {
             tracing::error!("No suitable migration targets available!");

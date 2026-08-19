@@ -3,7 +3,8 @@ members = [
     "dynamic_neural",
     "real_time_data",
     "security_daemon",
-    "neuromorphic"
+    "neuromorphic",
+    "ultron_neural_service"
 ]
 
 [profile.release]

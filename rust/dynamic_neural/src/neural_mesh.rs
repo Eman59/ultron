@@ -6,7 +6,6 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
-use tch::{Device, Tensor};
 use tracing::{debug, info, warn};
 
 /// Main neural mesh structure that manages dynamic neural networks
@@ -16,7 +15,6 @@ pub struct NeuralMesh {
     config: NeuralConfig,
     rng: ChaCha8Rng,
     metrics: NeuralMetrics,
-    device: Device,
     plasticity_history: Vec<PlasticityEvent>,
 }
 
@@ -108,7 +106,6 @@ impl NeuralMesh {
             config,
             rng,
             metrics,
-            device: Device::cuda_if_available(),
             plasticity_history: Vec::new(),
         })
     }

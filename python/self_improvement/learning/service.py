@@ -21,7 +21,7 @@ Architecture:
   │  Agent       │◀────│   Learning Service   │     │ Collector        │
   ├──────────────┤     │   (this file)        │     ├──────────────────┤
   │  Rust Neural │────▶│                      │────▶│ Pattern          │
-  │  Mesh        │◀────│   Port: 50052        │     │ Recognizer       │
+  │  Mesh        │◀────│   Port: 50060        │     │ Recognizer       │
   ├──────────────┤     │                      │     ├──────────────────┤
   │  Python Meta │────▶│                      │────▶│ Adaptive         │
   │  Learning    │◀────│                      │     │ Optimizer        │
@@ -317,8 +317,8 @@ class UnifiedLearningService:
             self.learner = ContinuousLearner(
                 project_root=str(self.project_root),
                 models_dir=str(self.project_root / "models"),
-                retrain_interval_hours=24.0,
-                min_new_examples=500,
+                retrain_interval_hours=2.0,    # retrain every 2h instead of 24h
+                min_new_examples=10,           # trigger after 10 interactions, not 500
                 auto_retrain=True,
             )
         except ImportError:
@@ -611,6 +611,17 @@ class UnifiedLearningService:
                 processed += 1
                 self._metrics.events_received += 1
                 self._metrics.events_processed += 1
+
+                # ── Feed interactions directly into ContinuousLearner ──────
+                if event_data.get("event_type") == "interaction" and self.learner:
+                    d = event_data.get("data", {})
+                    ui = d.get("user_input", "")
+                    resp = d.get("response", "")
+                    if ui and resp:
+                        try:
+                            self.learner.ingest_interaction(ui, resp, quality_score=0.75)
+                        except Exception:
+                            pass
 
                 # Track per-component
                 component = event_data.get("component", "unknown")

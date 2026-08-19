@@ -19,7 +19,7 @@ import os
 from typing import Dict, Any, List, Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi import UploadFile, File
@@ -106,6 +106,13 @@ def _start_meta_controller():
         _cfg = {"project_root": str(_pathlib.Path(__file__).parent.parent.parent)}
         _meta_controller = create_ultron_meta_learner(_cfg)
         print("[META] Controller online")
+        # ── Wire meta-learning output back into the OODA loop ──
+        try:
+            from python.meta_learning.learning_bridge import start as _mb_start
+            _mb_start(_meta_controller)
+            print("[META] Learning bridge → OODA loop connected")
+        except Exception as _mbe:
+            print(f"[META] Bridge failed: {_mbe}")
     except Exception as _e:
         print(f"[META] Failed: {_e}")
 _start_meta_controller()
@@ -428,9 +435,23 @@ async def lifespan(app: FastAPI):
     # Background task: push real Go metrics to all WebSocket clients every second
     push_task = asyncio.create_task(_metrics_push_loop())
 
+    # Background task: auto-reconnect gRPC bridge every 10s until core_agent connects
+    async def _auto_reconnect():
+        while True:
+            await asyncio.sleep(10)
+            if not bridge.is_connected:
+                try:
+                    await asyncio.wait_for(bridge.connect(), timeout=3.0)
+                    if bridge.is_connected:
+                        print("[BRIDGE] Reconnected to Go Core Agent")
+                except Exception:
+                    pass
+    reconnect_task = asyncio.create_task(_auto_reconnect())
+
     yield
 
     push_task.cancel()
+    reconnect_task.cancel()
     await bridge.disconnect()
     if _soul:
         _soul.stop()
@@ -613,6 +634,16 @@ async def status():
     )
 
 
+@app.post("/reconnect")
+async def reconnect_brain():
+    """Force reconnect the gRPC bridge to Go Core Agent."""
+    try:
+        connected = await asyncio.wait_for(bridge.connect(), timeout=3.0)
+        return {"connected": connected, "state": bridge.state.value}
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
+
+
 @app.get("/connection")
 async def connection():
     """Get gRPC connection details."""
@@ -649,17 +680,78 @@ async def threat_level():
 
 @app.get("/health")
 async def health():
-    """Liveness check."""
+    """Liveness check — includes all module statuses for UI."""
+    # Poll Rust service health in parallel
+    rust_status = {}
+    rust_urls = {
+        "security_daemon": os.getenv("ULTRON_SECURITY_URL", "http://localhost:50055"),
+        "data_pipeline":   os.getenv("ULTRON_DATA_URL",     "http://localhost:50054"),
+        "neuromorphic":    os.getenv("ULTRON_NEURO_URL",    "http://localhost:50056"),
+    }
+    import urllib.request as _ur
+    for svc, url in rust_urls.items():
+        try:
+            with _ur.urlopen(f"{url}/health", timeout=0.5) as r:
+                rust_status[svc] = r.status == 200
+        except Exception:
+            rust_status[svc] = False
+
+    # Check MQTT
+    mqtt_up = False
+    try:
+        import socket as _s
+        _sock = _s.socket(); _sock.settimeout(0.5)
+        mqtt_up = _sock.connect_ex(("localhost", int(os.getenv("MQTT_PORT","1883")))) == 0
+        _sock.close()
+    except Exception:
+        pass
+
     return {
         "status": "alive",
         "uptime": time.time() - _start_time,
         "brain_connected": bridge.is_connected,
         "llm_active": is_ollama_available(),
-        "world_intel": _world_intel is not None,
-        "smart_home": _smart_home is not None,
-        "autonomous_daemon": _autonomous_daemon is not None,
-        "self_mod_engine": _self_mod_engine is not None,
+        # Python modules
+        "soul":             _soul is not None,
+        "self_model":       _self_model is not None,
+        "emotion":          _emotional_core is not None,
+        "improvement":      _improvement_engine is not None,
+        "world_intel":      _world_intel is not None,
+        "smart_home":       _smart_home is not None,
+        "daemon":           _autonomous_daemon is not None,
+        "self_mod_engine":  _self_mod_engine is not None,
+        "voice_engine":     _voice_engine is not None,
+        "meta_controller":  _meta_controller is not None,
+        "interaction_learner": _interaction_learner is not None,
+        "cyber_physical":   _cyber_physical is not None,
+        "supply_chain":     _supply_chain is not None,
+        "intuition_engine": _intuition_engine is not None,
+        # Rust services
+        "rust_security":    rust_status.get("security_daemon", False),
+        "rust_data":        rust_status.get("data_pipeline", False),
+        "rust_neuromorphic": rust_status.get("neuromorphic", False),
+        # IoT
+        "mqtt_broker":      mqtt_up,
     }
+
+
+@app.get("/rust/metrics")
+async def rust_metrics():
+    """Aggregate metrics from all running Rust services."""
+    import urllib.request as _ur
+    results = {}
+    urls = {
+        "security_daemon":  os.getenv("ULTRON_SECURITY_URL", "http://localhost:50055"),
+        "data_pipeline":    os.getenv("ULTRON_DATA_URL",     "http://localhost:50054"),
+        "neuromorphic":     os.getenv("ULTRON_NEURO_URL",    "http://localhost:50056"),
+    }
+    for svc, url in urls.items():
+        try:
+            with _ur.urlopen(f"{url}/metrics", timeout=0.8) as r:
+                results[svc] = json.loads(r.read().decode())
+        except Exception:
+            results[svc] = {"status": "offline"}
+    return results
 
 
 @app.get("/world")
@@ -858,7 +950,7 @@ async def execute_command(body: dict):
     args = parts[1:] if len(parts) > 1 else []
 
     # ── STATUS ──────────────────────────────────────────────────
-    if action in ("status", "s"):
+    if action in ("status",):
         metrics = await _fetch_agent_metrics()
         if metrics:
             drives = metrics.get("drives", {})
@@ -876,14 +968,14 @@ async def execute_command(body: dict):
         return {"response": f"PYTHON+OLLAMA mode | Uptime: {uptime}s | LLM: {'ready' if is_ollama_available() else 'offline'}", "drives": None}
 
     # ── DRIVES ──────────────────────────────────────────────────
-    elif action in ("drives", "d"):
+    elif action in ("drives",):
         if bridge.is_connected:
             drives = await bridge.get_drives()
             return {"response": "Drives pulled from Go agent", "drives": drives}
         return {"response": "Go agent offline — drives are static", "drives": None}
 
     # ── INJECT ──────────────────────────────────────────────────
-    elif action in ("inject", "i"):
+    elif action in ("inject",):
         if len(args) >= 2:
             intent_type = args[0].upper()
             content = args[1]
@@ -917,7 +1009,7 @@ async def execute_command(body: dict):
     elif action == "think":
         query = " ".join(args) if args else "What should I do next?"
         response = await generate_response(query, [])
-        return {"response": f"🧠 {response}"}
+        return {"response": response}
 
     # ── SOUL ────────────────────────────────────────────────────
     elif action == "soul":
@@ -1274,7 +1366,7 @@ async def execute_command(body: dict):
     # ── DEFAULT: pass to LLM ─────────────────────────────────────
     else:
         response = await generate_response(cmd, [])
-        return {"response": f"🧠 {response}"}
+        return {"response": response}
 
 
 @app.websocket("/ws/command")
@@ -1423,19 +1515,22 @@ async def text_to_speech(text: str):
 
 
 @app.post("/speak")
-async def speak_out_loud(text: str):
-    """Speak directly through Mac speakers using evolved voice engine."""
-    # Try voice evolution engine first (learns preferences)
-    if _voice_engine:
-        try:
-            result = _voice_engine.synthesize(text)
-            if result and result.get("audio_path"):
-                import subprocess
-                subprocess.Popen(["afplay", result["audio_path"]])
-                return {"speaking": True, "text": text, "engine": result.get("provider", "evolved")}
-        except Exception:
-            pass
-    # Fallback to direct TTS
+async def speak_out_loud(request: Request):
+    """Speak directly through Mac speakers — accepts JSON or form-encoded text."""
+    try:
+        ct = request.headers.get("content-type", "")
+        if "application/json" in ct:
+            body = await request.json()
+            text = body.get("text", "")
+        else:
+            form = await request.form()
+            text = form.get("text", "")
+    except Exception:
+        text = ""
+    if not text:
+        return {"speaking": False, "error": "no text"}
+
+    # Go straight to macOS say — most reliable, no double-play risk
     from .tts_engine import speak_directly
     speak_directly(text)
     return {"speaking": True, "text": text, "engine": "system"}

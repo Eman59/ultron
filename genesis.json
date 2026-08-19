@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "owner": "IMSAYYED2401",
+  "created_at": "2026-08-19T12:18:57Z",
+  "created_timestamp": 1787141937,
+  "public_key_hex": "dedade80ada5b82ad8e536934e38b17978c8e0b79488e26c51de43f9a109767c",
+  "public_key_hash": "7e40d49b3892e5d22e04844ad00c293910eeac98bd8e16119e8a8868d1b69389",
+  "algorithm": "Ed25519",
+  "purpose": "Ultron cryptographic ownership \u2014 only this key can control the system",
+  "signature": "16a155d4ec722f03c81fd7b0234c2b7976cbe9a3fe14e1f22be58d30c15e82f3c09c1f7840f25deadf22ba7a6eda91e025a9f1cc0450bfdfa762f85900e91f00"
+}

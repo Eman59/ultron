@@ -311,7 +311,7 @@ class ContinuousLearner:
         
         # Time-based trigger
         if now >= self._metrics.next_retrain_time:
-            if self._metrics.examples_since_last_train >= 50:  # At least some data
+            if self._metrics.examples_since_last_train >= 10:  # trigger early
                 return RetrainTrigger.SCHEDULED
         
         # Data threshold trigger

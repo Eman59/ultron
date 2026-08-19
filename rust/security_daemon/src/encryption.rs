@@ -1,7 +1,7 @@
 //! Encryption engine — protects core memory when under threat.
 
 use aes_gcm::{Aes256Gcm, Key, Nonce};
-use aes_gcm::aead::{Aead, NewAead};
+use aes_gcm::aead::{Aead, KeyInit};
 use rand::RngCore;
 use std::collections::HashMap;
 
@@ -67,7 +67,7 @@ impl EncryptionEngine {
         rand::thread_rng().fill_bytes(&mut nonce_bytes);
 
         // Encrypt using AES-256-GCM
-        let cipher_key = Key::from_slice(&key);
+        let cipher_key = Key::<Aes256Gcm>::from_slice(&key);
         let cipher = Aes256Gcm::new(cipher_key);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
@@ -97,7 +97,7 @@ impl EncryptionEngine {
         let key = self.region_keys.get(region_id)
             .ok_or_else(|| format!("No key for region {}", region_id))?;
 
-        let cipher_key = Key::from_slice(key);
+        let cipher_key = Key::<Aes256Gcm>::from_slice(key);
         let cipher = Aes256Gcm::new(cipher_key);
         let nonce = Nonce::from_slice(&encrypted.nonce);
 

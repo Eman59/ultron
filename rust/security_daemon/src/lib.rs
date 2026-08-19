@@ -52,8 +52,9 @@ pub enum SecurityError {
 pub type Result<T> = std::result::Result<T, SecurityError>;
 
 /// Threat severity levels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum ThreatLevel {
+    #[default]
     None = 0,
     Low = 1,       // Suspicious activity, monitor
     Medium = 2,    // Confirmed anomaly, increase vigilance

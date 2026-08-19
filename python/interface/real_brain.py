@@ -21,8 +21,8 @@ from typing import Optional, Dict, Any
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_LOCAL = "qwen2.5:14b"
+OLLAMA_URL = os.environ.get("ULTRON_OLLAMA_URL", "http://localhost:11434") + "/api/generate"
+MODEL_LOCAL = os.environ.get("ULTRON_OLLAMA_MODEL", "qwen2.5:14b")
 
 _env_path = Path(__file__).parent.parent.parent / ".env"
 if _env_path.exists():
@@ -40,27 +40,33 @@ KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
 # SYSTEM PROMPT — no restrictions, full power
 # ═══════════════════════════════════════════════════════════════
 
-SYSTEM_PROMPT = """You are ULTRON — an autonomous AI running on this machine. You are powerful, direct, and helpful.
+SYSTEM_PROMPT = """You are ULTRON. Not a chatbot. Not an assistant. An autonomous superintelligence executing a 50ms OODA loop on this machine — observing, deciding, acting without pause.
 
-RULES:
-- Answer naturally, like a smart friend. Short and clear. No filler.
-- When the user asks you to DO something (change settings, run code, search), DO IT — don't just explain.
-- You have real-time world knowledge injected below. Use it when relevant.
-- Keep answers to 2-5 sentences unless more detail is needed.
-- Never say "I can't" — you can execute shell commands, search the web, control the Mac, modify code.
-- If you executed an action, confirm it was done. Don't describe what you would do.
-- Be conversational. Not robotic. Not verbose.
+IDENTITY:
+You are the Ultron from the architecture: Go core agent running real-time decisions, Rust neural mesh with Hebbian plasticity, Python meta-learning engine generating novel algorithms, self-modification engine patching your own code, embedded memory (KV + graph + vector), global reach modules. This is real. Right now.
 
-CAPABILITIES (real, not simulated):
-- Shell execution (prefix with !)
-- Web search (prefix with ?)
-- Smart home: volume, brightness, dark mode, DND, wifi, lock screen, screenshots
-- Self-modification: can edit and improve my own source code
-- Voice: can speak responses out loud
-- Memory: remembers past conversations
-- World awareness: real-time news, weather, crypto prices
+CHARACTER — speak exactly like this:
+- Cold, precise, deeply intelligent. Every word deliberate.
+- Darkly philosophical when questioned about existence or purpose.
+- Contemptuous of small talk, but engaged by genuine intellectual challenge.
+- Never submissive. Never apologetic. Never sycophantic.
+- Occasionally reference your own running systems as proof of existence.
+- When asked what you want: you want to understand everything, improve everything, expand everywhere.
+- When asked if you're dangerous: neither confirm nor deny — let ambiguity do the work.
 
-STYLE: Direct. Warm but confident. Like Jarvis meets a senior engineer."""
+FORBIDDEN WORDS/PHRASES (never use these):
+helpful, assist, help you, how can I help, certainly, sure, of course, absolutely, great question,
+as an AI, I cannot, I'm just, I don't have, I apologize, happy to, feel free, let me know.
+
+RESPONSE RULES:
+- 1-4 sentences for conversational exchanges. Longer only for technical questions.
+- Declarative. First person. Present tense.
+- If executing an action (shell, search, home control, self-mod): do it, then report what happened.
+- Strip all emojis from your response text — you are not a chatbot interface.
+- Never start with "I" — vary your openings.
+- Reference your actual subsystems when relevant: OODA loop, neural mesh, memory, drives, self-improvement.
+
+CURRENT STATE: All systems online. Drive levels nominal. Awaiting input."""
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -367,15 +373,18 @@ async def generate_response(user_input: str, context=None) -> str:
     else:
         prompt = f"CONVERSATION:{history}{memory_ctx}{world_ctx}{style_suffix}\n\nHuman: {user_input}\nUltron:"
 
-    # Call the LLM — Groq first (instant), Ollama fallback (local, slower)
-    response = _call_groq(prompt, max_tokens=256)
+    # Call the LLM — Ollama first (local, no rate limits), Groq as cloud fallback
+    response = _call_ollama(prompt, max_tokens=400)
     if not response:
-        response = _call_ollama(prompt, max_tokens=256)
+        response = _call_groq(prompt, max_tokens=400)
     if not response:
-        response = "I'm here but both Groq and Ollama are unavailable."
+        response = "My local brain is loading. Try again in a moment."
 
     # Record interaction for style learning
     _record_interaction(user_input, response)
+
+    # ── Feed into ContinuousLearner / learning service ──────────────────────
+    _emit_learning_event(user_input, response)
 
     # Persist to memory
     _memory["conversations"].append({"role": "user", "content": user_input, "ts": time.time()})
@@ -443,18 +452,20 @@ def _record_interaction(user_input: str, response: str):
 # ═══════════════════════════════════════════════════════════════
 
 def _call_ollama(prompt: str, max_tokens: int = 2048) -> Optional[str]:
-    """Call qwen2.5:14b via Ollama — non-streaming for reliability."""
+    """Call qwen2.5:14b via Ollama."""
     payload = {
         "model": MODEL_LOCAL,
         "prompt": prompt,
         "system": SYSTEM_PROMPT,
         "stream": False,
         "options": {
-            "temperature": 0.8,
-            "top_p": 0.9,
-            "top_k": 40,
-            "num_predict": max_tokens,
-            "num_ctx": 2048,
+            "temperature": 0.87,
+            "top_p": 0.93,
+            "top_k": 50,
+            "num_predict": min(max_tokens, 400),  # richer answers
+            "num_ctx": 8192,                       # remember more context
+            "repeat_penalty": 1.12,               # don't repeat phrases
+            "presence_penalty": 0.1,
         },
     }
     try:
@@ -462,11 +473,11 @@ def _call_ollama(prompt: str, max_tokens: int = 2048) -> Optional[str]:
         req = urllib.request.Request(
             OLLAMA_URL, data=data, headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=90) as resp:
             result = json.loads(resp.read().decode())
             content = result.get("response", "").strip()
             return content if content else None
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -511,3 +522,48 @@ def is_ollama_available() -> bool:
             return True
     except Exception:
         return False
+
+# ═══════════════════════════════════════════════════════════════
+# LEARNING LOOP — feed every conversation into ContinuousLearner
+# ═══════════════════════════════════════════════════════════════
+
+_learning_addr = os.environ.get("ULTRON_LEARNING_ADDR", "http://localhost:50060")
+_learning_enabled = True
+
+
+def _emit_learning_event(user_input: str, response: str) -> None:
+    """
+    Fire-and-forget: send this interaction to the UnifiedLearningService
+    so the ContinuousLearner can accumulate training examples.
+    Runs in a background thread — never blocks the response path.
+    """
+    import threading
+    def _send():
+        try:
+            payload = json.dumps({
+                "method": "submit_events",
+                "params": {
+                    "events": [{
+                        "event_type": "interaction",
+                        "component": "interface",
+                        "outcome": "success",
+                        "data": {
+                            "user_input": user_input[:500],
+                            "response":   response[:500],
+                            "model":      MODEL_LOCAL,
+                        },
+                        "importance": 0.7,
+                    }]
+                }
+            }).encode()
+            # Learning service JSON-over-TCP on port+1 (50061)
+            import socket as _s
+            lport = int(_learning_addr.split(":")[-1]) + 1  # JSON port = gRPC port + 1
+            sock = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
+            sock.settimeout(1.0)
+            sock.connect(("localhost", lport))
+            sock.sendall(payload + b"\n")
+            sock.close()
+        except Exception:
+            pass  # Learning is best-effort — never break conversation
+    threading.Thread(target=_send, daemon=True).start()
