@@ -2,7 +2,6 @@
 
 use crate::neural_types::*;
 use anyhow::Result;
-use rand::Rng;
 use std::collections::HashMap;
 use tracing::{debug, info};
 
@@ -211,22 +210,25 @@ impl PlasticityEngine {
         connections: &mut HashMap<NeuronId, Vec<NeuralConnection>>,
     ) -> Result<usize> {
         let mut changes_applied = 0;
-        
-        // Check if rule should be activated
+
         if !self.should_activate_rule(rule, neurons) {
             return Ok(0);
         }
-        
-        // Apply rule to applicable connections
-        for (neuron_id, neuron_connections) in connections.iter_mut() {
-            for connection in neuron_connections.iter_mut() {
-                if self.is_connection_applicable(rule, connection, neurons) {
-                    self.apply_rule_to_connection(rule, connection);
-                    changes_applied += 1;
+
+        // Collect applicable connection keys first to avoid borrow conflict
+        let keys: Vec<NeuronId> = connections.keys().copied().collect();
+
+        for neuron_id in keys {
+            if let Some(neuron_connections) = connections.get_mut(&neuron_id) {
+                for connection in neuron_connections.iter_mut() {
+                    if self.is_connection_applicable(rule, connection, neurons) {
+                        self.apply_rule_to_connection(rule, connection);
+                        changes_applied += 1;
+                    }
                 }
             }
         }
-        
+
         Ok(changes_applied)
     }
     
@@ -355,21 +357,18 @@ impl PlasticityEngine {
     }
     
     fn apply_meta_plasticity(&mut self, metrics: &mut PlasticityMetrics) -> Result<()> {
-        // Adjust rule strengths based on recent effectiveness
+        let rule_count = self.rules.len() as f32;
+        let effectiveness = metrics.changes_applied as f32 / rule_count.max(1.0);
+
         for rule in &mut self.rules {
-            let effectiveness = metrics.changes_applied as f32 / self.rules.len() as f32;
-            
             if effectiveness > 0.5 {
-                // Rules are effective - slightly increase strength
                 rule.strength *= 1.05;
             } else {
-                // Rules are less effective - slightly decrease strength
                 rule.strength *= 0.95;
             }
-            
             rule.strength = rule.strength.clamp(0.01, 1.0);
         }
-        
+
         metrics.meta_plasticity_applied = true;
         
         Ok(())

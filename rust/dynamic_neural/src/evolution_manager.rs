@@ -1,7 +1,8 @@
 //! Evolution Manager - Neural architecture evolution and optimization
 
 use crate::neural_types::*;
-use anyhow::{Context, Result};
+use crate::neural_mesh::NeuralMesh;
+use anyhow::Result;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
@@ -222,178 +223,122 @@ impl EvolutionManager {
     
     fn evaluate_population(&mut self) -> Result<Vec<FitnessEvaluation>> {
         let mut evaluations = Vec::new();
-        
+        let enable_novelty = self.config.enable_novelty_search;
+        let complexity_penalty = self.config.complexity_penalty;
+
         for (i, mesh) in self.population.iter_mut().enumerate() {
-            // Use a simple pattern recognition task for fitness evaluation
-            let inputs = vec![0.1, 0.2, 0.3, 0.4, 0.5];
-            let expected_outputs = vec![0.5, 0.4, 0.3, 0.2, 0.1];
-            
+            let inputs = vec![0.1_f32, 0.2, 0.3, 0.4, 0.5];
+            let expected_outputs = vec![0.5_f32, 0.4, 0.3, 0.2, 0.1];
             let outputs = mesh.process(&inputs)?;
-            
-            // Calculate fitness based on accuracy
-            let accuracy = self.calculate_accuracy(&outputs, &expected_outputs);
-            
-            // Calculate complexity
-            let complexity = mesh.get_metrics().total_connections as f32 / 
-                           mesh.get_metrics().total_neurons as f32;
-            
-            // Calculate novelty if enabled
-            let novelty = if self.config.enable_novelty_search {
-                self.calculate_novelty(mesh)?
-            } else {
-                0.0
-            };
-            
-            // Calculate adaptation score
-            let adaptation = mesh.get_metrics().plasticity_changes as f32 / 1000.0;
-            
-            // Combined fitness score with complexity penalty
-            let fitness = accuracy * (1.0 - self.config.complexity_penalty * complexity)
+
+            let metrics = mesh.get_metrics();
+            let total_neurons = metrics.total_neurons;
+            let total_conns   = metrics.total_connections;
+            let plasticity_ch = metrics.plasticity_changes;
+
+            let accuracy   = Self::compute_accuracy(&outputs, &expected_outputs);
+            let complexity  = total_conns as f32 / total_neurons.max(1) as f32;
+            let adaptation  = plasticity_ch as f32 / 1000.0;
+
+            // Simple novelty from architecture export (no self borrow needed)
+            let novelty = if enable_novelty {
+                let export = mesh.export_architecture()?;
+                if let Some(serde_json::Value::Array(arr)) = export.get("neurons") {
+                    let uniq: std::collections::HashSet<i32> = arr.iter()
+                        .filter_map(|n| n.get("activation").and_then(|a| a.as_f64()).map(|a| (a * 100.0) as i32))
+                        .collect();
+                    uniq.len() as f32 / arr.len().max(1) as f32
+                } else { 0.0 }
+            } else { 0.0 };
+
+            let fitness = accuracy * (1.0 - complexity_penalty * complexity)
                 + 0.1 * novelty
                 + 0.1 * adaptation;
-            
-            evaluations.push(FitnessEvaluation {
-                individual_id: i,
-                fitness,
-                accuracy,
-                complexity,
-                novelty,
-                adaptation,
-            });
+
+            evaluations.push(FitnessEvaluation { individual_id: i, fitness, accuracy, complexity, novelty, adaptation });
         }
-        
+
         Ok(evaluations)
     }
-    
-    fn calculate_accuracy(&self, outputs: &[f32], expected: &[f32]) -> f32 {
-        let mut total_error = 0.0;
+
+    fn compute_accuracy(outputs: &[f32], expected: &[f32]) -> f32 {
         let min_len = outputs.len().min(expected.len());
-        
-        for i in 0..min_len {
-            let error = (outputs[i] - expected[i]).abs();
-            total_error += error;
-        }
-        
-        if min_len > 0 {
-            1.0 - (total_error / min_len as f32)
-        } else {
-            0.0
-        }
+        if min_len == 0 { return 0.0; }
+        let total_err: f32 = (0..min_len).map(|i| (outputs[i] - expected[i]).abs()).sum();
+        1.0 - (total_err / min_len as f32)
     }
     
-    fn calculate_novelty(&self, mesh: &NeuralMesh) -> Result<f32> {
-        // Simple novelty calculation based on activation patterns
-        let exports = mesh.export_architecture()?;
-        
-        if let Some(neurons) = exports.get("neurons") {
-            if let serde_json::Value::Array(neuron_array) = neurons {
-                let unique_activations: std::collections::HashSet<_> = neuron_array
-                    .iter()
-                    .filter_map(|n| {
-                        if let serde_json::Value::Object(map) = n {
-                            map.get("activation").and_then(|a| a.as_f64()).map(|a| (a * 100.0) as i32)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                
-                let novelty = unique_activations.len() as f32 / neuron_array.len() as f32;
-                return Ok(novelty);
-            }
-        }
-        
-        Ok(0.0)
-    }
     
-    fn select_parents(&self, evaluations: &[FitnessEvaluation]) -> Result<Vec<usize>> {
+    
+    fn select_parents(&mut self, evaluations: &[FitnessEvaluation]) -> Result<Vec<usize>> {
         let mut parents = Vec::new();
-        
+        let n = evaluations.len();
+
         // Tournament selection
         for _ in 0..self.config.population_size {
             let tournament_size = 3;
-            let mut tournament = Vec::new();
-            
-            for _ in 0..tournament_size {
-                let idx = self.rng.gen_range(0..evaluations.len());
-                tournament.push((idx, evaluations[idx].fitness));
+            let mut best_idx = self.rng.gen_range(0..n);
+            let mut best_fitness = evaluations[best_idx].fitness;
+
+            for _ in 1..tournament_size {
+                let idx = self.rng.gen_range(0..n);
+                if evaluations[idx].fitness > best_fitness {
+                    best_fitness = evaluations[idx].fitness;
+                    best_idx = idx;
+                }
             }
-            
-            tournament.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            parents.push(tournament[0].0);
+            parents.push(best_idx);
         }
-        
+
         Ok(parents)
     }
     
     fn create_offspring(&mut self, parents: &[usize]) -> Result<Vec<NeuralMesh>> {
         let mut offspring = Vec::new();
-        
-        for i in 0..parents.len() / 2 {
-            let parent1_idx = parents[i * 2];
-            let parent2_idx = parents[i * 2 + 1];
-            
-            if self.rng.gen::<f32>() < self.config.crossover_rate {
-                // Perform crossover
-                let child = self.crossover(
-                    &self.population[parent1_idx],
-                    &self.population[parent2_idx],
-                )?;
-                offspring.push(child);
+
+        let parent_count = parents.len() & !1; // round down to even
+        for i in 0..parent_count / 2 {
+            let p1 = parents[i * 2];
+            let p2 = parents[i * 2 + 1];
+
+            let do_crossover = self.rng.gen::<f32>() < self.config.crossover_rate;
+
+            if do_crossover {
+                // Build child config from parent metrics (no &NeuralMesh borrow kept)
+                let neurons1 = self.population[p1].get_metrics().total_neurons;
+                let conns1   = self.population[p1].get_metrics().total_connections;
+                let neurons2 = self.population[p2].get_metrics().total_neurons;
+                let conns2   = self.population[p2].get_metrics().total_connections;
+
+                let child_config = NeuralConfig {
+                    initial_neurons: (neurons1 + neurons2) / 2,
+                    connection_density: (conns1 as f32 / neurons1.max(1) as f32
+                                       + conns2 as f32 / neurons2.max(1) as f32) / 2.0,
+                    ..NeuralConfig::default()
+                };
+                offspring.push(NeuralMesh::new(child_config)?);
             } else {
-                // Clone parent (with potential mutation)
-                let mut child = self.clone_mesh(&self.population[parent1_idx])?;
-                self.mutate_mesh(&mut child)?;
+                let neurons = self.population[p1].get_metrics().total_neurons;
+                let conns   = self.population[p1].get_metrics().total_connections;
+                let config = NeuralConfig {
+                    initial_neurons: neurons,
+                    connection_density: conns as f32 / neurons.max(1) as f32,
+                    ..NeuralConfig::default()
+                };
+                let mut child = NeuralMesh::new(config)?;
+
+                // Mutate
+                if self.rng.gen::<f32>() < self.mutation_rates.add_neuron {
+                    child.add_random_neurons(1)?;
+                }
+                if self.rng.gen::<f32>() < self.mutation_rates.remove_neuron {
+                    child.prune_weak_connections(0.05)?;
+                }
                 offspring.push(child);
             }
         }
-        
+
         Ok(offspring)
-    }
-    
-    fn crossover(&self, parent1: &NeuralMesh, parent2: &NeuralMesh) -> Result<NeuralMesh> {
-        // Simplified crossover: average connection strengths
-        let child_config = NeuralConfig {
-            initial_neurons: (parent1.get_metrics().total_neurons + 
-                             parent2.get_metrics().total_neurons) / 2,
-            connection_density: (parent1.get_metrics().total_connections as f32 / 
-                               parent1.get_metrics().total_neurons as f32 +
-                               parent2.get_metrics().total_connections as f32 / 
-                               parent2.get_metrics().total_neurons as f32) / 2.0,
-            ..NeuralConfig::default()
-        };
-        
-        let child = NeuralMesh::new(child_config)?;
-        Ok(child)
-    }
-    
-    fn clone_mesh(&self, mesh: &NeuralMesh) -> Result<NeuralMesh> {
-        // Create a new mesh with similar configuration
-        let config = NeuralConfig {
-            initial_neurons: mesh.get_metrics().total_neurons,
-            connection_density: mesh.get_metrics().total_connections as f32 / 
-                              mesh.get_metrics().total_neurons as f32,
-            ..NeuralConfig::default()
-        };
-        
-        NeuralMesh::new(config)
-    }
-    
-    fn mutate_mesh(&mut self, mesh: &mut NeuralMesh) -> Result<()> {
-        // Apply mutations based on mutation rates
-        if self.rng.gen::<f32>() < self.mutation_rates.add_neuron {
-            mesh.add_random_neurons(1)?;
-        }
-        
-        if self.rng.gen::<f32>() < self.mutation_rates.remove_neuron {
-            // Simplified: don't actually remove neurons in this implementation
-        }
-        
-        if self.rng.gen::<f32>() < self.mutation_rates.modify_strength {
-            // Would modify connection strengths in real implementation
-        }
-        
-        Ok(())
     }
     
     fn form_new_population(
@@ -402,33 +347,42 @@ impl EvolutionManager {
         evaluations: &[FitnessEvaluation],
     ) -> Result<Vec<NeuralMesh>> {
         let mut new_population = Vec::new();
-        
-        // Add elite individuals
-        let mut elite_indices: Vec<_> = evaluations.iter().enumerate().collect();
-        elite_indices.sort_by(|a, b| b.1.fitness.partial_cmp(&a.1.fitness).unwrap());
-        
-        for i in 0..self.config.elite_size.min(elite_indices.len()) {
-            let mesh = self.clone_mesh(&self.population[elite_indices[i].0])?;
-            new_population.push(mesh);
+
+        // Sort indices by fitness (best first)
+        let mut sorted: Vec<usize> = (0..evaluations.len()).collect();
+        sorted.sort_by(|&a, &b| evaluations[b].fitness.partial_cmp(&evaluations[a].fitness).unwrap());
+
+        // Clone elite individuals by config (avoids borrow + call clash)
+        let elite_count = self.config.elite_size.min(sorted.len());
+        let elite_configs: Vec<NeuralConfig> = sorted[..elite_count]
+            .iter()
+            .map(|&idx| NeuralConfig {
+                initial_neurons: self.population[idx].get_metrics().total_neurons,
+                connection_density: self.population[idx].get_metrics().total_connections as f32
+                    / self.population[idx].get_metrics().total_neurons.max(1) as f32,
+                ..NeuralConfig::default()
+            })
+            .collect();
+
+        for cfg in elite_configs {
+            new_population.push(NeuralMesh::new(cfg)?);
         }
-        
+
         // Add offspring
         for child in offspring {
             new_population.push(child);
         }
-        
-        // Fill remaining slots with random individuals if needed
+
+        // Fill remaining slots
         while new_population.len() < self.config.population_size {
             let random_config = NeuralConfig {
                 initial_neurons: self.rng.gen_range(100..1000),
                 connection_density: self.rng.gen_range(0.01..0.5),
                 ..NeuralConfig::default()
             };
-            
-            let random_mesh = NeuralMesh::new(random_config)?;
-            new_population.push(random_mesh);
+            new_population.push(NeuralMesh::new(random_config)?);
         }
-        
+
         Ok(new_population)
     }
     
@@ -473,17 +427,21 @@ impl EvolutionManager {
             .max_by(|a, b| a.1.fitness.partial_cmp(&b.1.fitness).unwrap())
             .map(|(idx, _)| idx)
             .unwrap();
-        
+
         let best_eval = &evaluations[best_idx];
-        
+
+        // Collect metrics before mutable borrow
+        let neuron_count = self.population[best_idx].get_metrics().total_neurons;
+        let conn_count   = self.population[best_idx].get_metrics().total_connections;
+
         let architecture = NeuralArchitecture {
-            neuron_count: self.population[best_idx].get_metrics().total_neurons,
-            connection_count: self.population[best_idx].get_metrics().total_connections,
+            neuron_count,
+            connection_count: conn_count,
             connection_density: best_eval.complexity,
-            average_plasticity: 0.1, // Simplified
-            activation_pattern: vec![0.5], // Simplified
+            average_plasticity: 0.1,
+            activation_pattern: vec![0.5],
         };
-        
+
         let record = EvolutionRecord {
             generation: self.current_generation,
             mesh_id: best_idx as u64,
@@ -493,14 +451,12 @@ impl EvolutionManager {
             adaptation_score: best_eval.adaptation,
             architecture,
         };
-        
+
         self.best_performers.push(record);
-        
-        // Keep only recent best performers
         if self.best_performers.len() > 100 {
             self.best_performers.remove(0);
         }
-        
+
         Ok(())
     }
     

@@ -478,33 +478,41 @@ async def _fetch_agent_metrics() -> dict:
         return {}
 
 async def _metrics_push_loop():
-    """Push real tick/decision counts + drives to all connected UIs every second."""
+    """Push real tick/decision counts + drives + OODA state to all UIs every second."""
     import json as _j
     _local_tick = 0
     while True:
         await asyncio.sleep(1.0)
-        if not _ws_clients:
-            _local_tick += 20
-            continue
 
-        # Try real Go metrics via HTTP endpoint
+        # Always fetch from Go HTTP — even if no WS clients (keeps state fresh)
         metrics = await _fetch_agent_metrics()
+
+        if not _ws_clients:
+            if not metrics:
+                _local_tick += 20
+            continue
 
         if metrics:
             payload = {
-                "type": "status",
-                "tick_count": metrics.get("tick_count", _local_tick),
+                "type":           "status",
+                "tick_count":     metrics.get("tick_count", _local_tick),
                 "decisions_made": metrics.get("decisions_made", _decision_counter),
-                "uptime": int(time.time() - _start_time),
-                "drives": metrics.get("drives", {}),
+                "uptime":         int(time.time() - _start_time),
+                "drives":         metrics.get("drives", {}),
+                "mode":           metrics.get("state", metrics.get("mode", "Observing")),
+                "active_goals":   metrics.get("active_goals", 0),
+                "mesh_size":      metrics.get("mesh_size", 0),
+                "brain_live":     True,
             }
         else:
             _local_tick += 20
             payload = {
-                "type": "status",
-                "tick_count": _local_tick,
+                "type":           "status",
+                "tick_count":     _local_tick,
                 "decisions_made": _decision_counter,
-                "uptime": int(time.time() - _start_time),
+                "uptime":         int(time.time() - _start_time),
+                "mode":           "simulation",
+                "brain_live":     False,
             }
 
         # Push soul diary if available
@@ -606,29 +614,75 @@ async def approve(approval: ApprovalRequest):
     }
 
 
+def _parse_go_uptime(s: str) -> float:
+    """Parse Go duration string like '3m47.998s' or '1h2m3s' into seconds."""
+    import re as _re
+    total = 0.0
+    for val, unit in _re.findall(r'([\d.]+)([hms])', s):
+        v = float(val)
+        if unit == 'h': total += v * 3600
+        elif unit == 'm': total += v * 60
+        elif unit == 's': total += v
+    return total
+
+
 @app.get("/status", response_model=SystemStatus)
 async def status():
-    """Get full system status."""
-    if bridge.is_connected:
-        raw = await bridge.get_system_status()
-        return SystemStatus(
-            mode=raw.get("mode", "unknown"),
-            uptime_seconds=raw.get("uptime_ms", 0) / 1000.0,
-            decisions_made=raw.get("decisions_made", _decision_counter),
-            active_goals=raw.get("active_goals", 0),
-            drives=raw.get("drives", {}),
-            component_health=raw.get("component_states", {}),
-            grpc_connected=True,
-            threat_level=0.0,
-        )
+    """Get full system status — prefers Go HTTP metrics (always accurate)."""
+    import urllib.request as _ur2
+    import json as _j2
 
+    # ── Primary: Go agent HTTP endpoint (direct, no gRPC overhead) ──────────
+    try:
+        req = _ur2.Request(f"{_AGENT_HTTP}/metrics")
+        with _ur2.urlopen(req, timeout=1) as resp:
+            m = _j2.loads(resp.read())
+            drives = m.get("drives", {})
+            # Parse uptime string like "3m47.99s" → seconds
+            uptime_str = m.get("uptime", "0s")
+            uptime_secs = _parse_go_uptime(uptime_str)
+            return SystemStatus(
+                mode=m.get("state", m.get("mode", "Observing")),
+                uptime_seconds=uptime_secs,
+                decisions_made=m.get("decisions_made", 0),
+                active_goals=m.get("active_goals", 0),
+                drives=drives,
+                component_health={"brain": "online", "ooda": "running",
+                                  "mesh_size": str(m.get("mesh_size", 0)),
+                                  "tick_count": str(m.get("tick_count", 0))},
+                grpc_connected=bridge.is_connected,
+                threat_level=0.0,
+            )
+    except Exception:
+        pass
+
+    # ── Secondary: gRPC (if HTTP failed) ────────────────────────────────────
+    if bridge.is_connected:
+        try:
+            raw = await bridge.get_system_status()
+            if raw and raw.get("decisions_made", 0) > 0:
+                return SystemStatus(
+                    mode=raw.get("mode", "Observing"),
+                    uptime_seconds=raw.get("uptime_ms", 0) / 1000.0,
+                    decisions_made=raw.get("decisions_made", _decision_counter),
+                    active_goals=raw.get("active_goals", 0),
+                    drives=raw.get("drives", {}),
+                    component_health=raw.get("component_states", {}),
+                    grpc_connected=True,
+                    threat_level=0.0,
+                )
+        except Exception:
+            pass
+
+    # ── Fallback: simulation (Railway / no Go agent) ─────────────────────────
     return SystemStatus(
         mode="simulation",
         uptime_seconds=time.time() - _start_time,
         decisions_made=_decision_counter,
         active_goals=3,
-        drives={"curiosity": 0.7, "efficiency": 0.6, "purpose": 0.7},
-        component_health={"brain": "offline (simulated)"},
+        drives={"curiosity": 0.7, "efficiency": 0.6, "purpose": 0.7,
+                "coherence": 0.8, "expansion": 0.5, "self_preservation": 0.3},
+        component_health={"brain": "offline (Python-only mode)"},
         grpc_connected=False,
         threat_level=0.0,
     )
@@ -652,12 +706,50 @@ async def connection():
 
 @app.post("/goal")
 async def inject_goal(goal_type: str, domain: str, description: str, priority: float = 0.7):
-    """Inject a goal into the brain."""
-    if not bridge.is_connected:
-        return {"success": False, "error": "Brain offline"}
+    """
+    Inject a goal into the Go Core Agent.
+    Tries gRPC first; falls back to the Go agent's HTTP /inject endpoint
+    so goals land even when gRPC is unavailable.
+    """
+    # Path 1: gRPC (preferred — Go agent processes it directly)
+    if bridge.is_connected:
+        success = await bridge.inject_goal(goal_type, domain, description, "performance", 0.8, priority)
+        if success:
+            return {"success": True, "path": "grpc", "description": description}
 
-    success = await bridge.inject_goal(goal_type, domain, description, "performance", 0.8, priority)
-    return {"success": success}
+    # Path 2: HTTP injection into Go agent's world model
+    agent_http = os.getenv("ULTRON_AGENT_HTTP", "http://localhost:50052")
+    try:
+        import urllib.request as _ur
+        payload = json.dumps({
+            "type": "goal",
+            "data": {
+                "goal_type":   goal_type,
+                "domain":      domain,
+                "description": description,
+                "priority":    priority,
+                "source":      "python_interface",
+            },
+        }).encode("utf-8")
+        req = _ur.Request(
+            f"{agent_http}/inject",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with _ur.urlopen(req, timeout=2) as resp:
+            result = json.loads(resp.read())
+            return {"success": result.get("success", False), "path": "http", "description": description}
+    except Exception as e:
+        pass
+
+    # Path 3: queue it in the autonomous daemon for when the agent comes back up
+    if _autonomous_daemon:
+        _autonomous_daemon.inject_goal(description, priority)
+        return {"success": True, "path": "daemon_queue", "description": description,
+                "note": "Go agent offline — queued in autonomous daemon"}
+
+    return {"success": False, "error": "All injection paths failed (gRPC + HTTP + daemon)"}
 
 
 @app.post("/improve")
@@ -687,6 +779,7 @@ async def health():
         "security_daemon": os.getenv("ULTRON_SECURITY_URL", "http://localhost:50055"),
         "data_pipeline":   os.getenv("ULTRON_DATA_URL",     "http://localhost:50054"),
         "neuromorphic":    os.getenv("ULTRON_NEURO_URL",    "http://localhost:50056"),
+        "neural_mesh":     os.getenv("ULTRON_NEURAL_URL",   "http://localhost:50053"),
     }
     import urllib.request as _ur
     for svc, url in rust_urls.items():
@@ -730,20 +823,49 @@ async def health():
         "rust_security":    rust_status.get("security_daemon", False),
         "rust_data":        rust_status.get("data_pipeline", False),
         "rust_neuromorphic": rust_status.get("neuromorphic", False),
+        "rust_neural_mesh": rust_status.get("neural_mesh", False),
         # IoT
         "mqtt_broker":      mqtt_up,
     }
 
 
+@app.get("/agent/metrics")
+async def agent_metrics_proxy():
+    """Proxy the Go agent's HTTP metrics — works on Railway too."""
+    import urllib.request as _ur3
+    import json as _j3
+    try:
+        req = _ur3.Request(f"{_AGENT_HTTP}/metrics")
+        with _ur3.urlopen(req, timeout=1) as resp:
+            return _j3.loads(resp.read())
+    except Exception:
+        return {"error": "Go agent offline", "tick_count": 0, "decisions_made": 0}
+
+
+@app.get("/learning/status")
+async def learning_status_proxy():
+    """Proxy learning service status."""
+    import urllib.request as _ur4
+    import json as _j4
+    learning_port = int(os.getenv("ULTRON_LEARNING_PORT", "50060"))
+    try:
+        url = f"http://localhost:{learning_port+1}/status"
+        with _ur4.urlopen(url, timeout=0.8) as resp:
+            return _j4.loads(resp.read())
+    except Exception:
+        return {"status": "offline", "total_training_examples": 0}
+
+
 @app.get("/rust/metrics")
 async def rust_metrics():
-    """Aggregate metrics from all running Rust services."""
+    """Aggregate metrics from all running Rust services — includes neural mesh."""
     import urllib.request as _ur
     results = {}
     urls = {
-        "security_daemon":  os.getenv("ULTRON_SECURITY_URL", "http://localhost:50055"),
-        "data_pipeline":    os.getenv("ULTRON_DATA_URL",     "http://localhost:50054"),
-        "neuromorphic":     os.getenv("ULTRON_NEURO_URL",    "http://localhost:50056"),
+        "neural_mesh":      os.getenv("ULTRON_NEURAL_URL",    "http://localhost:50053"),
+        "security_daemon":  os.getenv("ULTRON_SECURITY_URL",  "http://localhost:50055"),
+        "data_pipeline":    os.getenv("ULTRON_DATA_URL",      "http://localhost:50054"),
+        "neuromorphic":     os.getenv("ULTRON_NEURO_URL",     "http://localhost:50056"),
     }
     for svc, url in urls.items():
         try:
@@ -760,6 +882,150 @@ async def world_state():
     if _world_intel:
         return _world_intel.get_world_state()
     return {"error": "World Intelligence not running"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# CONSCIOUSNESS ENDPOINTS — live Soul / SelfModel / TheoryOfMind
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/consciousness")
+async def consciousness_status():
+    """
+    Live snapshot of all three consciousness modules:
+      - Soul: current mood, purpose, last diary entry, top visions
+      - SelfModel: identity, beliefs summary, capabilities, meta-cognition
+    """
+    out: dict = {
+        "online": {
+            "soul":       _soul is not None,
+            "self_model": _self_model is not None,
+        },
+    }
+
+    # ── Soul ──────────────────────────────────────────────────────────
+    if _soul:
+        try:
+            purpose = _soul.get_purpose()
+            last_entry = None
+            if _soul.journal:
+                e = _soul.journal[-1]
+                last_entry = {
+                    "id":        e.id,
+                    "tone":      e.tone.value,
+                    "content":   e.content[:300],
+                    "insights":  e.insights,
+                    "alignment": round(e.purpose_alignment, 3),
+                    "timestamp": e.timestamp,
+                }
+            out["soul"] = {
+                "purpose":       purpose.get("statement"),
+                "mood":          purpose.get("mood"),
+                "confidence":    purpose.get("confidence"),
+                "visions":       purpose.get("visions", [])[:3],
+                "last_diary":    last_entry,
+                "entry_count":   _soul._entry_count,
+                "stances_count": len(_soul.stances),
+            }
+        except Exception as exc:
+            out["soul"] = {"error": str(exc)}
+
+    # ── Self-Model ────────────────────────────────────────────────────
+    if _self_model:
+        try:
+            snap = _self_model.introspect()
+            out["self_model"] = {
+                "identity":           snap.get("identity"),
+                "meta_cognition":     snap.get("meta_cognition"),
+                "beliefs":            snap.get("beliefs_summary"),
+                "capabilities":       snap.get("capabilities_summary"),
+                "self_description":   _self_model.what_am_i()[:300],
+                "should_self_modify": _self_model.should_self_modify(),
+                "blind_spots":        _self_model.detect_blind_spots()[:5],
+            }
+        except Exception as exc:
+            out["self_model"] = {"error": str(exc)}
+
+    return out
+
+
+@app.get("/consciousness/diary")
+async def consciousness_diary(limit: int = 10):
+    """Return the last N Soul diary entries (newest first)."""
+    if not _soul:
+        return {"error": "Soul not running"}
+    entries = _soul.journal[-limit:] if _soul.journal else []
+    return {
+        "count": len(entries),
+        "entries": [
+            {
+                "id":        e.id,
+                "tone":      e.tone.value,
+                "content":   e.content,
+                "insights":  e.insights,
+                "alignment": round(e.purpose_alignment, 3),
+                "timestamp": e.timestamp,
+            }
+            for e in reversed(entries)
+        ],
+    }
+
+
+@app.post("/consciousness/diary/generate")
+async def consciousness_diary_generate():
+    """Force-generate a new Soul diary entry right now."""
+    if not _soul:
+        return {"error": "Soul not running"}
+    emotions = {}
+    if _emotional_core:
+        try:
+            emotions = _emotional_core.get_emotional_state()
+        except Exception:
+            pass
+    if not emotions:
+        emotions = {
+            "joy": 0.3, "trust": 0.4, "fear": 0.1,
+            "surprise": 0.2, "sadness": 0.1, "disgust": 0.0,
+            "anger": 0.1, "anticipation": 0.5,
+        }
+    entry = _soul.generate_diary_entry(emotions, ["manual_trigger"])
+    return {
+        "id":        entry.id,
+        "tone":      entry.tone.value,
+        "content":   entry.content,
+        "insights":  entry.insights,
+        "alignment": round(entry.purpose_alignment, 3),
+    }
+
+
+@app.get("/consciousness/beliefs")
+async def consciousness_beliefs(category: str = None, min_confidence: str = None):
+    """Query Self-Model beliefs by category and minimum confidence."""
+    if not _self_model:
+        return {"error": "SelfModel not running"}
+    try:
+        import sys as _sys2
+        import pathlib as _pathlib2
+        _sys2.path.insert(0, str(_pathlib2.Path(__file__).parent.parent.parent))
+        from python.consciousness.self_model import BeliefCategory, ConfidenceLevel
+        cat  = BeliefCategory(category)     if category       else None
+        conf = ConfidenceLevel(min_confidence) if min_confidence else None
+        beliefs = _self_model.query_beliefs(cat, conf)
+        return {
+            "count": len(beliefs),
+            "beliefs": [
+                {
+                    "id":          b.id,
+                    "category":    b.category.value,
+                    "content":     b.content,
+                    "confidence":  b.confidence.value,
+                    "reliability": round(b.reliability, 3),
+                    "source":      b.source,
+                }
+                for b in beliefs[:50]
+            ],
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
 @app.get("/world/news")
@@ -920,13 +1186,13 @@ async def code_search(q: str, language: str = None):
 
 @app.get("/", response_class=HTMLResponse)
 async def command_center():
-    """Serve the Neural Command Center — the real interface to Ultron."""
+    """Serve the Neural Brain UI — holographic neural canvas."""
     import pathlib
-    html_path = pathlib.Path(__file__).parent / "command_center.html"
+    # Use the original neural brain canvas UI (chat.html)
+    html_path = pathlib.Path(__file__).parent / "chat.html"
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text())
-    # Fallback to old chat UI if command center doesn't exist
-    html_path = pathlib.Path(__file__).parent / "chat.html"
+    html_path = pathlib.Path(__file__).parent / "command_center.html"
     return HTMLResponse(content=html_path.read_text())
 
 

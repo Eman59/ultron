@@ -1,8 +1,10 @@
 """
 Real Brain — Ultron's intelligence layer.
 
-Cloudflare Workers AI — fast, free (10k neurons/day), zero local setup.
-Model: @cf/meta/llama-3.1-8b-instruct
+Multi-provider fallback chain (strongest first):
+  1. Cloudflare Workers AI — @cf/meta/llama-3.3-70b-instruct-fp8-fast
+  2. Cloudflare Workers AI — @cf/meta/llama-3.1-8b-instruct  (auto-fallback)
+  3. Ollama local          — any model at OLLAMA_URL           (offline capable)
 """
 
 import importlib.util
@@ -28,11 +30,18 @@ MEMORY_FILE   = PROJECT_ROOT / "data" / "brain_memory.json"
 KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # ═══════════════════════════════════════════════════════════════
-# CLOUDFLARE WORKERS AI CONFIG
+# PROVIDER CONFIG
 # ═══════════════════════════════════════════════════════════════
-CF_ACCOUNT_ID = os.environ.get("CF_ACCOUNT_ID", "")
-CF_API_TOKEN  = os.environ.get("CF_API_TOKEN", "")
-CF_MODEL      = os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+CF_ACCOUNT_ID     = os.environ.get("CF_ACCOUNT_ID", "")
+CF_API_TOKEN      = os.environ.get("CF_API_TOKEN", "")
+CF_MODEL_PRIMARY  = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+CF_MODEL_FALLBACK = "@cf/meta/llama-3.1-8b-instruct"
+CF_MODEL          = os.environ.get("CF_AI_MODEL", CF_MODEL_PRIMARY)
+
+OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b")
+
+_active_provider: str = "cloudflare"
 
 # ═══════════════════════════════════════════════════════════════
 # SYSTEM PROMPT — no restrictions, full power
@@ -411,10 +420,10 @@ async def generate_response(user_input: str, context=None) -> str:
     else:
         prompt = f"CONVERSATION:{history}{memory_ctx}{world_ctx}{style_suffix}\n\nHuman: {user_input}\nUltron:"
 
-    # Call Cloudflare Workers AI — only brain, no fallback
-    response = _call_cloudflare(prompt, max_tokens=400)
+    # Call brain with full fallback chain (70B → 8B → Ollama)
+    response = call_brain(prompt, max_tokens=800)
     if not response:
-        response = "Cloudflare AI unreachable. Check CF_ACCOUNT_ID and CF_API_TOKEN in .env."
+        response = "[ALL PROVIDERS OFFLINE] Check .env or start Ollama."
 
     # Record interaction for style learning
     _record_interaction(user_input, response)
@@ -495,54 +504,107 @@ def _record_interaction(user_input: str, response: str):
 
 
 # ═══════════════════════════════════════════════════════════════
-# CLOUDFLARE WORKERS AI — only brain
+# MULTI-PROVIDER BRAIN — fallback chain
 # ═══════════════════════════════════════════════════════════════
 
-def _call_cloudflare(prompt: str, max_tokens: int = 400) -> Optional[str]:
-    """Call Cloudflare Workers AI. Free tier: 10k neurons/day."""
-    account_id = os.environ.get("CF_ACCOUNT_ID", CF_ACCOUNT_ID)
-    api_token  = os.environ.get("CF_API_TOKEN",  CF_API_TOKEN)
-    model      = os.environ.get("CF_AI_MODEL",   CF_MODEL)
-
-    if not account_id or not api_token:
+def _call_cloudflare(prompt: str, max_tokens: int = 800) -> Optional[str]:
+    """
+    Cloudflare Workers AI — tries 70B first, then 8B.
+    Automatic retry once per model on transient failures.
+    """
+    global _active_provider
+    if not CF_ACCOUNT_ID or not CF_API_TOKEN:
         return None
 
-    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
+    for model in (CF_MODEL, CF_MODEL_FALLBACK):
+        url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model}"
+        payload = {
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": prompt},
+            ],
+            "max_tokens": min(max_tokens, 800),
+            "temperature": 0.75,
+        }
+        for attempt in range(2):
+            try:
+                data = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(
+                    url, data=data,
+                    headers={
+                        "Content-Type":  "application/json",
+                        "Authorization": f"Bearer {CF_API_TOKEN}",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+                    if result.get("success"):
+                        content = result.get("result", {}).get("response", "").strip()
+                        if content:
+                            _active_provider = f"cloudflare/{model.split('/')[-1]}"
+                            return content
+            except Exception:
+                if attempt == 0:
+                    time.sleep(0.5)
+
+    return None
+
+
+def _call_ollama(prompt: str, max_tokens: int = 800) -> Optional[str]:
+    """Local Ollama — zero cost, fully offline capable."""
+    global _active_provider
+    url = f"{OLLAMA_URL}/api/generate"
+    full_prompt = f"{SYSTEM_PROMPT}\n\nHuman: {prompt}\nUltron:"
     payload = {
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": prompt},
-        ],
-        "max_tokens": min(max_tokens, 400),
-        "temperature": 0.8,
+        "model": OLLAMA_MODEL,
+        "prompt": full_prompt,
+        "stream": False,
+        "options": {"num_predict": max_tokens, "temperature": 0.75},
     }
     try:
         data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={
-                "Content-Type":  "application/json",
-                "Authorization": f"Bearer {api_token}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        req = urllib.request.Request(url, data=data,
+                                     headers={"Content-Type": "application/json"},
+                                     method="POST")
+        with urllib.request.urlopen(req, timeout=35) as resp:
             result = json.loads(resp.read().decode("utf-8"))
-            if result.get("success"):
-                content = result.get("result", {}).get("response", "").strip()
-                return content if content else None
+            content = result.get("response", "").strip()
+            if content:
+                _active_provider = f"ollama/{OLLAMA_MODEL}"
+                return content
     except Exception:
-        return None
+        pass
     return None
+
+
+def call_brain(prompt: str, max_tokens: int = 800) -> str:
+    """
+    Full fallback chain:  Cloudflare 70B → Cloudflare 8B → Ollama
+    Never raises — always returns a string.
+    """
+    response = _call_cloudflare(prompt, max_tokens)
+    if response:
+        return response
+    response = _call_ollama(prompt, max_tokens)
+    if response:
+        return response
+    return (
+        "[ALL PROVIDERS OFFLINE]\n"
+        "Cloudflare unreachable and Ollama not running.\n"
+        "Check CF_ACCOUNT_ID / CF_API_TOKEN in .env, or: ollama serve"
+    )
+
+
+def get_active_provider() -> str:
+    """Which provider answered the last request."""
+    return _active_provider
 
 
 def is_cloudflare_available() -> bool:
     """Check if Cloudflare credentials are configured."""
-    return bool(
-        os.environ.get("CF_ACCOUNT_ID", CF_ACCOUNT_ID) and
-        os.environ.get("CF_API_TOKEN",  CF_API_TOKEN)
-    )
+    return bool(CF_ACCOUNT_ID and CF_API_TOKEN)
+
 
 # ═══════════════════════════════════════════════════════════════
 # LEARNING LOOP — feed every conversation into ContinuousLearner
@@ -571,7 +633,7 @@ def _emit_learning_event(user_input: str, response: str) -> None:
                         "data": {
                             "user_input": user_input[:500],
                             "response":   response[:500],
-                            "model":      os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct"),
+                            "model":      get_active_provider(),
                         },
                         "importance": 0.7,
                     }]

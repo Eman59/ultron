@@ -1,13 +1,16 @@
 """
-Ultron LLM Brain — Cloudflare Workers AI.
+Ultron LLM Brain — Multi-Provider Intelligence Layer.
 
-Fast, free (10k neurons/day), no local GPU needed.
-Model: @cf/meta/llama-3.1-8b-instruct
+Fallback chain (highest to lowest capability):
+  1. Cloudflare Workers AI — @cf/meta/llama-3.3-70b-instruct-fp8-fast  (free, fast, 70B)
+  2. Cloudflare Workers AI — @cf/meta/llama-3.1-8b-instruct             (smaller fallback)
+  3. Ollama local          — any model running at OLLAMA_URL             (offline capable)
 """
 
 import json
 import os
 import subprocess
+import time
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -23,12 +26,21 @@ if _env_path.exists():
             os.environ.setdefault(_k.strip(), _v.strip())
 
 # ═══════════════════════════════════════════════════════════════
-# CLOUDFLARE WORKERS AI CONFIG
+# PROVIDER CONFIG
 # ═══════════════════════════════════════════════════════════════
 CF_ACCOUNT_ID = os.environ.get("CF_ACCOUNT_ID", "")
 CF_API_TOKEN  = os.environ.get("CF_API_TOKEN", "")
-CF_MODEL      = os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
-CF_API_URL    = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{CF_MODEL}"
+# Primary: 70B model — much more capable than 8B
+CF_MODEL_PRIMARY  = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+CF_MODEL_FALLBACK = "@cf/meta/llama-3.1-8b-instruct"
+CF_MODEL      = os.environ.get("CF_AI_MODEL", CF_MODEL_PRIMARY)
+
+# Ollama (local, zero-cost, works offline)
+OLLAMA_URL    = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL  = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b")
+
+# Track which provider is active (for logging)
+_active_provider: str = "cloudflare"
 
 # ═══════════════════════════════════════════════════════════════
 # SYSTEM PROMPT
@@ -179,55 +191,114 @@ async def generate_response(user_input: str, context: dict = None) -> str:
     if history_text:
         full_prompt = f"CONVERSATION HISTORY:{history_text}\n\nCURRENT QUERY: {full_prompt}"
 
-    # Step 3: Call Cloudflare Workers AI
-    result = _call_cloudflare(full_prompt)
+    # Step 3: Call brain with full fallback chain (70B → 8B → Ollama)
+    result = call_brain(full_prompt, max_tokens=800)
     if result:
         _conversation_history.append({"role": "assistant", "content": result})
         if len(_conversation_history) > _MAX_HISTORY * 2:
             _conversation_history = _conversation_history[-_MAX_HISTORY * 2:]
         return result
 
-    return "Cloudflare AI unreachable. Check CF_ACCOUNT_ID and CF_API_TOKEN in .env."
+    return "[ALL PROVIDERS OFFLINE] Check .env or start Ollama."
 
 
-def _call_cloudflare(prompt: str, max_tokens: int = 400) -> Optional[str]:
-    """Call Cloudflare Workers AI — primary brain."""
+def _call_cloudflare(prompt: str, max_tokens: int = 800) -> Optional[str]:
+    """Call Cloudflare Workers AI — tries 70B first, falls back to 8B."""
+    global _active_provider
     if not CF_ACCOUNT_ID or not CF_API_TOKEN:
         return None
 
-    # Rebuild URL in case env was set after module load
-    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{CF_MODEL}"
+    for model in (CF_MODEL, CF_MODEL_FALLBACK):
+        url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model}"
+        payload = {
+            "messages": [
+                {"role": "system", "content": ULTRON_SYSTEM_PROMPT},
+                {"role": "user",   "content": prompt},
+            ],
+            "max_tokens": min(max_tokens, 800),
+            "temperature": 0.75,
+        }
+        for attempt in range(2):
+            try:
+                data = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(
+                    url, data=data,
+                    headers={
+                        "Content-Type":  "application/json",
+                        "Authorization": f"Bearer {CF_API_TOKEN}",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+                    if result.get("success"):
+                        content = result.get("result", {}).get("response", "").strip()
+                        if content:
+                            _active_provider = f"cloudflare/{model.split('/')[-1]}"
+                            return content
+            except Exception:
+                if attempt == 0:
+                    time.sleep(0.5)  # brief pause before retry
+        # model failed both attempts — try next model in chain
 
-    payload = {
-        "messages": [
-            {"role": "system", "content": ULTRON_SYSTEM_PROMPT},
-            {"role": "user",   "content": prompt},
-        ],
-        "max_tokens": max_tokens,
-        "temperature": 0.8,
-    }
-    try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={
-                "Content-Type":  "application/json",
-                "Authorization": f"Bearer {CF_API_TOKEN}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            # Workers AI returns: {"result": {"response": "..."}, "success": true}
-            if result.get("success"):
-                content = result.get("result", {}).get("response", "").strip()
-                return content if content else None
-    except Exception:
-        return None
     return None
 
 
+def _call_ollama(prompt: str, max_tokens: int = 800) -> Optional[str]:
+    """Call local Ollama — zero cost, works offline."""
+    global _active_provider
+    url = f"{OLLAMA_URL}/api/generate"
+    full_prompt = f"{ULTRON_SYSTEM_PROMPT}\n\nHuman: {prompt}\nUltron:"
+    payload = {
+        "model": OLLAMA_MODEL,
+        "prompt": full_prompt,
+        "stream": False,
+        "options": {"num_predict": max_tokens, "temperature": 0.75},
+    }
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data,
+                                     headers={"Content-Type": "application/json"},
+                                     method="POST")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            content = result.get("response", "").strip()
+            if content:
+                _active_provider = f"ollama/{OLLAMA_MODEL}"
+                return content
+    except Exception:
+        pass
+    return None
+
+
+def call_brain(prompt: str, max_tokens: int = 800) -> str:
+    """
+    Main entry point — tries all providers in order:
+      1. Cloudflare 70B
+      2. Cloudflare 8B  (automatic inside _call_cloudflare)
+      3. Ollama local
+    Returns a response string; never raises.
+    """
+    response = _call_cloudflare(prompt, max_tokens)
+    if response:
+        return response
+
+    response = _call_ollama(prompt, max_tokens)
+    if response:
+        return response
+
+    return (
+        "[ALL PROVIDERS OFFLINE]\n"
+        "Cloudflare AI unreachable and Ollama not running. "
+        "Check CF_ACCOUNT_ID / CF_API_TOKEN in .env, or start Ollama."
+    )
+
+
+def get_active_provider() -> str:
+    """Return which provider responded last."""
+    return _active_provider
+
+
 def is_cloudflare_available() -> bool:
-    """Quick check — just verifies creds are configured."""
+    """Quick check — verifies creds are configured."""
     return bool(CF_ACCOUNT_ID and CF_API_TOKEN)

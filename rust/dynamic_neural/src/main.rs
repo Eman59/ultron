@@ -26,13 +26,13 @@ async fn main() -> Result<()> {
     {
         let cfg = dynamic_neural::neural_types::NeuralConfig {
             initial_neurons: 256,
-            max_neurons: 4096,
-            initial_connections: 512,
-            max_connections: 16384,
+            connection_density: 0.08,
             plasticity_rate: 0.01,
-            pruning_threshold: 0.001,
-            growth_rate: 0.005,
             learning_rate: 0.01,
+            decay_rate: 0.001,
+            max_connections_per_neuron: 64,
+            enable_quantum_simulation: false,
+            enable_real_time_adaptation: true,
         };
         match NeuralMesh::new(cfg) {
             Ok(m) => {

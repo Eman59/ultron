@@ -1,12 +1,11 @@
 //! Neural Mesh - Dynamic neural network with real-time plasticity
 
 use crate::neural_types::*;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Main neural mesh structure that manages dynamic neural networks
 pub struct NeuralMesh {
@@ -16,35 +15,6 @@ pub struct NeuralMesh {
     rng: ChaCha8Rng,
     metrics: NeuralMetrics,
     plasticity_history: Vec<PlasticityEvent>,
-}
-
-/// Event recording plasticity changes
-#[derive(Debug, Clone)]
-pub struct PlasticityEvent {
-    pub timestamp: u64,
-    pub neuron_id: NeuronId,
-    pub connection_change: ConnectionChange,
-    pub reason: PlasticityReason,
-}
-
-/// Type of connection change
-#[derive(Debug, Clone)]
-pub enum ConnectionChange {
-    Added(NeuralConnection),
-    Removed(NeuronId, NeuronId),
-    Strengthened(NeuronId, NeuronId, f32),
-    Weakened(NeuronId, NeuronId, f32),
-}
-
-/// Reason for plasticity change
-#[derive(Debug, Clone)]
-pub enum PlasticityReason {
-    HebbianLearning,
-    SpikeTimingDependent,
-    Homeostatic,
-    Evolutionary,
-    ExternalInput,
-    PatternRecognition,
 }
 
 impl NeuralMesh {
@@ -268,85 +238,105 @@ impl NeuralMesh {
     }
     
     fn propagate_activation(&mut self) -> Result<()> {
-        // Simple activation propagation
-        for (neuron_id, neuron_state) in self.neurons.iter_mut() {
-            if neuron_state.activation > neuron_state.threshold {
-                // Neuron fires
-                neuron_state.last_fired = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64;
-                
-                // Propagate to connected neurons
-                if let Some(connections) = self.connections.get(neuron_id) {
-                    for connection in connections {
-                        if let Some(target_neuron) = self.neurons.get_mut(&connection.to) {
-                            let activation_change = neuron_state.activation * connection.strength;
-                            target_neuron.activation += activation_change;
-                            
-                            // Update connection activation timestamp
-                            if let Some(conn_list) = self.connections.get_mut(neuron_id) {
-                                if let Some(conn) = conn_list.iter_mut().find(|c| c.to == connection.to) {
-                                    conn.last_activated = neuron_state.last_fired;
-                                }
-                            }
-                        }
-                    }
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+
+        // Collect firing neurons first (avoids simultaneous mut + immut borrow)
+        let firing: Vec<(NeuronId, f32)> = self.neurons
+            .iter()
+            .filter(|(_, s)| s.activation > s.threshold)
+            .map(|(id, s)| (*id, s.activation))
+            .collect();
+
+        // Collect propagation targets: (target_id, activation_delta)
+        let mut deltas: Vec<(NeuronId, f32)> = Vec::new();
+        let mut update_timestamps: Vec<(NeuronId, NeuronId)> = Vec::new();
+
+        for (src_id, src_act) in &firing {
+            if let Some(conns) = self.connections.get(src_id) {
+                for conn in conns {
+                    deltas.push((conn.to, src_act * conn.strength));
+                    update_timestamps.push((*src_id, conn.to));
                 }
-                
-                // Reset activation after firing
-                neuron_state.activation = 0.0;
             }
         }
-        
+
+        // Apply deltas to target neurons
+        for (target_id, delta) in deltas {
+            if let Some(n) = self.neurons.get_mut(&target_id) {
+                n.activation += delta;
+            }
+        }
+
+        // Update last_fired on firing neurons and reset activation
+        for (src_id, _) in &firing {
+            if let Some(n) = self.neurons.get_mut(src_id) {
+                n.last_fired = now_ms;
+                n.activation = 0.0;
+            }
+        }
+
+        // Stamp last_activated on connections that fired
+        for (src_id, tgt_id) in update_timestamps {
+            if let Some(conns) = self.connections.get_mut(&src_id) {
+                if let Some(conn) = conns.iter_mut().find(|c| c.to == tgt_id) {
+                    conn.last_activated = now_ms;
+                }
+            }
+        }
+
         Ok(())
     }
     
     fn apply_plasticity(&mut self) -> Result<()> {
-        // Hebbian learning: "neurons that fire together, wire together"
-        for neuron_id in self.neurons.keys().copied().collect::<Vec<_>>() {
-            if let Some(connections) = self.connections.get_mut(&neuron_id) {
-                for connection in connections.iter_mut() {
-                    if connection.last_activated > 0 {
-                        // Strengthen frequently used connections
-                        connection.strength += self.config.learning_rate * connection.plasticity;
-                        connection.strength = connection.strength.clamp(0.0, 1.0);
-                        
-                        self.plasticity_history.push(PlasticityEvent {
-                            timestamp: connection.last_activated,
-                            neuron_id: connection.from,
-                            connection_change: ConnectionChange::Strengthened(
-                                connection.from,
-                                connection.to,
-                                connection.strength
-                            ),
-                            reason: PlasticityReason::HebbianLearning,
-                        });
-                        
-                        self.metrics.plasticity_changes += 1;
-                    }
-                }
-            }
-        }
-        
-        // Decay unused connections
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
-        
-        for connections in self.connections.values_mut() {
-            for connection in connections.iter_mut() {
-                if current_time - connection.last_activated > 1000 {
-                    // Decay unused connections
-                    connection.strength -= self.config.decay_rate;
-                    if connection.strength < 0.01 {
-                        connection.strength = 0.0;
+
+        let learning_rate = self.config.learning_rate;
+        let decay_rate = self.config.decay_rate;
+        let mut events: Vec<PlasticityEvent> = Vec::new();
+
+        for conns in self.connections.values_mut() {
+            for conn in conns.iter_mut() {
+                if conn.last_activated > 0 {
+                    // Hebbian: strengthen recently used connections
+                    conn.strength += learning_rate * conn.plasticity;
+                    conn.strength = conn.strength.clamp(0.0, 1.0);
+
+                    events.push(PlasticityEvent {
+                        timestamp: conn.last_activated,
+                        neuron_id: conn.from,
+                        connection_change: ConnectionChange::Strengthened(
+                            conn.from,
+                            conn.to,
+                            conn.strength,
+                        ),
+                        reason: PlasticityReason::HebbianLearning,
+                    });
+                }
+
+                // Decay idle connections
+                if current_time.saturating_sub(conn.last_activated) > 1000 {
+                    conn.strength -= decay_rate;
+                    if conn.strength < 0.01 {
+                        conn.strength = 0.0;
                     }
                 }
             }
         }
-        
+
+        self.metrics.plasticity_changes += events.len() as u64;
+        self.plasticity_history.extend(events);
+
+        // Keep history bounded
+        if self.plasticity_history.len() > 10_000 {
+            self.plasticity_history.drain(0..5_000);
+        }
+
         Ok(())
     }
     
@@ -362,9 +352,10 @@ impl NeuralMesh {
         total / self.neurons.len() as f32
     }
     
-    fn add_random_neurons(&mut self, count: usize) -> Result<()> {
+    pub fn add_random_neurons(&mut self, count: usize) -> Result<()> {
         let start_id = self.neurons.len() as u64;
-        
+
+        // First insert all new neurons
         for i in 0..count {
             let neuron_id = NeuronId(start_id + i as u64);
             let position = NeuralPosition {
@@ -372,7 +363,6 @@ impl NeuralMesh {
                 y: self.rng.gen_range(-1.0..1.0),
                 z: self.rng.gen_range(-1.0..1.0),
             };
-            
             self.neurons.insert(neuron_id, NeuralState {
                 neuron_id,
                 activation: 0.0,
@@ -382,21 +372,27 @@ impl NeuralMesh {
                 neuron_type: NeuronType::Hidden,
                 position,
             });
-            
-            // Create initial connections for new neuron
+        }
+
+        // Then wire them (neurons map is fully populated now)
+        let new_ids: Vec<NeuronId> = (0..count)
+            .map(|i| NeuronId(start_id + i as u64))
+            .collect();
+
+        for neuron_id in new_ids {
             let connections = Self::create_initial_connections(
-                &self.neurons, neuron_id, &self.config, &mut self.rng
+                &self.neurons, neuron_id, &self.config, &mut self.rng,
             );
             self.connections.insert(neuron_id, connections);
         }
-        
+
         self.metrics.total_neurons += count;
         info!("Added {} new neurons to the mesh", count);
-        
+
         Ok(())
     }
     
-    fn prune_weak_connections(&mut self, threshold: f32) -> Result<()> {
+    pub fn prune_weak_connections(&mut self, threshold: f32) -> Result<()> {
         let mut pruned_count = 0;
         
         for connections in self.connections.values_mut() {

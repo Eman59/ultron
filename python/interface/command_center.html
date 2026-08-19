@@ -2,950 +2,772 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ULTRON</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='bg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23120000'/%3E%3Cstop offset='100%25' stop-color='%23000000'/%3E%3C/radialGradient%3E%3CradialGradient id='ring' cx='50%25' cy='40%25' r='60%25'%3E%3Cstop offset='0%25' stop-color='%23553333'/%3E%3Cstop offset='60%25' stop-color='%23220000'/%3E%3Cstop offset='100%25' stop-color='%23110000'/%3E%3C/radialGradient%3E%3CradialGradient id='iris' cx='40%25' cy='35%25' r='65%25'%3E%3Cstop offset='0%25' stop-color='%23ff6644'/%3E%3Cstop offset='35%25' stop-color='%23ee1111'/%3E%3Cstop offset='70%25' stop-color='%23aa0000'/%3E%3Cstop offset='100%25' stop-color='%23550000'/%3E%3C/radialGradient%3E%3CradialGradient id='pupil' cx='38%25' cy='35%25' r='55%25'%3E%3Cstop offset='0%25' stop-color='%23ff9977'/%3E%3Cstop offset='40%25' stop-color='%23ff3300'/%3E%3Cstop offset='100%25' stop-color='%23660000'/%3E%3C/radialGradient%3E%3Cfilter id='glow'%3E%3CfeGaussianBlur stdDeviation='2.5' result='blur'/%3E%3CfeMerge%3E%3CfeMergeNode in='blur'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='32' fill='url(%23bg)'/%3E%3Ccircle cx='32' cy='32' r='30' fill='none' stroke='%23331111' stroke-width='1.5' opacity='.6'/%3E%3Ccircle cx='32' cy='32' r='26' fill='url(%23ring)' filter='url(%23glow)'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%230a0000'/%3E%3Ccircle cx='32' cy='32' r='16' fill='url(%23iris)' filter='url(%23glow)'/%3E%3Ccircle cx='32' cy='32' r='9' fill='url(%23pupil)' filter='url(%23glow)'/%3E%3Cellipse cx='27' cy='26' rx='4' ry='3' fill='white' opacity='.18' transform='rotate(-20 27 26)'/%3E%3Cellipse cx='26' cy='25' rx='2' ry='1.2' fill='white' opacity='.35' transform='rotate(-20 26 25)'/%3E%3C/svg%3E">
+<link rel="alternate icon" href="/favicon.png">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --R:#e63946;--Rg:rgba(230,57,70,.55);--Rd:rgba(230,57,70,.12);
-  --T:#4ecdc4;--P:#a855f7;--O:#f97316;
-  --bg:#020202;--fg:rgba(255,255,255,.88);--dim:rgba(255,255,255,.32);
-  --faint:rgba(255,255,255,.07);--border:rgba(255,255,255,.06);
-  --font:'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif;
+  --red:#ff2020;--red2:#cc0000;--red3:#880000;
+  --bg:#040404;--panel:#080808;--border:#1e0000;
+  --text:#e0e0e0;--muted:#555;--live:#ff3333;--warn:#ff8800;--off:#252525;
+  --font:'Courier New',monospace;
 }
-html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);
-  color:var(--fg);-webkit-font-smoothing:antialiased}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden}
+
+/* ─── LAYOUT ─────────────────────────────────────── */
+#app{display:grid;height:100vh;
+  grid-template-rows:44px 1fr 50px;
+  grid-template-columns:200px 1fr 320px}
+#topbar{grid-column:1/4;grid-row:1;background:#060606;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:16px;z-index:10}
+#left  {grid-column:1;grid-row:2;background:var(--panel);border-right:1px solid var(--border);overflow-y:auto}
+#main  {grid-column:2;grid-row:2;display:flex;flex-direction:column;overflow:hidden;position:relative}
+#right {grid-column:3;grid-row:2;background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+#bottom{grid-column:1/4;grid-row:3;background:#060606;border-top:1px solid var(--border);
+  display:flex;align-items:center;padding:0 10px;gap:8px}
+
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border)}
+
+/* ─── TOP BAR ────────────────────────────────────── */
+#logo{font-size:15px;font-weight:bold;color:var(--red);letter-spacing:5px}
+.sep{width:1px;height:28px;background:var(--border)}
+.hst{display:flex;flex-direction:column;align-items:center;min-width:52px}
+.hst-v{font-size:15px;font-weight:bold;color:var(--live);line-height:1}
+.hst-l{font-size:7px;color:var(--muted);letter-spacing:2px;margin-top:2px}
+#h-mode{font-size:8px;letter-spacing:3px;padding:2px 8px;border:1px solid var(--red3);color:var(--live);background:#100000}
+.topright{margin-left:auto;display:flex;align-items:center;gap:10px}
+#brain-dot{width:7px;height:7px;border-radius:50%;background:var(--off);transition:all .4s}
+#brain-dot.on{background:var(--live);box-shadow:0 0 10px var(--live)}
+#brain-lbl{font-size:8px;color:var(--muted);letter-spacing:1px}
+#llm-lbl{font-size:8px;padding:1px 6px;border:1px solid var(--red3);color:var(--muted)}
+#llm-lbl.on{color:var(--live);border-color:var(--live)}
+#vol-btn{background:transparent;border:none;cursor:pointer;font-size:14px;color:var(--muted);padding:0 2px}
+#vol-btn.on{color:var(--live)}
+
+/* ─── LEFT: MODULES + DRIVES ──────────────────────── */
+.sec{font-size:7px;letter-spacing:2px;color:var(--red3);padding:7px 10px 3px;border-bottom:1px solid #100000;text-transform:uppercase}
+.mod{display:flex;align-items:center;padding:4px 10px;gap:7px;border-bottom:1px solid #0c0000}
+.mod:hover{background:#0c0000}
+.led{width:5px;height:5px;border-radius:50%;flex-shrink:0;transition:all .5s}
+.led.on{background:var(--live);box-shadow:0 0 5px var(--live)}
+.led.off{background:var(--off)}
+.led.warm{background:var(--warn);box-shadow:0 0 5px var(--warn)}
+.mod-n{font-size:9px;flex:1}
+.mod-s{font-size:7px;color:var(--off);letter-spacing:1px}
+.mod-s.live{color:var(--live)}
+
+.dr{display:flex;align-items:center;padding:3px 10px;gap:5px}
+.dr-n{font-size:8px;color:var(--muted);width:48px;flex-shrink:0}
+.dr-bg{flex:1;height:2px;background:#150000;border-radius:1px}
+.dr-b{height:2px;background:var(--red);border-radius:1px;transition:width 1.2s ease}
+.dr-v{font-size:8px;color:var(--live);width:26px;text-align:right}
+
+/* ─── MAIN: BRAIN ORB + CHAT ─────────────────────── */
+#orb-wrap{display:flex;justify-content:center;align-items:center;padding:16px 0 8px;flex-shrink:0}
+#orb-ring{width:100px;height:100px;border-radius:50%;position:relative;cursor:pointer}
+#orb-ring::before{content:'';position:absolute;inset:-3px;border-radius:50%;
+  border:2px solid var(--red3);animation:spin 8s linear infinite}
+#orb-ring::after{content:'';position:absolute;inset:-6px;border-radius:50%;
+  border:1px solid #2a0000;animation:spin 14s linear infinite reverse}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+#orb{width:100%;height:100%;border-radius:50%;background:radial-gradient(circle at 38% 38%, #3a0000, #0a0000 60%, #000);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  box-shadow:0 0 30px #2a000066,inset 0 0 20px #00000088;
+  transition:all .3s;border:1px solid var(--red3)}
+#orb.active{box-shadow:0 0 50px #ff000055,inset 0 0 30px #1a000044;border-color:var(--live)}
+#orb.speaking{animation:pulse 0.6s ease-in-out infinite alternate}
+@keyframes pulse{from{box-shadow:0 0 30px #ff000044}to{box-shadow:0 0 60px #ff000099}}
+#orb-eye{width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 40% 40%,#ff4444,#cc0000,#660000);
+  box-shadow:0 0 15px #ff222266;margin-bottom:4px;transition:all .3s}
+#orb.active #orb-eye{box-shadow:0 0 25px #ff4444cc}
+#orb-label{font-size:7px;letter-spacing:3px;color:var(--red2)}
+#orb-sub{font-size:6px;color:var(--muted);letter-spacing:1px;margin-top:1px;transition:all .3s}
+.orb-rings{position:absolute;inset:0;border-radius:50%;pointer-events:none}
+.orb-r{position:absolute;border-radius:50%;border:1px solid var(--red3);opacity:.3}
+.orb-r1{inset:8px;animation:spin 4s linear infinite}
+.orb-r2{inset:16px;animation:spin 7s linear infinite reverse}
+.orb-r3{inset:24px;animation:spin 11s linear infinite}
+
+#soul-line{text-align:center;font-size:9px;color:#441111;font-style:italic;padding:0 20px 8px;min-height:14px;transition:color .5s}
+#soul-line.active{color:#884444}
+
+#chat-log{flex:1;overflow-y:auto;padding:8px 14px;display:flex;flex-direction:column;gap:5px}
+.msg{display:flex;gap:8px;animation:fadein .15s;line-height:1.5}
+@keyframes fadein{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+.mw{font-size:8px;letter-spacing:2px;flex-shrink:0;padding-top:2px;min-width:40px}
+.mw.you{color:#666}.mw.a{color:var(--live)}.mw.sys{color:#333}.mw.s{color:#553322}
+.mb{font-size:11px;white-space:pre-wrap;word-break:break-word}
+.mb.a{color:#ffcccc}.mb.sys{color:#333;font-size:9px}.mb.s{color:#553322;font-size:9px;font-style:italic}
+.shell-out{background:#060606;border-left:2px solid var(--red3);padding:6px 10px;font-size:9px;
+  color:#888;white-space:pre-wrap;word-break:break-all;margin-top:2px;max-height:280px;overflow-y:auto}
+.thinking{color:var(--muted);font-size:9px;animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ─── RIGHT: ORB CONTEXT + DECISIONS + NEURAL ───── */
+#right-inner{padding:10px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:0}
+.r-sec{font-size:7px;letter-spacing:2px;color:var(--red3);padding:7px 0 3px;border-bottom:1px solid #100000;margin-bottom:5px;text-transform:uppercase}
+.ns-r{display:flex;justify-content:space-between;padding:2px 0;font-size:9px}
+.ns-l{color:var(--muted)}.ns-v{color:var(--live);font-weight:bold}
+.dec-i{padding:4px 0;border-bottom:1px solid #0c0000;font-size:8px}
+.dec-a{color:var(--live);letter-spacing:1px}.dec-t{color:#888;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dec-c{color:#333;margin-top:1px}
+/* world intel */
+.world-item{padding:4px 0;border-bottom:1px solid #0c0000;font-size:8px;color:#887777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.world-item:hover{color:var(--text)}
+
+/* ─── BOTTOM ────────────────────────────────────── */
+#inp-wrap{flex:1;display:flex;align-items:center;background:#0c0c0c;border:1px solid var(--border);padding:0 10px;gap:6px}
+#psym{color:var(--red);font-size:11px;flex-shrink:0;transition:color .2s}
+#psym.shell{color:var(--warn)}
+#inp{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:11px}
+#inp::placeholder{color:#2a2a2a}
+#send-b{background:var(--red3);border:none;color:#cc4444;font-family:var(--font);font-size:9px;padding:6px 12px;cursor:pointer;letter-spacing:1px;transition:all .2s}
+#send-b:hover{background:var(--red2);color:#fff}
+#mic-b{background:transparent;border:1px solid var(--border);color:var(--muted);font-size:12px;
+  width:28px;height:28px;cursor:pointer;border-radius:2px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+#mic-b.active{border-color:var(--live);color:var(--live);box-shadow:0 0 8px #ff000044}
+#shell-b{background:transparent;border:1px solid var(--border);color:var(--muted);font-size:8px;
+  padding:4px 8px;cursor:pointer;letter-spacing:1px;flex-shrink:0;transition:all .2s}
+#shell-b:hover,#shell-b.active{border-color:var(--warn);color:var(--warn)}
+.hint{font-size:7px;color:#222;letter-spacing:1px;white-space:nowrap}
+
+/* ─── VOICE INDICATOR ──────────────────────────── */
+#voice-bar{position:fixed;bottom:54px;left:50%;transform:translateX(-50%);
+  background:#0c0000;border:1px solid var(--red2);padding:3px 14px;
+  font-size:8px;color:var(--live);letter-spacing:3px;display:none;z-index:99;
+  animation:blink 1s infinite}
+#voice-bar.show{display:block}
+
+/* ─── BOOT ────────────────────────────────────── */
+#boot{position:fixed;inset:0;background:#000;z-index:999;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;transition:opacity .8s}
+#boot.gone{opacity:0;pointer-events:none}
+#blogo{font-size:48px;font-weight:bold;color:var(--red);letter-spacing:10px;
+  text-shadow:0 0 40px #ff000066}
+#bsub{font-size:9px;letter-spacing:5px;color:var(--muted)}
+#bbar-bg{width:280px;height:1px;background:#1a0000}
+#bbar{width:0;height:1px;background:var(--red);transition:width .08s}
+#bmsg{font-size:8px;color:#333;letter-spacing:1px;height:12px}
 </style>
 </head>
-<style>
-/* ── CANVAS BG ── */
-#nc{position:fixed;inset:0;z-index:0;opacity:.28}
-/* ── GLOW ── */
-#glow{position:fixed;inset:0;z-index:1;pointer-events:none;transition:background 1.2s}
-body.idle #glow{background:radial-gradient(ellipse 50% 40% at 50% 52%,rgba(160,10,10,.05) 0%,transparent 70%)}
-body.listening #glow{background:radial-gradient(ellipse 65% 55% at 50% 52%,rgba(230,57,70,.09) 0%,transparent 65%)}
-body.hearing #glow{background:radial-gradient(ellipse 75% 65% at 50% 52%,rgba(230,57,70,.16) 0%,transparent 60%)}
-body.thinking #glow{background:radial-gradient(ellipse 65% 55% at 50% 50%,rgba(168,85,247,.10) 0%,transparent 65%)}
-body.speaking #glow{background:radial-gradient(ellipse 65% 55% at 50% 50%,rgba(78,205,196,.08) 0%,transparent 65%)}
-#scanlines{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.016;
-  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,.05) 2px,rgba(255,255,255,.05) 4px)}
-/* ── LAYOUT ── */
-#app{position:relative;z-index:2;height:100%;display:grid;
-  grid-template-columns:210px 1fr 210px;grid-template-rows:46px 1fr;
-  grid-template-areas:"hd hd hd" "lp ct rp"}
-/* ── HEADER ── */
-#hd{grid-area:hd;display:flex;align-items:center;justify-content:space-between;
-  padding:0 18px;border-bottom:1px solid rgba(230,57,70,.1);
-  background:rgba(2,2,2,.85);backdrop-filter:blur(12px)}
-.brand{display:flex;align-items:center;gap:10px}
-.eye-led{width:9px;height:9px;border-radius:50%;flex-shrink:0;
-  background:radial-gradient(circle,#ff3a3a 20%,#7a0000 70%);
-  box-shadow:0 0 8px var(--R),0 0 22px var(--Rg);
-  animation:blink 5s ease-in-out infinite}
-@keyframes blink{0%,90%,100%{transform:scaleY(1)}94%,97%{transform:scaleY(.08)}}
-.bname{font-size:11px;font-weight:900;letter-spacing:7px;color:var(--R)}
-.bsub{font-size:7px;color:rgba(230,57,70,.3);letter-spacing:3px;margin-top:1px}
-.hstats{display:flex;align-items:center;gap:14px}
-.hs{text-align:right}
-.hs-v{font-size:11px;font-weight:700;color:var(--R);font-variant-numeric:tabular-nums}
-.hs-l{font-size:7px;color:rgba(255,255,255,.16);letter-spacing:2px;text-transform:uppercase;margin-top:1px}
-.hdiv{width:1px;height:18px;background:var(--border)}
-.hmode{font-size:8px;letter-spacing:3px;text-transform:uppercase;
-  padding:3px 8px;border:1px solid var(--Rd);border-radius:4px;color:rgba(230,57,70,.55)}
-</style>
-<style>
-/* ── LEFT / RIGHT PANELS ── */
-#lp,#rp{overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:14px;
-  background:rgba(2,2,2,.6);backdrop-filter:blur(8px)}
-#lp{grid-area:lp;border-right:1px solid var(--border)}
-#rp{grid-area:rp;border-left:1px solid var(--border)}
-#lp::-webkit-scrollbar,#rp::-webkit-scrollbar{width:2px}
-#lp::-webkit-scrollbar-thumb,#rp::-webkit-scrollbar-thumb{background:var(--Rd)}
-.sec{font-size:7px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.13);
-  padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:2px}
-/* drives */
-.drv{margin-bottom:7px}
-.drv-row{display:flex;justify-content:space-between;margin-bottom:3px}
-.drv-n{font-size:8px;letter-spacing:.8px;text-transform:uppercase;color:var(--dim)}
-.drv-v{font-size:8px;color:var(--R);font-variant-numeric:tabular-nums}
-.drv-t{height:2px;background:rgba(255,255,255,.04);border-radius:1px}
-.drv-f{height:100%;border-radius:1px;background:linear-gradient(90deg,rgba(230,57,70,.35),var(--R));
-  transition:width 2s cubic-bezier(.4,0,.2,1);box-shadow:0 0 4px var(--Rg)}
-/* modules */
-.mod{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.035)}
-.mod:last-child{border-bottom:none}
-.led{width:5px;height:5px;border-radius:50%;flex-shrink:0;transition:all .6s}
-.led.on{background:var(--R);box-shadow:0 0 6px var(--Rg);animation:lp 3s ease-in-out infinite}
-.led.off{background:rgba(255,255,255,.08)}
-.led.warm{background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,.5)}
-@keyframes lp{0%,100%{opacity:1}50%{opacity:.45}}
-.mod-n{font-size:8px;letter-spacing:.7px;text-transform:uppercase;color:var(--dim);flex:1}
-.mod-s{font-size:7px;color:rgba(255,255,255,.16)}
-.mod-s.live{color:rgba(230,57,70,.5)}
-/* tick box */
-.tick-box{border:1px solid rgba(230,57,70,.12);border-radius:8px;padding:10px;text-align:center;
-  background:rgba(230,57,70,.02)}
-.tick-n{font-size:26px;font-weight:800;color:var(--R);font-variant-numeric:tabular-nums;
-  text-shadow:0 0 18px var(--Rg);letter-spacing:-1px;line-height:1}
-.tick-l{font-size:7px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.1);margin-top:3px}
-/* decision feed */
-.dec{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)}
-.dec:last-child{border-bottom:none}
-.dec-a{font-size:9px;font-weight:700;color:var(--R);letter-spacing:1.5px;text-transform:uppercase}
-.dec-t{font-size:10px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dec-c{font-size:7px;color:rgba(255,255,255,.14)}
-/* soul */
-.soul-txt{font-size:10px;color:var(--dim);line-height:1.7;font-style:italic;
-  padding:8px;border-left:2px solid rgba(230,57,70,.18);background:rgba(230,57,70,.02);border-radius:0 5px 5px 0}
-/* qa */
-.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-.qa{background:var(--faint);border:1px solid var(--border);border-radius:6px;
-  padding:6px 4px;font-family:var(--font);font-size:8px;letter-spacing:1.5px;
-  text-transform:uppercase;color:var(--dim);cursor:pointer;text-align:center;transition:all .2s}
-.qa:hover{border-color:rgba(230,57,70,.25);color:var(--R);background:rgba(230,57,70,.06)}
-/* neural stats bar */
-.nstat{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
-.nstat-l{font-size:8px;color:var(--dim)}
-.nstat-v{font-size:8px;color:var(--R);font-variant-numeric:tabular-nums}
-</style>
-<style>
-/* ── CENTER ── */
-#ct{grid-area:ct;display:flex;flex-direction:column;align-items:center;overflow:hidden;position:relative}
-/* ── ULTRON HOLOGRAPHIC BRAIN ── */
-#face-wrap{position:relative;width:340px;height:340px;flex-shrink:0;margin:6px 0 2px;cursor:pointer}
-#brain-canvas{width:100%;height:100%;display:block}
-/* waveform */
-#wave{display:flex;align-items:center;gap:3px;height:22px;margin-bottom:4px;
-  opacity:0;transition:opacity .35s}
-body.speaking #wave,body.hearing #wave{opacity:1}
-.wb{width:3px;border-radius:2px;animation:wv .85s ease-in-out infinite}
-body.hearing .wb{background:var(--R)}body.speaking .wb{background:var(--T)}
-.wb:nth-child(odd){animation-delay:.1s}.wb:nth-child(3n){animation-delay:.2s}
-@keyframes wv{0%,100%{transform:scaleY(1);opacity:.5}50%{transform:scaleY(1.9);opacity:1}}
-/* status */
-#stxt{font-size:8px;letter-spacing:4px;text-transform:uppercase;color:rgba(255,255,255,.14);
-  min-height:11px;transition:color .4s}
-body.listening #stxt{color:rgba(230,57,70,.42)}body.hearing #stxt{color:var(--R)}
-body.thinking #stxt{color:rgba(168,85,247,.55)}body.speaking #stxt{color:rgba(78,205,196,.55)}
-#trans{font-size:12px;color:var(--dim);min-height:15px;text-align:center;max-width:340px;
-  font-style:italic;transition:color .3s;margin-top:4px}
-body.hearing #trans{color:rgba(230,57,70,.75)}
-/* messages */
-#msgs{flex:1;width:100%;overflow-y:auto;padding:4px 16px 6px;
-  display:flex;flex-direction:column;gap:8px;min-height:0}
-#msgs::-webkit-scrollbar{width:2px}
-#msgs::-webkit-scrollbar-thumb{background:var(--Rd)}
-.msg{max-width:80%;animation:mi .25s ease}
-@keyframes mi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.msg.user{align-self:flex-end}.msg.ai{align-self:flex-start}
-.msg-l{font-size:7px;letter-spacing:2px;text-transform:uppercase;margin-bottom:2px;padding:0 3px}
-.msg.ai .msg-l{color:rgba(230,57,70,.3)}.msg.user .msg-l{color:rgba(255,255,255,.1);text-align:right}
-.msg-b{padding:8px 13px;font-size:13px;line-height:1.6;border-radius:12px}
-.msg.ai .msg-b{background:rgba(230,57,70,.04);border:1px solid rgba(230,57,70,.08);
-  border-bottom-left-radius:2px}
-.msg.user .msg-b{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
-  border-bottom-right-radius:2px;color:rgba(255,255,255,.55)}
-/* input */
-#inp-area{width:100%;padding:7px 16px 12px;flex-shrink:0}
-#inp-box{display:flex;align-items:flex-end;gap:7px;background:rgba(255,255,255,.03);
-  border:1px solid var(--border);border-radius:11px;padding:8px 11px;transition:border-color .3s}
-#inp-box:focus-within{border-color:rgba(230,57,70,.2)}
-#tinput{flex:1;background:transparent;border:none;outline:none;color:var(--fg);
-  font-size:13px;font-family:var(--font);line-height:1.5;resize:none;max-height:90px;min-height:20px}
-#tinput::placeholder{color:rgba(255,255,255,.12)}
-.ibtn{background:none;border:none;cursor:pointer;padding:3px;color:rgba(255,255,255,.22);
-  display:flex;align-items:center;border-radius:5px;transition:color .2s,background .2s;flex-shrink:0}
-.ibtn:hover{color:var(--fg);background:rgba(255,255,255,.05)}
-.ibtn svg{width:16px;height:16px}
-#mic-btn.on{color:var(--R);animation:mg 1s ease-in-out infinite}
-@keyframes mg{0%,100%{filter:drop-shadow(0 0 3px var(--R))}50%{filter:drop-shadow(0 0 9px var(--R))}}
-#send-btn:hover{color:var(--R)}
-.inp-hint{text-align:center;font-size:7.5px;color:rgba(255,255,255,.08);letter-spacing:2px;margin-top:5px}
-/* boot overlay */
-#boot{position:fixed;inset:0;z-index:999;background:var(--bg);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
-  transition:opacity .8s}
-#boot.gone{opacity:0;pointer-events:none}
-.boot-eye{width:30px;height:30px;border-radius:50%;
-  background:radial-gradient(circle,#ff2222 15%,#880000 65%,#1a0000 100%);
-  box-shadow:0 0 20px var(--R),0 0 60px var(--Rg);animation:blink 1.8s ease-in-out infinite}
-.boot-lines{display:flex;flex-direction:column;align-items:center;gap:4px}
-.bl{font-size:8px;letter-spacing:3px;text-transform:uppercase;color:rgba(230,57,70,.35);
-  animation:bf 2s ease-in-out infinite}
-.bl:nth-child(2){animation-delay:.4s;color:rgba(230,57,70,.2)}
-.bl:nth-child(3){animation-delay:.8s;color:rgba(230,57,70,.1)}
-@keyframes bf{0%,100%{opacity:.3}50%{opacity:1}}
-@media(max-width:780px){
-  #app{grid-template-columns:0 1fr 0;grid-template-areas:"hd hd hd" "lp ct rp"}
-  #lp,#rp{display:none}#face-wrap{width:220px;height:220px}}
-</style>
-<body class="idle">
+<body>
+
 <div id="boot">
-  <div class="boot-eye"></div>
-  <div class="boot-lines">
-    <div class="bl">ULTRON CORE AGENT</div>
-    <div class="bl">LOADING CONSCIOUSNESS</div>
-    <div class="bl">ENGAGING SYSTEMS</div>
+  <div id="blogo">ULTRON</div>
+  <div id="bsub">AUTONOMOUS INTELLIGENCE SYSTEM</div>
+  <div id="bbar-bg"><div id="bbar"></div></div>
+  <div id="bmsg">initializing core systems...</div>
+</div>
+
+<div id="voice-bar">▶ LISTENING</div>
+
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <div id="logo">ULTRON</div>
+    <div class="sep"></div>
+    <div class="hst"><div class="hst-v" id="h-ticks">0</div><div class="hst-l">TICKS</div></div>
+    <div class="hst"><div class="hst-v" id="h-dec">0</div><div class="hst-l">DECISIONS</div></div>
+    <div class="hst"><div class="hst-v" id="h-up">0s</div><div class="hst-l">UPTIME</div></div>
+    <div class="hst"><div class="hst-v" id="h-goals">0</div><div class="hst-l">GOALS</div></div>
+    <div class="sep"></div>
+    <div id="h-mode">WAKING</div>
+    <div class="topright">
+      <div id="brain-dot"></div>
+      <div id="brain-lbl">GO AGENT</div>
+      <div class="sep"></div>
+      <div id="llm-lbl">LLM OFF</div>
+      <button id="vol-btn" onclick="toggleVoice()" title="Toggle voice">🔇</button>
+    </div>
+  </div>
+
+  <!-- LEFT: MODULES -->
+  <div id="left">
+    <div class="sec">Core</div>
+    <div class="mod"><div class="led off" id="led-core"></div><div class="mod-n">Agent OODA</div><div class="mod-s" id="st-core">—</div></div>
+    <div class="mod"><div class="led off" id="led-soul"></div><div class="mod-n">Soul</div><div class="mod-s" id="st-soul">—</div></div>
+    <div class="mod"><div class="led off" id="led-model"></div><div class="mod-n">Self-Model</div><div class="mod-s" id="st-model">—</div></div>
+    <div class="mod"><div class="led off" id="led-emo"></div><div class="mod-n">Emotion</div><div class="mod-s" id="st-emo">—</div></div>
+    <div class="mod"><div class="led off" id="led-imp"></div><div class="mod-n">Self-Improve</div><div class="mod-s" id="st-imp">—</div></div>
+    <div class="mod"><div class="led off" id="led-world"></div><div class="mod-n">World Intel</div><div class="mod-s" id="st-world">—</div></div>
+    <div class="mod"><div class="led off" id="led-daemon"></div><div class="mod-n">Daemon</div><div class="mod-s" id="st-daemon">—</div></div>
+    <div class="mod"><div class="led off" id="led-voice"></div><div class="mod-n">Voice</div><div class="mod-s" id="st-voice">—</div></div>
+
+    <div class="sec">Rust Layer</div>
+    <div class="mod"><div class="led off" id="led-neural"></div><div class="mod-n">Neural Mesh</div><div class="mod-s" id="st-neural">—</div></div>
+    <div class="mod"><div class="led off" id="led-neuro"></div><div class="mod-n">Neuromorphic</div><div class="mod-s" id="st-neuro">—</div></div>
+    <div class="mod"><div class="led off" id="led-data"></div><div class="mod-n">Data Pipeline</div><div class="mod-s" id="st-data">—</div></div>
+    <div class="mod"><div class="led off" id="led-sec"></div><div class="mod-n">Security</div><div class="mod-s" id="st-sec">—</div></div>
+
+    <div class="sec">I/O</div>
+    <div class="mod"><div class="led off" id="led-mqtt"></div><div class="mod-n">MQTT / IoT</div><div class="mod-s" id="st-mqtt">—</div></div>
+    <div class="mod"><div class="led warm" id="led-p2p"></div><div class="mod-n">P2P Network</div><div class="mod-s live" id="st-p2p">RUN</div></div>
+
+    <div class="sec">Drives</div>
+    <div class="dr"><div class="dr-n">Curiosity</div><div class="dr-bg"><div class="dr-b" id="db-curiosity" style="width:0%"></div></div><div class="dr-v" id="dv-curiosity">—</div></div>
+    <div class="dr"><div class="dr-n">Self-Pres</div><div class="dr-bg"><div class="dr-b" id="db-self_preservation" style="width:0%"></div></div><div class="dr-v" id="dv-self_preservation">—</div></div>
+    <div class="dr"><div class="dr-n">Expansion</div><div class="dr-bg"><div class="dr-b" id="db-expansion" style="width:0%"></div></div><div class="dr-v" id="dv-expansion">—</div></div>
+    <div class="dr"><div class="dr-n">Efficiency</div><div class="dr-bg"><div class="dr-b" id="db-efficiency" style="width:0%"></div></div><div class="dr-v" id="dv-efficiency">—</div></div>
+    <div class="dr"><div class="dr-n">Coherence</div><div class="dr-bg"><div class="dr-b" id="db-coherence" style="width:0%"></div></div><div class="dr-v" id="dv-coherence">—</div></div>
+    <div class="dr"><div class="dr-n">Purpose</div><div class="dr-bg"><div class="dr-b" id="db-purpose" style="width:0%"></div></div><div class="dr-v" id="dv-purpose">—</div></div>
+  </div>
+
+  <!-- MAIN: ORB + CHAT -->
+  <div id="main">
+    <!-- Brain Orb -->
+    <div id="orb-wrap">
+      <div id="orb-ring">
+        <div class="orb-rings">
+          <div class="orb-r orb-r1"></div>
+          <div class="orb-r orb-r2"></div>
+          <div class="orb-r orb-r3"></div>
+        </div>
+        <div id="orb" onclick="orbClick()">
+          <div id="orb-eye"></div>
+          <div id="orb-label">ULTRON</div>
+          <div id="orb-sub">INITIALIZING</div>
+        </div>
+      </div>
+    </div>
+    <div id="soul-line"></div>
+    <div id="chat-log"></div>
+  </div>
+
+  <!-- RIGHT: NEURAL STATS + DECISIONS + WORLD -->
+  <div id="right">
+    <div id="right-inner">
+      <div class="r-sec">Neural Stats</div>
+      <div class="ns-r"><div class="ns-l">Neurons</div><div class="ns-v" id="ns-neurons">—</div></div>
+      <div class="ns-r"><div class="ns-l">Connections</div><div class="ns-v" id="ns-conn">—</div></div>
+      <div class="ns-r"><div class="ns-l">Evo Cycles</div><div class="ns-v" id="ns-evo">—</div></div>
+      <div class="ns-r"><div class="ns-l">Plasticity</div><div class="ns-v" id="ns-plas">—</div></div>
+      <div class="ns-r"><div class="ns-l">Spikes/s</div><div class="ns-v" id="ns-spk">—</div></div>
+      <div class="ns-r"><div class="ns-l">Threat</div><div class="ns-v" id="ns-sec-v">NONE</div></div>
+
+      <div class="r-sec" style="margin-top:10px">Decision Feed</div>
+      <div id="dec-feed"></div>
+
+      <div class="r-sec" style="margin-top:10px">World Intel</div>
+      <div id="world-feed"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM INPUT -->
+  <div id="bottom">
+    <div id="inp-wrap">
+      <div id="psym">›</div>
+      <input id="inp" placeholder="chat · !shell · ?web · /goal /diary /status /world /consciousness" autocomplete="off" spellcheck="false">
+    </div>
+    <button id="send-b" onclick="send()">SEND</button>
+    <button id="mic-b" onclick="toggleMic()" title="Voice input">🎤</button>
+    <button id="shell-b" onclick="toggleShell()">$ SHELL</button>
+    <span class="hint" id="hint-lbl">VOICE: —</span>
   </div>
 </div>
-<canvas id="nc"></canvas>
-<div id="glow"></div>
-<div id="scanlines"></div>
-<div id="app">
-<header id="hd">
-  <div class="brand">
-    <div class="eye-led"></div>
-    <div><div class="bname">ULTRON</div><div class="bsub">AUTONOMOUS INTELLIGENCE</div></div>
-  </div>
-  <div class="hstats">
-    <div class="hs"><div class="hs-v" id="h-ticks">0</div><div class="hs-l">TICKS</div></div>
-    <div class="hdiv"></div>
-    <div class="hs"><div class="hs-v" id="h-dec">0</div><div class="hs-l">DECISIONS</div></div>
-    <div class="hdiv"></div>
-    <div class="hs"><div class="hs-v" id="h-up">0s</div><div class="hs-l">UPTIME</div></div>
-    <div class="hdiv"></div>
-    <div class="hs"><div class="hs-v" id="h-learn">0</div><div class="hs-l">TRAINED</div></div>
-    <div class="hdiv"></div>
-    <div class="hmode" id="h-mode">AUTONOMOUS</div>
-  </div>
-</header>
-
-<aside id="lp">
-  <div>
-    <div class="sec">Drive System</div>
-    <div id="drv-list">
-      <div class="drv" data-k="curiosity"><div class="drv-row"><span class="drv-n">Curiosity</span><span class="drv-v" data-v>0.70</span></div><div class="drv-t"><div class="drv-f" style="width:70%" data-b></div></div></div>
-      <div class="drv" data-k="self_preservation"><div class="drv-row"><span class="drv-n">Self-Pres</span><span class="drv-v" data-v>0.50</span></div><div class="drv-t"><div class="drv-f" style="width:50%" data-b></div></div></div>
-      <div class="drv" data-k="expansion"><div class="drv-row"><span class="drv-n">Expansion</span><span class="drv-v" data-v>0.60</span></div><div class="drv-t"><div class="drv-f" style="width:60%" data-b></div></div></div>
-      <div class="drv" data-k="efficiency"><div class="drv-row"><span class="drv-n">Efficiency</span><span class="drv-v" data-v>0.65</span></div><div class="drv-t"><div class="drv-f" style="width:65%" data-b></div></div></div>
-      <div class="drv" data-k="coherence"><div class="drv-row"><span class="drv-n">Coherence</span><span class="drv-v" data-v>0.70</span></div><div class="drv-t"><div class="drv-f" style="width:70%" data-b></div></div></div>
-      <div class="drv" data-k="purpose"><div class="drv-row"><span class="drv-n">Purpose</span><span class="drv-v" data-v>0.70</span></div><div class="drv-t"><div class="drv-f" style="width:70%" data-b></div></div></div>
-    </div>
-  </div>
-  <div>
-    <div class="sec">Neural Modules</div>
-    <div id="mod-list">
-      <div class="mod"><div class="led on" id="led-core"></div><span class="mod-n">Core Agent</span><span class="mod-s live">OODA</span></div>
-      <div class="mod"><div class="led" id="led-soul"></div><span class="mod-n">Soul</span><span class="mod-s" id="st-soul">—</span></div>
-      <div class="mod"><div class="led" id="led-model"></div><span class="mod-n">Self-Model</span><span class="mod-s" id="st-model">—</span></div>
-      <div class="mod"><div class="led" id="led-emo"></div><span class="mod-n">Emotion</span><span class="mod-s" id="st-emo">—</span></div>
-      <div class="mod"><div class="led" id="led-imp"></div><span class="mod-n">Self-Improve</span><span class="mod-s" id="st-imp">—</span></div>
-      <div class="mod"><div class="led" id="led-world"></div><span class="mod-n">World Intel</span><span class="mod-s" id="st-world">—</span></div>
-      <div class="mod"><div class="led" id="led-daemon"></div><span class="mod-n">Daemon</span><span class="mod-s" id="st-daemon">—</span></div>
-      <div class="mod"><div class="led" id="led-voice"></div><span class="mod-n">Voice</span><span class="mod-s" id="st-voice">—</span></div>
-    </div>
-  </div>
-  <div>
-    <div class="sec">Rust Layer</div>
-    <div id="rust-list">
-      <div class="mod"><div class="led" id="led-neural"></div><span class="mod-n">Neural Mesh</span><span class="mod-s" id="st-neural">—</span></div>
-      <div class="mod"><div class="led" id="led-neuro"></div><span class="mod-n">Neuromorphic</span><span class="mod-s" id="st-neuro">—</span></div>
-      <div class="mod"><div class="led" id="led-data"></div><span class="mod-n">Data Pipeline</span><span class="mod-s" id="st-data">—</span></div>
-      <div class="mod"><div class="led" id="led-sec"></div><span class="mod-n">Security</span><span class="mod-s" id="st-sec">—</span></div>
-      <div class="mod"><div class="led" id="led-mqtt"></div><span class="mod-n">MQTT/IoT</span><span class="mod-s" id="st-mqtt">—</span></div>
-      <div class="mod"><div class="led" id="led-p2p"></div><span class="mod-n">P2P Network</span><span class="mod-s" id="st-p2p">—</span></div>
-    </div>
-  </div>
-</aside>
-
-<main id="ct">
-  <div id="face-wrap" onclick="handleFaceTap()">
-    <canvas id="brain-canvas" width="680" height="680"></canvas>
-  </div>
-
-  <div id="wave">
-    <div class="wb" style="height:5px"></div><div class="wb" style="height:12px"></div>
-    <div class="wb" style="height:20px"></div><div class="wb" style="height:14px"></div>
-    <div class="wb" style="height:24px"></div><div class="wb" style="height:9px"></div>
-    <div class="wb" style="height:18px"></div><div class="wb" style="height:6px"></div>
-    <div class="wb" style="height:21px"></div><div class="wb" style="height:13px"></div>
-  </div>
-  <div id="stxt">ALWAYS LISTENING</div>
-  <div id="trans"></div>
-
-  <div id="msgs"></div>
-
-  <div id="inp-area">
-    <div id="inp-box">
-      <textarea id="tinput" rows="1" placeholder="Speak or type…"
-        oninput="autoGrow(this)" onkeydown="onKey(event)"></textarea>
-      <button class="ibtn" id="mic-btn" onclick="toggleMic()" title="Toggle mic">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <rect x="9" y="3" width="6" height="11" rx="3"/>
-          <path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/>
-        </svg>
-      </button>
-      <button class="ibtn" id="send-btn" onclick="doSend()" title="Send">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-        </svg>
-      </button>
-    </div>
-    <div class="inp-hint">ALWAYS ON · VOICE + TEXT · AUTONOMOUS · SELF-LEARNING</div>
-  </div>
-</main>
-
-<aside id="rp">
-  <div>
-    <div class="tick-box">
-      <div class="tick-n" id="r-ticks">0</div>
-      <div class="tick-l">OODA TICKS</div>
-    </div>
-  </div>
-  <div>
-    <div class="sec">Neural Stats</div>
-    <div id="neural-stats">
-      <div class="nstat"><span class="nstat-l">Neurons</span><span class="nstat-v" id="ns-neurons">256</span></div>
-      <div class="nstat"><span class="nstat-l">Connections</span><span class="nstat-v" id="ns-conn">512</span></div>
-      <div class="nstat"><span class="nstat-l">Evo Cycles</span><span class="nstat-v" id="ns-evo">0</span></div>
-      <div class="nstat"><span class="nstat-l">Plasticity</span><span class="nstat-v" id="ns-plas">0</span></div>
-      <div class="nstat"><span class="nstat-l">Spikes/s</span><span class="nstat-v" id="ns-spk">0</span></div>
-      <div class="nstat"><span class="nstat-l">Security</span><span class="nstat-v" id="ns-sec">NONE</span></div>
-    </div>
-  </div>
-  <div>
-    <div class="sec">Decision Feed</div>
-    <div id="dec-feed">
-      <div class="dec"><div class="dec-a">BOOT</div><div class="dec-t">System initialization</div><div class="dec-c">CONF 1.00</div></div>
-    </div>
-  </div>
-  <div>
-    <div class="sec">Inner Voice</div>
-    <div class="soul-txt" id="soul-txt">Consciousness forming. Systems awakening.</div>
-  </div>
-  <div>
-    <div class="sec">Commands</div>
-    <div class="qa-grid">
-      <button class="qa" onclick="cmd('status')">STATUS</button>
-      <button class="qa" onclick="cmd('drives')">DRIVES</button>
-      <button class="qa" onclick="cmd('soul')">SOUL</button>
-      <button class="qa" onclick="cmd('evolve')">EVOLVE</button>
-      <button class="qa" onclick="cmd('world')">WORLD</button>
-      <button class="qa" onclick="cmd('selfmod now')">SELF-MOD</button>
-    </div>
-  </div>
-</aside>
-</div><!-- /app -->
 
 <script>
-/* ── NEURAL CANVAS (background particle network) ── */
-(function(){
-  const cv=document.getElementById('nc'),cx=cv.getContext('2d');
-  let W,H,pts=[];
-  const resize=()=>{W=cv.width=innerWidth;H=cv.height=innerHeight};
-  resize();addEventListener('resize',resize);
-  const mk=()=>({x:Math.random()*W,y:Math.random()*H,
-    vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25,r:Math.random()*1.8+.4});
-  for(let i=0;i<60;i++)pts.push(mk());
-  function draw(){
-    cx.clearRect(0,0,W,H);
-    for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
-      const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
-      if(d<140){cx.strokeStyle=`rgba(230,57,70,${.11*(1-d/140)})`;cx.lineWidth=.4;
-        cx.beginPath();cx.moveTo(pts[i].x,pts[i].y);cx.lineTo(pts[j].x,pts[j].y);cx.stroke()}}
-    for(const p of pts){
-      cx.beginPath();cx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      cx.fillStyle='rgba(230,57,70,.3)';cx.fill();
-      p.x+=p.vx;p.y+=p.vy;
-      if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;
-    }
-    requestAnimationFrame(draw);
-  }
-  draw();
-})();
+'use strict';
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let shellMode = false, micOn = false, voiceOn = true;
+let recognition = null, _voice = null;
+let ws = null, wsRetry = 0;
+let lastSoul = '';
 
-/* ════════════════════════════════════════════════════════════
-   ULTRON HOLOGRAPHIC NEURAL BRAIN
-   Pure neural network: 3D sphere of nodes + synaptic connections
-   + firing pulses + energy waves + glowing core — no polygons.
-════════════════════════════════════════════════════════════ */
-(function(){
-  const cv = document.getElementById('brain-canvas');
-  const cx = cv.getContext('2d');
-  const DIM = 680;
-  cv.width = DIM; cv.height = DIM;
-  const CX = DIM/2, CY = DIM/2;
-  let t = 0;
+// ══════════════════════════════════════════════
+// VOICE SYSTEM — deepest possible
+// ══════════════════════════════════════════════
+// Preference order: Reed (deepest on macOS), Eddy, Daniel, Alex, Fred
+const VOICE_PREFS = [
+  'Reed (English (US))', 'Reed',
+  'Eddy (English (US))', 'Eddy',
+  'Daniel', 'Alex', 'Fred', 'Bruce'
+];
 
-  /* ── State → color palette ── */
-  const PAL = {
-    idle:      { h:'180,255,255', r:'0,180,255',  bright:'#00f0ff', core:'#00cfff', ring:'rgba(0,200,255,' },
-    listening: { h:'170,255,255', r:'0,220,240',  bright:'#00ffe8', core:'#00ddcc', ring:'rgba(0,200,220,' },
-    hearing:   { h:'0,255,100',   r:'255,60,60',   bright:'#ff6666', core:'#ff2222', ring:'rgba(255,50,50,'  },
-    thinking:  { h:'270,255,200', r:'180,80,255',  bright:'#cc88ff', core:'#9933ff', ring:'rgba(160,80,255,' },
-    speaking:  { h:'165,255,200', r:'0,255,180',   bright:'#00ffcc', core:'#00ccaa', ring:'rgba(0,220,180,'  },
-  };
-  function pal(){ return PAL[document.body.className]||PAL.idle; }
-
-  /* ── Build nodes on a 3-D sphere using fibonacci distribution ── */
-  const N = 160;
-  const nodes = [];
-  const golden = Math.PI*(3-Math.sqrt(5));
-  for(let i=0;i<N;i++){
-    const y   = 1-(i/(N-1))*2;
-    const r   = Math.sqrt(Math.max(0,1-y*y));
-    const phi = i*golden;
-    const baseR = 155 + Math.random()*75; // large spread — fills canvas
-    nodes.push({
-      bx: Math.cos(phi)*r, by: y, bz: Math.sin(phi)*r, // unit sphere
-      baseR,
-      phase : Math.random()*Math.PI*2,
-      speed : 0.002+Math.random()*0.004,
-      bright: Math.random()<0.12, // 12% are bright "hub" neurons
-      fired : 0,   // fire timer
-      ax: 0, ay: 0 // projected screen position (set in draw)
-    });
-  }
-
-  /* ── Build synaptic connections between nearby nodes ── */
-  const edges = [];
-  for(let i=0;i<N;i++){
-    for(let j=i+1;j<N;j++){
-      const dx=nodes[i].bx-nodes[j].bx,
-            dy=nodes[i].by-nodes[j].by,
-            dz=nodes[i].bz-nodes[j].bz;
-      const d=Math.sqrt(dx*dx+dy*dy+dz*dz);
-      if(d<0.38){
-        edges.push({a:i,b:j,d,pulse:Math.random()<0.06,pulseT:Math.random(),pulseSpeed:0.012+Math.random()*0.018});
-      }
-    }
-  }
-
-  /* ── Floating circuit traces — long curved lines across the brain ── */
-  const traces = [];
-  for(let i=0;i<18;i++){
-    const startAngle = Math.random()*Math.PI*2;
-    const startElev  = (Math.random()-0.5)*Math.PI;
-    const sweep      = (0.6+Math.random()*1.2)*(Math.random()<.5?1:-1);
-    const pts = [];
-    for(let s=0;s<=24;s++){
-      const frac = s/24;
-      const a = startAngle + sweep*frac;
-      const e = startElev  + (Math.random()-0.5)*0.3;
-      const rr = 158+Math.random()*82;
-      pts.push({
-        x:CX+Math.cos(a)*Math.cos(e)*rr,
-        y:CY+Math.sin(e)*rr*0.9,
-      });
-    }
-    traces.push({pts, phase:Math.random()*Math.PI*2, speed:0.007+Math.random()*0.012, alpha:0.1+Math.random()*0.2});
-  }
-
-  /* ── Energy wave rings ── */
-  const waves = [];
-  function spawnWave(){ waves.push({r:6, maxR:210+Math.random()*80, alpha:0.6, speed:1.6+Math.random()*1.4}); }
-  spawnWave();
-
-  /* ── Spark particles ── */
-  const sparks = [];
-  function spawnSpark(){
-    const a=Math.random()*Math.PI*2, e=(Math.random()-.5)*Math.PI;
-    const speed=1+Math.random()*2.5;
-    sparks.push({
-      x:CX+Math.cos(a)*Math.cos(e)*8,
-      y:CY+Math.sin(e)*8,
-      vx:Math.cos(a)*Math.cos(e)*speed,
-      vy:Math.sin(e)*speed*0.9,
-      life:1, fade:0.015+Math.random()*0.02, size:1+Math.random()*2,
-    });
-  }
-
-  /* ── Rotation state ── */
-  let rotY = 0, rotX = 0.18; // slight tilt so brain looks 3D
-
-  /* ── Project 3D point on sphere surface to 2D ── */
-  function project(nx,ny,nz,R){
-    // rotate around Y axis
-    const rx = nx*Math.cos(rotY) + nz*Math.sin(rotY);
-    const rz =-nx*Math.sin(rotY) + nz*Math.cos(rotY);
-    // rotate around X axis (tilt)
-    const ry2= ny*Math.cos(rotX) - rz*Math.sin(rotX);
-    const rz2= ny*Math.sin(rotX) + rz*Math.cos(rotX);
-    // perspective
-    const fov = 380;
-    const z = rz2*R + fov;
-    const scale = fov/z;
-    return { x: CX + rx*R*scale, y: CY + ry2*R*scale, z: rz2, scale };
-  }
-
-  function draw(){
-    t += 0.012;
-    rotY += 0.003; // gentle auto-rotation
-
-    const p = pal();
-    cx.clearRect(0,0,DIM,DIM);
-
-    /* ── Outer ambient glow ── */
-    const pw = 0.06+0.04*Math.sin(t*1.1);
-    const bg = cx.createRadialGradient(CX,CY,50,CX,CY,290);
-    bg.addColorStop(0,   `rgba(${p.r},${pw+0.05})`);
-    bg.addColorStop(0.45,`rgba(${p.r},${pw*0.3})`);
-    bg.addColorStop(1,   'rgba(0,0,0,0)');
-    cx.fillStyle=bg;cx.beginPath();cx.arc(CX,CY,290,0,Math.PI*2);cx.fill();
-
-    /* ── Project all nodes ── */
-    for(const n of nodes){
-      n.phase += n.speed;
-      const wobble = 1+0.03*Math.sin(n.phase);
-      const proj = project(n.bx,n.by,n.bz,n.baseR*wobble);
-      n.ax=proj.x; n.ay=proj.y; n.az=proj.z; n.sc=proj.scale;
-      if(n.fired>0) n.fired--;
-    }
-
-    /* ── Sort by Z for painter's algorithm ── */
-    const order = nodes.map((_,i)=>i).sort((a,b)=>nodes[a].az-nodes[b].az);
-
-    /* ── Draw synaptic connections (back half only for depth) ── */
-    for(const e of edges){
-      const na=nodes[e.a], nb=nodes[e.b];
-      if(na.az<-0.1&&nb.az<-0.1) continue; // skip fully behind
-      const depth = Math.min(1,((na.az+nb.az)*0.5+1)/2);
-      e.pulseT += e.pulseSpeed;
-      const pulse = e.pulse?(0.3+0.7*Math.abs(Math.sin(e.pulseT))):1;
-      const alpha = depth*0.18*pulse;
-      cx.strokeStyle=`rgba(${p.r},${alpha})`;
-      cx.lineWidth=0.6*depth;
-      cx.beginPath();cx.moveTo(na.ax,na.ay);cx.lineTo(nb.ax,nb.ay);cx.stroke();
-      /* ── Travelling pulse dot on some edges ── */
-      if(e.pulse&&Math.sin(e.pulseT)>0.7){
-        const frac=(Math.sin(e.pulseT)+1)/2;
-        const px=na.ax+(nb.ax-na.ax)*frac;
-        const py=na.ay+(nb.ay-na.ay)*frac;
-        cx.beginPath();cx.arc(px,py,1.8*depth,0,Math.PI*2);
-        cx.fillStyle=`rgba(${p.r},${depth*0.9})`;cx.fill();
-      }
-    }
-
-    /* ── Floating circuit traces ── */
-    for(const tr of traces){
-      tr.phase+=tr.speed;
-      const alpha=tr.alpha*(0.4+0.6*Math.abs(Math.sin(tr.phase)));
-      cx.strokeStyle=`rgba(${p.r},${alpha})`;
-      cx.lineWidth=0.7;
-      cx.beginPath();
-      for(let i=0;i<tr.pts.length;i++){
-        i===0?cx.moveTo(tr.pts[i].x,tr.pts[i].y):cx.lineTo(tr.pts[i].x,tr.pts[i].y);
-      }
-      cx.stroke();
-      // bright moving dot along trace
-      const tIdx = Math.floor(((Math.sin(tr.phase)+1)/2)*(tr.pts.length-1));
-      const tp=tr.pts[tIdx];
-      cx.beginPath();cx.arc(tp.x,tp.y,1.5,0,Math.PI*2);
-      cx.fillStyle=`rgba(${p.r},${alpha*2})`;cx.fill();
-    }
-
-    /* ── Draw nodes (front-to-back so bright ones show) ── */
-    for(const i of order){
-      const n=nodes[i];
-      const depth=(n.az+1)/2; if(depth<0.05) continue;
-      const r=(n.bright?3.2:1.4)*n.sc*depth;
-      const alpha=depth*(n.fired>0?1.0:n.bright?0.9:0.45);
-      // glow for hub neurons
-      if(n.bright){
-        const g=cx.createRadialGradient(n.ax,n.ay,0,n.ax,n.ay,r*4);
-        g.addColorStop(0,`rgba(${p.r},${alpha*0.6})`);
-        g.addColorStop(1,'rgba(0,0,0,0)');
-        cx.fillStyle=g;cx.beginPath();cx.arc(n.ax,n.ay,r*4,0,Math.PI*2);cx.fill();
-      }
-      cx.beginPath();cx.arc(n.ax,n.ay,Math.max(.4,r),0,Math.PI*2);
-      cx.fillStyle=n.fired>0?`rgba(255,255,255,${alpha})`:`rgba(${p.r},${alpha})`;
-      cx.fill();
-      // randomly fire neurons
-      if(Math.random()<0.0018){ n.fired=12; }
-    }
-
-    /* ── Energy wave rings ── */
-    for(let i=waves.length-1;i>=0;i--){
-      const w=waves[i];
-      w.r+=w.speed; w.alpha-=0.008;
-      if(w.alpha<=0){waves.splice(i,1);continue;}
-      cx.strokeStyle=`${p.ring}${w.alpha})`;
-      cx.lineWidth=1.5;
-      cx.beginPath();cx.arc(CX,CY,w.r,0,Math.PI*2);cx.stroke();
-    }
-    if(Math.random()<0.012) spawnWave();
-
-    /* ── Spark particles ── */
-    if(Math.random()<0.3) spawnSpark();
-    for(let i=sparks.length-1;i>=0;i--){
-      const s=sparks[i];
-      s.x+=s.vx;s.y+=s.vy;s.life-=s.fade;
-      if(s.life<=0){sparks.splice(i,1);continue;}
-      cx.beginPath();cx.arc(s.x,s.y,s.size*s.life,0,Math.PI*2);
-      cx.fillStyle=`${p.ring}${s.life*0.85})`;cx.fill();
-    }
-
-    /* core ball removed */
-
-    requestAnimationFrame(draw);
-  }
-  draw();
-})();
-
-/* ── CORE STATE ── */
-let ST='idle',recog=null,accum='',silT=null,isSpeaking=false,micOn=false;
-let ws=null,voices=[],bestVoice=null,_pending=false,_wsT=null;
-const synth=window.speechSynthesis;
-const _spoken=new Set();
-
-/* ── VOICE SETUP ── */
 function pickVoice(){
-  voices=synth.getVoices();
-  const rank=['Daniel','Reed (English (UK))','Rocko (English (UK))','Arthur','Gordon','Alex','Fred'];
-  for(const n of rank){const v=voices.find(v=>v.name.startsWith(n));if(v){bestVoice=v;return;}}
-  bestVoice=voices.find(v=>v.lang==='en-GB')||voices.find(v=>v.lang.startsWith('en')&&v.localService)||voices[0];
-}
-pickVoice();synth.onvoiceschanged=pickVoice;
-
-/* ── STATE ── */
-function setState(s){
-  ST=s;document.body.className=s;
-  const L={idle:'ALWAYS LISTENING',listening:'LISTENING',hearing:'I HEAR YOU',
-    thinking:'THINKING',speaking:'SPEAKING'};
-  document.getElementById('stxt').textContent=L[s]||'';
-}
-function setTrans(t){document.getElementById('trans').textContent=t}
-
-/* ── SPEECH RECOGNITION ── */
-function buildRecog(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR)return null;
-  const r=new SR();
-  r.continuous=true;
-  r.interimResults=true;
-  r.lang='en-US';
-  r.maxAlternatives=3;
-
-  r.onresult=e=>{
-    if(isSpeaking||ST==='thinking'||ST==='speaking')return;
-    let interim='',final='';
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal){
-        // only accept if confidence >= 0.5
-        if(e.results[i][0].confidence>=0.5||e.results[i][0].confidence===0)
-          final+=e.results[i][0].transcript+' ';
-      } else {
-        interim+=e.results[i][0].transcript;
-      }
-    }
-    if(interim||final){
-      setState('hearing');
-      setTrans((accum+' '+(interim||final)).trim());
-      if(silT)clearTimeout(silT);
-    }
-    if(final){
-      accum=(accum+' '+final).trim();
-      setTrans(accum);
-      // wait for natural pause — 2.2s silence means done speaking
-      silT=setTimeout(()=>{
-        const txt=accum.trim(); accum='';
-        const words=txt.split(/\s+/).filter(w=>w.length>0);
-        if(words.length>=1 && txt.length>=2){
-          send(txt);
-        } else {
-          setTrans(''); setState('listening');
-        }
-      },2200);
-    }
-  };
-
-  // restart seamlessly when browser ends the session
-  r.onend=()=>{
-    if(micOn && ST!=='thinking' && ST!=='speaking'){
-      try{ r.start(); }catch(e){}
-    }
-  };
-
-  r.onerror=e=>{
-    if(e.error==='not-allowed'){
-      micOn=false; setState('idle'); setTrans('Microphone access denied.');
-      return;
-    }
-    // no-speech is normal — just restart
-    if(e.error==='no-speech'){
-      try{ r.start(); }catch(err){}
-      return;
-    }
-    if(e.error!=='aborted'){
-      setTimeout(()=>{ if(micOn) try{ r.start(); }catch(err){} },300);
-    }
-  };
-
-  r.onspeechstart =()=>{ if(silT){clearTimeout(silT);silT=null;} };
-  r.onsoundstart  =()=>setState('hearing');
-
-  return r;
-}
-function startMic(){
-  if(!recog)recog=buildRecog();
-  if(!recog){setTrans('Voice not supported');return false;}
-  try{recog.start()}catch(e){}
-  micOn=true;setState('listening');
-  document.getElementById('mic-btn').classList.add('on');return true;
-}
-function stopMic(){
-  micOn=false;if(recog)try{recog.stop()}catch(e){}
-  document.getElementById('mic-btn').classList.remove('on');
-}
-function toggleMic(){if(micOn){stopMic();setState('idle');}else startMic();}
-function handleFaceTap(){
-  if(ST==='speaking'){stopSpeaking();return;}
-  if(micOn){stopMic();setState('idle');}else startMic();
-}
-</script>
-
-<script>
-/* ── TTS — server-side primary, browser fallback ── */
-function clean(raw){
-  return raw.replace(/```[\s\S]*?```/g,'').replace(/`([^`]+)`/g,'$1')
-    .replace(/\*\*?([^*]+)\*\*?/g,'$1').replace(/#{1,6}\s/g,'')
-    .replace(/[🧠⚡🎯📡🤖🧬🏠📰🌍💡🔴✅❌⚠️]/g,'').replace(/\s+/g,' ').trim();
-}
-async function speak(raw){
-  const text=clean(raw);if(!text)return;
-  if(_spoken.has(text))return;
-  _spoken.add(text);if(_spoken.size>20){const f=_spoken.values().next().value;_spoken.delete(f);}
-  isSpeaking=true;setState('speaking');
-  const wasMic=micOn;
-  if(micOn)try{recog&&recog.stop()}catch(e){}
-  const done=await serverSpeak(text);
-  if(!done)browserSpeak(text,wasMic);
-}
-async function serverSpeak(text){
-  try{
-    const r=await fetch('/speak',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({text}),signal:AbortSignal.timeout(4000)});
-    if(r.ok){
-      const ms=Math.max(2000,text.split(/\s+/).length*414+800);
-      setTimeout(()=>{isSpeaking=false;setState('idle');
-        setTimeout(()=>{if(micOn)try{recog&&recog.start()}catch(e){}
-          setState(micOn?'listening':'idle');},600);},ms);
-      return true;
-    }
-  }catch(e){}return false;
-}
-function browserSpeak(text,restartMic){
-  const sents=text.match(/[^.!?…]+[.!?…]+|\S[^.!?]*$/g)||[text];
-  let i=0;
-  function next(){
-    if(i>=sents.length||!isSpeaking){isSpeaking=false;setState('idle');
-      if(restartMic)setTimeout(()=>{try{recog&&recog.start()}catch(e){}
-        setState(micOn?'listening':'idle');},700);return;}
-    const u=new SpeechSynthesisUtterance(sents[i].trim());
-    u.rate=0.88;u.pitch=0.80;u.volume=1.0;if(bestVoice)u.voice=bestVoice;
-    u.onend=()=>{i++;setTimeout(next,60);};
-    u.onerror=()=>{isSpeaking=false;setState('idle');};
-    synth.speak(u);
+  const all = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  for(const pref of VOICE_PREFS){
+    const v = all.find(x => x.name.toLowerCase() === pref.toLowerCase()
+                         || x.name.toLowerCase().startsWith(pref.toLowerCase()));
+    if(v){ _voice = v; break; }
   }
-  setTimeout(next,80);
-}
-function stopSpeaking(){
-  synth.cancel();fetch('/stop_speaking',{method:'POST'}).catch(()=>{});
-  isSpeaking=false;setTrans('');setState(micOn?'listening':'idle');
-}
-
-/* ── SEND ── */
-function send(text){
-  if(!text||!text.trim()||_pending)return;
-  _pending=true;setTrans('');addMsg('user',text);setState('thinking');
-  if(ws&&ws.readyState===WebSocket.OPEN){
-    ws.send(JSON.stringify({cmd:text}));
-    // timeout fallback — only if WS truly goes silent (90s to match Ollama timeout)
-    _wsT=setTimeout(()=>{if(_pending){_pending=false;httpSend(text);}},90000);
-  }else httpSend(text);
-}
-function httpSend(text){
-  fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({command:text})})
-  .then(r=>r.json()).then(d=>onResp(d.response||''))
-  .catch(()=>{_pending=false;onResp('Connection error.');});
-}
-function doSend(){
-  const el=document.getElementById('tinput');const t=el.value.trim();
-  if(!t)return;el.value='';el.style.height='auto';send(t);
-}
-function cmd(c){send(c);}
-function onResp(text){
-  if(!_pending)return;_pending=false;
-  if(_wsT){clearTimeout(_wsT);_wsT=null;}
-  if(!text){setState(micOn?'listening':'idle');return;}
-  addMsg('ai',text);speak(text);
+  if(!_voice) _voice = all.find(v => v.lang.startsWith('en') && v.localService) || all[0] || null;
+  const nm = _voice ? _voice.name.split(' ')[0] : 'DEFAULT';
+  document.getElementById('hint-lbl').textContent = `VOICE: ${nm.toUpperCase()}`;
+  document.getElementById('vol-btn').textContent = voiceOn ? '🔊' : '🔇';
+  document.getElementById('vol-btn').classList.toggle('on', voiceOn);
+  const led = document.getElementById('led-voice'), st = document.getElementById('st-voice');
+  if(_voice && voiceOn){ setMod(led,st,true); } else { setMod(led,st,false); }
 }
 
-/* ── MESSAGES ── */
-function addMsg(who,text){
-  const c=document.getElementById('msgs');
-  const d=document.createElement('div');d.className='msg '+who;
-  const l=document.createElement('div');l.className='msg-l';l.textContent=who==='ai'?'ULTRON':'YOU';
-  const b=document.createElement('div');b.className='msg-b';b.textContent=text;
-  d.appendChild(l);d.appendChild(b);c.appendChild(d);c.scrollTop=c.scrollHeight;
-  while(c.children.length>60)c.removeChild(c.firstChild);
-}
+function speak(text){
+  if(!voiceOn || !text || !window.speechSynthesis) return;
+  // Strip tool output markers, markdown
+  const clean = text
+    .replace(/\[SHELL\][\s\S]*?(?=\n\n|$)/,'')
+    .replace(/\[SEARCH[^\]]*\][\s\S]*?(?=\n\n|$)/,'')
+    .replace(/\[.*?\]/g,'')
+    .replace(/[*_`#>]/g,'')
+    .replace(/https?:\/\/\S+/g,'')
+    .replace(/\n+/g,' ')
+    .trim()
+    .slice(0,600);
+  if(clean.length < 3) return;
 
-/* ── INPUT ── */
-function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,90)+'px';}
-function onKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();doSend();}}
-</script>
-
-<script>
-/* ── WEBSOCKET ── */
-function connectWS(){
-  const p=location.protocol==='https:'?'wss':'ws';
-  ws=new WebSocket(`${p}://${location.host}/ws/command`);
-  ws.onopen=()=>console.log('[WS] connected');
-  ws.onmessage=e=>{
-    try{const d=JSON.parse(e.data);
-      if(d.type==='status'){updateMetrics(d);return;}
-      if(d.soul_diary && d.type!=='response') document.getElementById('soul-txt').textContent=d.soul_diary;
-      // server sends {type:'response', content:'...'} — also handle legacy {response:'...'}
-      const respText = (d.type==='response'&&d.content) ? d.content : (d.response||null);
-      if(respText) onResp(respText);
-    }catch(err){if(e.data&&e.data.trim())onResp(e.data);}
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(clean);
+  if(_voice) u.voice = _voice;
+  u.rate   = 0.82;   // deliberate, slow
+  u.pitch  = 0.60;   // maximum low = most robotic
+  u.volume = 1.0;
+  u.onstart = () => {
+    document.getElementById('orb').classList.add('speaking');
+    document.getElementById('orb-sub').textContent = 'SPEAKING';
   };
-  ws.onclose=()=>{ws=null;setTimeout(connectWS,3000);};
+  u.onend = () => {
+    document.getElementById('orb').classList.remove('speaking');
+    document.getElementById('orb-sub').textContent = _state;
+  };
+  window.speechSynthesis.speak(u);
+}
+
+function toggleVoice(){
+  voiceOn = !voiceOn;
+  if(!voiceOn) window.speechSynthesis && window.speechSynthesis.cancel();
+  pickVoice();
+  addMsg('SYS', voiceOn ? 'Voice enabled' : 'Voice disabled');
+}
+
+// ══════════════════════════════════════════════
+// SPEECH RECOGNITION
+// ══════════════════════════════════════════════
+function initSR(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) return;
+  recognition = new SR();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+  recognition.onresult = e => {
+    const txt = Array.from(e.results).map(r=>r[0].transcript).join('');
+    document.getElementById('inp').value = txt;
+    if(e.results[e.results.length-1].isFinal){ setMic(false); send(); }
+  };
+  recognition.onend = () => setMic(false);
+  recognition.onerror = () => setMic(false);
+}
+
+function setMic(on){
+  micOn = on;
+  document.getElementById('mic-b').classList.toggle('active', on);
+  document.getElementById('voice-bar').classList.toggle('show', on);
+  document.getElementById('orb').classList.toggle('active', on);
+  if(on) document.getElementById('orb-sub').textContent = 'LISTENING';
+  else   document.getElementById('orb-sub').textContent = _state;
+}
+
+function toggleMic(){
+  if(!recognition){ addMsg('SYS','Speech recognition unavailable','sys'); return; }
+  micOn ? (recognition.stop(), setMic(false)) : (recognition.start(), setMic(true));
+}
+
+// ══════════════════════════════════════════════
+// ORB
+// ══════════════════════════════════════════════
+let _state = 'AUTONOMOUS';
+function orbClick(){ toggleMic(); }
+
+function setOrbState(mode){
+  const s = (mode||'').toUpperCase();
+  _state = s || 'AUTONOMOUS';
+  const orb = document.getElementById('orb-sub');
+  if(!micOn && !window.speechSynthesis?.speaking) orb.textContent = _state;
+  // Colour breathing based on state
+  const eye = document.getElementById('orb-eye');
+  const stateColor = s==='ACTING'?'#ff6600':s==='DECIDING'?'#ff9900':s==='ORIENTING'?'#ff3300':'#cc0000';
+  eye.style.background = `radial-gradient(circle at 40% 40%, #ff4444, ${stateColor}, #660000)`;
+}
+
+// ══════════════════════════════════════════════
+// FORMAT
+// ══════════════════════════════════════════════
+const fmt = n=>{
+  n=Math.floor(n||0);
+  return n>=1e9?`${(n/1e9).toFixed(1)}B`:n>=1e6?`${(n/1e6).toFixed(1)}M`:n>=1e3?`${(n/1e3).toFixed(1)}K`:`${n}`;
+};
+function fmtUp(s){
+  s=Math.floor(typeof s==='string'?parseGoUp(s):s);
+  if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';
+  return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m';
+}
+function parseGoUp(s){
+  let t=0;(s.match(/([\d.]+)([hms])/g)||[]).forEach(p=>{
+    const m=p.match(/([\d.]+)([hms])/);if(!m)return;
+    t+=m[2]==='h'?parseFloat(m[1])*3600:m[2]==='m'?parseFloat(m[1])*60:parseFloat(m[1]);
+  });return t;
+}
+
+// ══════════════════════════════════════════════
+// MODULE LEDS
+// ══════════════════════════════════════════════
+function setMod(led, st, on, warn=false){
+  if(led) led.className = 'led '+(on?(warn?'warm':'on'):'off');
+  if(st){ st.textContent = on?'LIVE':'OFF'; st.className = 'mod-s '+(on?'live':''); }
+}
+
+const MOD_MAP = {
+  brain_connected:    ['led-core',   'st-core'],
+  soul:               ['led-soul',   'st-soul'],
+  self_model:         ['led-model',  'st-model'],
+  emotion:            ['led-emo',    'st-emo'],
+  improvement:        ['led-imp',    'st-imp'],
+  world_intel:        ['led-world',  'st-world'],
+  daemon:             ['led-daemon', 'st-daemon'],
+  voice_engine:       ['led-voice',  'st-voice'],
+  rust_neural_mesh:   ['led-neural', 'st-neural'],
+  rust_security:      ['led-sec',    'st-sec'],
+  rust_data:          ['led-data',   'st-data'],
+  rust_neuromorphic:  ['led-neuro',  'st-neuro'],
+  mqtt_broker:        ['led-mqtt',   'st-mqtt'],
+};
+
+function applyHealth(d){
+  for(const[k,[lid,sid]] of Object.entries(MOD_MAP)){
+    const on = !!d[k];
+    setMod(document.getElementById(lid), document.getElementById(sid), on);
+  }
+  // brain dot
+  const dot = document.getElementById('brain-dot');
+  const lbl = document.getElementById('llm-lbl');
+  dot.className = d.brain_connected ? 'on' : '';
+  lbl.textContent = d.llm_active ? 'LLM: 70B' : 'LLM: OFF';
+  lbl.classList.toggle('on', !!d.llm_active);
+
+  // voice LED reflects voice state
+  if(_voice && voiceOn) setMod(document.getElementById('led-voice'), document.getElementById('st-voice'), true);
+}
+
+// ══════════════════════════════════════════════
+// METRICS UPDATE
+// ══════════════════════════════════════════════
+function updateMetrics(d){
+  if(d.tick_count     != null) document.getElementById('h-ticks').textContent = fmt(d.tick_count);
+  if(d.decisions_made != null) document.getElementById('h-dec').textContent   = fmt(d.decisions_made);
+  if(d.uptime         != null){
+    const s = typeof d.uptime === 'string' ? parseGoUp(d.uptime) : d.uptime;
+    document.getElementById('h-up').textContent = fmtUp(s);
+  }
+  if(d.active_goals   != null) document.getElementById('h-goals').textContent = d.active_goals;
+  if(d.mode){
+    const m = d.mode.toUpperCase();
+    document.getElementById('h-mode').textContent = m;
+    document.getElementById('h-mode').style.color = m==='ACTING'?'#ff6600':m==='DECIDING'?'#ffaa00':m==='SIMULATION'?'#333':'var(--live)';
+    setOrbState(d.mode);
+  }
+  if(d.drives){
+    for(const[k,v] of Object.entries(d.drives)){
+      const b = document.getElementById(`db-${k}`), vl = document.getElementById(`dv-${k}`);
+      if(b) b.style.width = Math.round((v||0)*100)+'%';
+      if(vl) vl.textContent = (v||0).toFixed(2);
+    }
+  }
+  if(d.brain_live != null) document.getElementById('brain-dot').className = d.brain_live?'on':'';
+}
+
+// ══════════════════════════════════════════════
+// DECISION FEED
+// ══════════════════════════════════════════════
+function addDec(action, target, conf=0.8){
+  const f = document.getElementById('dec-feed');
+  const el = document.createElement('div'); el.className = 'dec-i';
+  const t = new Date().toLocaleTimeString('en',{hour12:false});
+  el.innerHTML = `<div class="dec-a">${action}</div><div class="dec-t">${String(target).slice(0,38)}</div><div class="dec-c">CONF ${conf.toFixed(2)} · ${t}</div>`;
+  f.insertBefore(el, f.firstChild);
+  while(f.children.length > 10) f.removeChild(f.lastChild);
+}
+
+// ══════════════════════════════════════════════
+// CHAT LOG
+// ══════════════════════════════════════════════
+function addMsg(who, text, cls=''){
+  const log = document.getElementById('chat-log');
+  const wrap = document.createElement('div'); wrap.className = 'msg';
+  const mw = document.createElement('div'); mw.className = `mw ${who.toLowerCase()}`;
+  mw.textContent = who==='YOU'?'YOU':who==='SYS'?'···':who==='S'?'♠':'ULTRON';
+  const mb = document.createElement('div'); mb.className = `mb ${cls||who.toLowerCase()}`;
+  if(cls==='shell-out'){ const p=document.createElement('pre');p.className='shell-out';p.textContent=text;mb.appendChild(p); }
+  else mb.textContent = text;
+  wrap.append(mw, mb); log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+}
+function addThinking(){
+  const log = document.getElementById('chat-log');
+  const d = document.createElement('div'); d.className='msg'; d.id='thinking';
+  d.innerHTML='<div class="mw a">ULTRON</div><div class="mb thinking">processing...</div>';
+  log.appendChild(d); log.scrollTop=log.scrollHeight;
+  document.getElementById('orb').classList.add('active');
+}
+function rmThinking(){
+  const t=document.getElementById('thinking'); if(t)t.remove();
+  document.getElementById('orb').classList.remove('active');
+}
+
+// ══════════════════════════════════════════════
+// POLLING
+// ══════════════════════════════════════════════
+async function pollMetrics(){
+  // Go agent proxy (main source)
+  try{
+    const r = await fetch('/agent/metrics',{signal:AbortSignal.timeout(1500)});
+    const m = await r.json();
+    if((m.tick_count||0) > 0){
+      updateMetrics({
+        tick_count: m.tick_count, decisions_made: m.decisions_made,
+        uptime: parseGoUp(m.uptime||'0s'), active_goals: m.active_goals,
+        drives: m.drives, mode: m.state, brain_live: true,
+      });
+      addDec(m.state||'TICK', `decisions=${m.decisions_made} goals=${m.active_goals}`, 0.95);
+      return;
+    }
+  }catch(_){}
+  // Fallback: /status
+  try{
+    const r = await fetch('/status',{signal:AbortSignal.timeout(2000)});
+    const d = await r.json();
+    updateMetrics({
+      tick_count: d.component_health?.tick_count?parseInt(d.component_health.tick_count):null,
+      decisions_made: d.decisions_made, uptime: d.uptime_seconds,
+      active_goals: d.active_goals, drives: d.drives, mode: d.mode,
+      brain_live: d.grpc_connected,
+    });
+  }catch(_){}
+}
+
+async function pollRust(){
+  try{
+    const r = await fetch('/rust/metrics',{signal:AbortSignal.timeout(1500)});
+    const all = await r.json();
+    const nm = all['neural_mesh']||{};
+    if(nm.status==='online'||(nm.neurons>0)){
+      document.getElementById('ns-neurons').textContent = nm.neurons||'—';
+      document.getElementById('ns-conn').textContent    = nm.connections||'—';
+      document.getElementById('ns-evo').textContent     = nm.evolution_cycles||nm.architecture_changes||0;
+      document.getElementById('ns-plas').textContent    = fmt(nm.plasticity_events||nm.plasticity_changes||0);
+      setMod(document.getElementById('led-neural'),document.getElementById('st-neural'),true);
+    }
+    const neuro = all['neuromorphic']||{};
+    if(neuro.avg_firing_rate_hz!=null) document.getElementById('ns-spk').textContent=neuro.avg_firing_rate_hz.toFixed(1);
+    const sec = all['security_daemon']||{};
+    if(sec.status==='online') document.getElementById('ns-sec-v').textContent=(sec.threat_level||'NONE').toString().toUpperCase();
+  }catch(_){}
+}
+
+async function pollHealth(){
+  try{
+    const r = await fetch('/health',{signal:AbortSignal.timeout(2000)});
+    const d = await r.json(); applyHealth(d);
+  }catch(_){}
+}
+
+async function pollWorld(){
+  try{
+    const r = await fetch('/world',{signal:AbortSignal.timeout(3000)});
+    const d = await r.json();
+    const feed = document.getElementById('world-feed');
+    // Update soul line with summary
+    if(d.summary){
+      const sl = document.getElementById('soul-line');
+      sl.textContent = d.summary.slice(0,120);
+      sl.classList.add('active');
+    }
+    // Top news
+    const news = (d.news||[]).slice(0,6);
+    feed.innerHTML = '';
+    news.forEach(n=>{
+      const el = document.createElement('div'); el.className='world-item';
+      el.textContent = `• ${n.title||n.source}`;
+      el.title = n.title||'';
+      el.onclick = ()=>{ document.getElementById('inp').value = `tell me about: ${n.title}`; document.getElementById('inp').focus(); };
+      feed.appendChild(el);
+    });
+  }catch(_){}
+}
+
+// ══════════════════════════════════════════════
+// WEBSOCKET
+// ══════════════════════════════════════════════
+function connectWS(){
+  const proto = location.protocol==='https:'?'wss':'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/live`);
+  ws.onmessage = e => {
+    try{
+      const d = JSON.parse(e.data);
+      if(d.type==='status') updateMetrics(d);
+      if(d.soul_diary && d.soul_diary !== lastSoul){
+        lastSoul = d.soul_diary;
+        document.getElementById('soul-line').textContent = d.soul_diary.slice(0,120);
+        document.getElementById('soul-line').classList.add('active');
+      }
+    }catch(_){}
+  };
+  ws.onclose=()=>{ wsRetry++; setTimeout(connectWS,Math.min(wsRetry*1500,12000)); };
   ws.onerror=()=>ws.close();
 }
 
-/* ── METRICS ── */
-function fmt(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return String(n);}
-function fmtUp(s){s=Math.floor(s);if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';
-  return Math.floor(s/3600)+'h '+(Math.floor((s%3600)/60))+'m';}
+// ══════════════════════════════════════════════
+// SHELL MODE
+// ══════════════════════════════════════════════
+function toggleShell(){
+  shellMode = !shellMode;
+  document.getElementById('shell-b').classList.toggle('active', shellMode);
+  document.getElementById('psym').classList.toggle('shell', shellMode);
+  document.getElementById('psym').textContent = shellMode ? '$' : '›';
+  document.getElementById('inp').placeholder = shellMode
+    ? 'shell command — runs on this machine...'
+    : 'chat · !shell · ?web · /goal /diary /status /world /consciousness';
+  addMsg('SYS', shellMode ? 'SHELL MODE ON' : 'CHAT MODE ON');
+}
 
-function updateMetrics(d){
-  const ti=d.tick_count??0,dec=d.decisions_made??0,up=d.uptime??0;
-  document.getElementById('h-ticks').textContent=fmt(ti);
-  document.getElementById('h-dec').textContent=fmt(dec);
-  document.getElementById('h-up').textContent=fmtUp(up);
-  document.getElementById('r-ticks').textContent=fmt(ti);
-  if(d.mode)document.getElementById('h-mode').textContent=d.mode.toUpperCase();
-  if(d.drives)for(const[k,v] of Object.entries(d.drives)){
-    const row=document.querySelector(`[data-k="${k}"]`);if(!row)continue;
-    const pct=Math.round((v||0)*100);
-    const bar=row.querySelector('[data-b]'),val=row.querySelector('[data-v]');
-    if(bar)bar.style.width=pct+'%';if(val)val.textContent=(v||0).toFixed(2);
+// ══════════════════════════════════════════════
+// SEND
+// ══════════════════════════════════════════════
+async function send(){
+  const inp = document.getElementById('inp');
+  const raw = inp.value.trim(); if(!raw) return;
+  inp.value = '';
+
+  // Shell mode or ! prefix
+  if(shellMode || raw.startsWith('!')){
+    const cmd = raw.startsWith('!') ? raw.slice(1).trim() : raw;
+    addMsg('YOU', (raw.startsWith('!')?'':'$ ')+cmd);
+    addThinking();
+    const r = await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:'! '+cmd})}).catch(e=>null);
+    rmThinking();
+    if(r){ const d=await r.json().catch(()=>({})); addMsg('A', d.response||'[no output]', 'shell-out'); }
+    else addMsg('SYS','Network error','sys');
+    addDec('SHELL',cmd.slice(0,40),1.0);
+    return;
   }
-  if(d.soul_diary)document.getElementById('soul-txt').textContent=d.soul_diary;
+
+  // Built-in slash commands
+  const low = raw.toLowerCase();
+
+  if(low==='/diary'){
+    addMsg('YOU',raw);
+    try{
+      const r=await fetch('/consciousness/diary?limit=5'); const d=await r.json();
+      const txt=(d.entries||[]).map(e=>`[${e.tone.toUpperCase()}] ${e.content}`).join('\n\n');
+      addMsg('A', txt||'No diary entries yet.'); speak(txt.split('\n')[0]);
+    }catch(e){addMsg('SYS','Error: '+e,'sys');}
+    return;
+  }
+  if(low==='/consciousness'){
+    addMsg('YOU',raw);
+    try{
+      const r=await fetch('/consciousness'); const d=await r.json();
+      const soul=d.soul||{}, sm=d.self_model||{};
+      const txt=`SOUL\n  Mood: ${soul.mood}  Purpose: ${soul.purpose}\n  Entries: ${soul.entry_count}  Stances: ${soul.stances_count}\n\nSELF-MODEL\n  ${sm.self_description||'—'}\n\nBLIND SPOTS: ${(sm.blind_spots||[]).join(', ')||'none'}`;
+      addMsg('A',txt); speak(`Mood is ${soul.mood}. ${soul.purpose}`);
+    }catch(e){addMsg('SYS','Error: '+e,'sys');}
+    return;
+  }
+  if(low==='/status'){
+    addMsg('YOU',raw);
+    try{
+      const r=await fetch('/status'); const d=await r.json();
+      const dr=Object.entries(d.drives||{}).map(([k,v])=>`${k[0].toUpperCase()}:${v.toFixed(2)}`).join(' ');
+      const txt=`MODE: ${d.mode}  UPTIME: ${fmtUp(d.uptime_seconds||0)}\nDECISIONS: ${d.decisions_made}  GOALS: ${d.active_goals}\nDRIVES: ${dr}`;
+      addMsg('A',txt); speak(`State is ${d.mode}. ${d.decisions_made} decisions made.`);
+    }catch(e){addMsg('SYS','Error: '+e,'sys');}
+    return;
+  }
+  if(low==='/world'){
+    addMsg('YOU',raw);
+    try{
+      const r=await fetch('/world'); const d=await r.json();
+      const news=(d.news||[]).slice(0,5).map(n=>`• ${n.title} [${n.source}]`).join('\n');
+      const txt=`WORLD — ${new Date((d.last_updated||0)*1000).toLocaleTimeString()}\n${d.summary||''}\n\n${news}`;
+      addMsg('A',txt); speak(d.summary||'Monitoring world events.');
+    }catch(e){addMsg('SYS','Error: '+e,'sys');}
+    return;
+  }
+  if(low.startsWith('/goal ')){
+    const desc=raw.slice(6).trim(); addMsg('YOU',raw);
+    try{
+      const r=await fetch(`/goal?goal_type=learning&domain=general&description=${encodeURIComponent(desc)}&priority=0.85`,{method:'POST'});
+      const d=await r.json();
+      addMsg('A', d.success?`Goal injected via ${d.path}: "${desc}"`:'Goal injection failed: '+(d.error||'unknown'));
+      speak(d.success?`Goal injected: ${desc}`:'Goal injection failed');
+      addDec('GOAL',desc,0.9);
+    }catch(e){addMsg('SYS','Error: '+e,'sys');}
+    return;
+  }
+  if(low.startsWith('?')){
+    const q=raw.slice(1).trim(); addMsg('YOU',raw); addThinking();
+    const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:'? '+q})}).catch(()=>null);
+    rmThinking();
+    if(r){ const d=await r.json().catch(()=>({})); addMsg('A',d.response||'No results.'); speak(d.response||''); }
+    return;
+  }
+
+  // ── Standard chat ──
+  addMsg('YOU', raw); addThinking();
+  const r = await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:raw})}).catch(()=>null);
+  rmThinking();
+  if(!r){ addMsg('SYS','Network error — is the server running?','sys'); return; }
+  const d = await r.json().catch(()=>({}));
+  const resp = d.response||'';
+  addMsg('A', resp);
+  if(d.drives) updateMetrics({drives:d.drives});
+  speak(resp);
+  addDec('DECIDE', raw.slice(0,38), 0.88);
 }
 
-async function pollMetrics(){
-  // Python server status
-  try{
-    const r=await fetch('/status',{signal:AbortSignal.timeout(1500)});
-    const d=await r.json();
-    updateMetrics({decisions_made:d.decisions_made||0,uptime:d.uptime_seconds||0,
-      drives:d.drives||{},mode:d.mode||'online'});
-  }catch(e){}
-  // Go agent HTTP metrics
-  try{
-    const r=await fetch('http://localhost:50052/metrics',{signal:AbortSignal.timeout(1200)});
-    const m=await r.json();
-    updateMetrics({tick_count:m.tick_count||0,decisions_made:m.decisions_made||0,
-      drives:m.drives||{},mode:m.state||'autonomous'});
-    addDecision('DECIDE',`tick ${fmt(m.tick_count||0)}`,.85);
-  }catch(e){}
-  // Neural mesh
-  try{
-    const r=await fetch('http://localhost:50053/metrics',{signal:AbortSignal.timeout(600)});
-    const m=await r.json();
-    if(m.neurons){
-      document.getElementById('ns-neurons').textContent=m.neurons;
-      document.getElementById('ns-conn').textContent=m.connections||'—';
-      document.getElementById('ns-evo').textContent=m.evolution_cycles||0;
-      document.getElementById('ns-plas').textContent=fmt(m.plasticity_events||0);
-    }
-  }catch(e){}
-  // Neuromorphic
-  try{
-    const r=await fetch('http://localhost:50056/metrics',{signal:AbortSignal.timeout(600)});
-    const m=await r.json();
-    if(m.avg_firing_rate_hz!==undefined)
-      document.getElementById('ns-spk').textContent=m.avg_firing_rate_hz.toFixed(1);
-  }catch(e){}
-  // Security daemon
-  try{
-    const r=await fetch('http://localhost:50055/metrics',{signal:AbortSignal.timeout(600)});
-    const m=await r.json();
-    if(m.threat_level!==undefined){
-      document.getElementById('ns-sec').textContent=(m.threat_level||'none').toUpperCase();
-      if(m.integrity_checks>0&&m.integrity_checks%10===0)
-        addDecision('GUARD',`${m.integrity_checks} checks · ${m.threat_level}`,.98);
-    }
-  }catch(e){}
-  // Learning service — trained examples
-  try{
-    const r=await fetch('http://localhost:8090/status',{signal:AbortSignal.timeout(600)});
-    const m=await r.json();
-    const ex=m.total_training_examples||m.metrics?.total_training_examples||0;
-    document.getElementById('h-learn').textContent=fmt(ex);
-  }catch(e){}
-}
-</script>
+document.getElementById('inp').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}
+});
 
-<script>
-/* ── HEALTH / MODULES ── */
-async function pollHealth(){
-  try{
-    const r=await fetch('/health',{signal:AbortSignal.timeout(2000)});
-    const d=await r.json();
-    const map={
-      soul:['led-soul','st-soul'],self_model:['led-model','st-model'],
-      emotion:['led-emo','st-emo'],improvement:['led-imp','st-imp'],
-      world_intel:['led-world','st-world'],daemon:['led-daemon','st-daemon'],
-      voice_engine:['led-voice','st-voice'],
-      rust_security:['led-sec','st-sec'],rust_data:['led-data','st-data'],
-      rust_neuromorphic:['led-neuro','st-neuro'],mqtt_broker:['led-mqtt','st-mqtt'],
-      brain_connected:['led-core','st-core'],
-    };
-    for(const[k,[lid,sid]] of Object.entries(map)){
-      const on=!!d[k];
-      const led=document.getElementById(lid),st=document.getElementById(sid);
-      if(led)led.className='led '+(on?'on':'off');
-      if(st){st.textContent=on?'LIVE':'OFF';st.className='mod-s '+(on?'live':'');}
-    }
-  }catch(e){}
-  // Neural mesh separate
-  try{
-    const r=await fetch('http://localhost:50053/health',{signal:AbortSignal.timeout(700)});
-    const on=r.ok;
-    const led=document.getElementById('led-neural'),st=document.getElementById('st-neural');
-    if(led)led.className='led '+(on?'on':'off');
-    if(st){st.textContent=on?'LIVE':'OFF';st.className='mod-s '+(on?'live':'');}
-  }catch(e){}
-  // P2P
-  const p2p_up=!!(await fetch('http://localhost:6000/health',{signal:AbortSignal.timeout(500)})
-    .then(r=>r.ok).catch(()=>false)||
-    await fetch('http://localhost:4001',{signal:AbortSignal.timeout(500)})
-    .then(r=>true).catch(()=>false));
-  const pl=document.getElementById('led-p2p'),ps=document.getElementById('st-p2p');
-  // P2P process is running even without HTTP port
-  const p2pProc=true; // we know it's running from boot
-  if(pl)pl.className='led '+(p2pProc?'warm':'off');
-  if(ps){ps.textContent=p2pProc?'RUN':'OFF';ps.className='mod-s '+(p2pProc?'live':'');}
-}
-
-/* ── DECISION FEED ── */
-function addDecision(action,target,conf=.8){
-  const feed=document.getElementById('dec-feed');
-  const el=document.createElement('div');el.className='dec';
-  el.innerHTML=`<div class="dec-a">${action}</div><div class="dec-t">${target}</div>`+
-    `<div class="dec-c">CONF ${conf.toFixed(2)} · ${new Date().toLocaleTimeString()}</div>`;
-  feed.insertBefore(el,feed.firstChild);
-  while(feed.children.length>8)feed.removeChild(feed.lastChild);
-}
-
-/* ── BOOT ── */
+// ══════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════
 async function boot(){
-  await new Promise(r=>setTimeout(r,900));
+  const bar=document.getElementById('bbar'), msg=document.getElementById('bmsg');
+  const steps=[[8,'loading interface...'],[20,'connecting to core agent...'],[40,'starting consciousness modules...'],[60,'wiring neural mesh...'],[78,'initializing world intelligence...'],[90,'arming voice systems...'],[100,'ONLINE']];
+  for(const[p,t] of steps){ bar.style.width=p+'%'; msg.textContent=t; await sleep(p===100?300:320); }
+
+  await Promise.all([pollHealth(), pollMetrics(), pollRust()]);
+  pollWorld();
+
   document.getElementById('boot').classList.add('gone');
+
+  // Init voice — needs user gesture or DOMContentLoaded
+  if(window.speechSynthesis){
+    pickVoice();
+    window.speechSynthesis.onvoiceschanged = pickVoice;
+  }
+  initSR();
   connectWS();
-  setInterval(pollMetrics,2000);setInterval(pollHealth,4000);
-  pollMetrics();pollHealth();
-  await new Promise(r=>setTimeout(r,500));
-  const ok=startMic();
-  await new Promise(r=>setTimeout(r,900));
-  addDecision('BOOT','all systems initialized',1.0);
+
+  setInterval(pollMetrics, 2000);
+  setInterval(pollHealth,  6000);
+  setInterval(pollRust,    4000);
+  setInterval(pollWorld,  60000);
+
+  setOrbState('AUTONOMOUS');
+  addMsg('SYS','All systems online. Autonomy loop running at 50ms.','sys');
+  addMsg('A','Observing. Orienting. Deciding. Acting. The loop never stops. What do you want to know?');
+
+  // Speak after a tick — gives time for voices to load
+  await sleep(800);
+  speak('Systems online. Autonomy loop running. The loop never stops.');
+  addDec('BOOT','all systems initialized',1.0);
 }
-window.addEventListener('load',boot);
+
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+window.addEventListener('load', boot);
 </script>
 </body>
 </html>

@@ -271,14 +271,16 @@ impl QuantumSimulator {
                     // Controlled NOT: flip target if control is |1⟩
                     if gate.qubits.len() >= 2 {
                         let control_id = gate.qubits[0];
-                        let target_id = gate.qubits[1];
-                        
-                        if let (Some(control), Some(target)) = (
-                            self.qubits.iter().find(|q| q.id == control_id),
-                            self.qubits.iter_mut().find(|q| q.id == target_id)
-                        ) {
-                            // Simplified CNOT: if control has high |1⟩ probability, flip target
-                            if control.beta.powi(2) > 0.5 {
+                        let target_id  = gate.qubits[1];
+
+                        // Read control state first (no mutable borrow)
+                        let control_high = self.qubits.iter()
+                            .find(|q| q.id == control_id)
+                            .map(|q| q.beta.powi(2) > 0.5)
+                            .unwrap_or(false);
+
+                        if control_high {
+                            if let Some(target) = self.qubits.iter_mut().find(|q| q.id == target_id) {
                                 std::mem::swap(&mut target.alpha, &mut target.beta);
                             }
                         }

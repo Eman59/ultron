@@ -131,3 +131,41 @@ pub struct EvolutionStats {
     pub stability_score: f32,
     pub novelty_score: f32,
 }
+
+// ─── Plasticity event types (shared between neural_mesh & plasticity_engine) ───
+
+/// Event recording a plasticity change
+#[derive(Debug, Clone)]
+pub struct PlasticityEvent {
+    pub timestamp: u64,
+    pub neuron_id: NeuronId,
+    pub connection_change: ConnectionChange,
+    pub reason: PlasticityReason,
+}
+
+/// Type of connection change recorded in a PlasticityEvent
+#[derive(Debug, Clone)]
+pub enum ConnectionChange {
+    Added(NeuralConnection),
+    Removed(NeuronId, NeuronId),
+    Strengthened(NeuronId, NeuronId, f32),
+    Weakened(NeuronId, NeuronId, f32),
+}
+
+/// Reason a plasticity change occurred
+#[derive(Debug, Clone)]
+pub enum PlasticityReason {
+    HebbianLearning,
+    SpikeTimingDependent,
+    Homeostatic,
+    Evolutionary,
+    ExternalInput,
+    PatternRecognition,
+}
+
+// ─── PartialEq for ConnectionType (needed for Applicability::SpecificTypes) ───
+impl PartialEq for ConnectionType {
+    fn eq(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
+}

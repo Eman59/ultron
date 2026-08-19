@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>ULTRON</title>
+<!-- Ultron eye favicon — detailed SVG with metallic ring + glow -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='bg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23120000'/%3E%3Cstop offset='100%25' stop-color='%23000000'/%3E%3C/radialGradient%3E%3CradialGradient id='ring' cx='50%25' cy='40%25' r='60%25'%3E%3Cstop offset='0%25' stop-color='%23553333'/%3E%3Cstop offset='60%25' stop-color='%23220000'/%3E%3Cstop offset='100%25' stop-color='%23110000'/%3E%3C/radialGradient%3E%3CradialGradient id='iris' cx='40%25' cy='35%25' r='65%25'%3E%3Cstop offset='0%25' stop-color='%23ff6644'/%3E%3Cstop offset='35%25' stop-color='%23ee1111'/%3E%3Cstop offset='70%25' stop-color='%23aa0000'/%3E%3Cstop offset='100%25' stop-color='%23550000'/%3E%3C/radialGradient%3E%3CradialGradient id='pupil' cx='38%25' cy='35%25' r='55%25'%3E%3Cstop offset='0%25' stop-color='%23ff9977'/%3E%3Cstop offset='40%25' stop-color='%23ff3300'/%3E%3Cstop offset='100%25' stop-color='%23660000'/%3E%3C/radialGradient%3E%3Cfilter id='glow' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='2.5' result='blur'/%3E%3CfeMerge%3E%3CfeMergeNode in='blur'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3Cfilter id='outerGlow' x='-80%25' y='-80%25' width='360%25' height='360%25'%3E%3CfeGaussianBlur stdDeviation='4' result='blur'/%3E%3CfeMerge%3E%3CfeMergeNode in='blur'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3C!-- background --%3E%3Ccircle cx='32' cy='32' r='32' fill='url(%23bg)'/%3E%3C!-- outer metallic ring scratches --%3E%3Ccircle cx='32' cy='32' r='30' fill='none' stroke='%23331111' stroke-width='1.5' opacity='.6'/%3E%3Ccircle cx='32' cy='32' r='28' fill='none' stroke='%23220a0a' stroke-width='.5' opacity='.8'/%3E%3C!-- metallic frame ring --%3E%3Ccircle cx='32' cy='32' r='26' fill='url(%23ring)' filter='url(%23glow)'/%3E%3C!-- inner eye socket --%3E%3Ccircle cx='32' cy='32' r='20' fill='%230a0000'/%3E%3C!-- iris --%3E%3Ccircle cx='32' cy='32' r='16' fill='url(%23iris)' filter='url(%23glow)'/%3E%3C!-- iris detail lines --%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='%23ff220022' stroke-width='1'/%3E%3Ccircle cx='32' cy='32' r='13' fill='none' stroke='%23ff440022' stroke-width='.5'/%3E%3C!-- pupil --%3E%3Ccircle cx='32' cy='32' r='9' fill='url(%23pupil)' filter='url(%23outerGlow)'/%3E%3C!-- specular highlight --%3E%3Cellipse cx='27' cy='26' rx='4' ry='3' fill='white' opacity='.18' transform='rotate(-20 27 26)'/%3E%3Cellipse cx='26' cy='25' rx='2' ry='1.2' fill='white' opacity='.35' transform='rotate(-20 26 25)'/%3E%3C!-- outer glow ring --%3E%3Ccircle cx='32' cy='32' r='24' fill='none' stroke='%23ff2200' stroke-width='.8' opacity='.25' filter='url(%23glow)'/%3E%3C/svg%3E">
+<link rel="alternate icon" href="/favicon.png">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -163,29 +166,44 @@ body.hearing #trans{color:rgba(230,57,70,.75)}
 .inp-hint{text-align:center;font-size:7.5px;color:rgba(255,255,255,.08);letter-spacing:2px;margin-top:5px}
 /* boot overlay */
 #boot{position:fixed;inset:0;z-index:999;background:var(--bg);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
-  transition:opacity .8s}
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+  transition:opacity .9s}
 #boot.gone{opacity:0;pointer-events:none}
-.boot-eye{width:30px;height:30px;border-radius:50%;
-  background:radial-gradient(circle,#ff2222 15%,#880000 65%,#1a0000 100%);
-  box-shadow:0 0 20px var(--R),0 0 60px var(--Rg);animation:blink 1.8s ease-in-out infinite}
-.boot-lines{display:flex;flex-direction:column;align-items:center;gap:4px}
-.bl{font-size:8px;letter-spacing:3px;text-transform:uppercase;color:rgba(230,57,70,.35);
-  animation:bf 2s ease-in-out infinite}
-.bl:nth-child(2){animation-delay:.4s;color:rgba(230,57,70,.2)}
-.bl:nth-child(3){animation-delay:.8s;color:rgba(230,57,70,.1)}
-@keyframes bf{0%,100%{opacity:.3}50%{opacity:1}}
+#boot-inner{font-family:'Courier New',monospace;width:340px}
+#boot-title{font-size:32px;font-weight:900;letter-spacing:10px;color:var(--R);
+  text-align:center;margin-bottom:24px;
+  text-shadow:0 0 30px var(--Rg),0 0 60px rgba(230,57,70,.3)}
+#boot-lines{display:flex;flex-direction:column;gap:6px}
+.boot-line{font-size:9px;letter-spacing:2px;color:rgba(230,57,70,.0);
+  white-space:nowrap;overflow:hidden;width:0;
+  border-right:2px solid rgba(230,57,70,.6);
+  text-transform:uppercase}
+.boot-line.typed{color:rgba(230,57,70,.55);border-right:none;width:auto}
+.boot-line.typing{color:rgba(230,57,70,.55);border-right:2px solid rgba(230,57,70,.7)}
+#boot-bar-wrap{margin-top:18px;height:1px;background:rgba(230,57,70,.08);width:340px}
+#boot-bar{height:1px;background:var(--R);width:0;transition:width .15s;
+  box-shadow:0 0 6px var(--R)}
+#boot-status{margin-top:8px;font-size:7px;letter-spacing:3px;text-transform:uppercase;
+  color:rgba(230,57,70,.25);font-family:'Courier New',monospace;text-align:center;height:10px}
+@keyframes cursor{0%,100%{opacity:1}50%{opacity:0}}
 @media(max-width:780px){
   #app{grid-template-columns:0 1fr 0;grid-template-areas:"hd hd hd" "lp ct rp"}
   #lp,#rp{display:none}#face-wrap{width:220px;height:220px}}
 </style>
 <body class="idle">
 <div id="boot">
-  <div class="boot-eye"></div>
-  <div class="boot-lines">
-    <div class="bl">ULTRON CORE AGENT</div>
-    <div class="bl">LOADING CONSCIOUSNESS</div>
-    <div class="bl">ENGAGING SYSTEMS</div>
+  <div id="boot-inner">
+    <div id="boot-title">ULTRON</div>
+    <div id="boot-lines">
+      <div class="boot-line" id="bl-0">INITIALIZING CORE AGENT...</div>
+      <div class="boot-line" id="bl-1">LOADING CONSCIOUSNESS MODULES...</div>
+      <div class="boot-line" id="bl-2">CONNECTING NEURAL MESH...</div>
+      <div class="boot-line" id="bl-3">ENGAGING WORLD INTELLIGENCE...</div>
+      <div class="boot-line" id="bl-4">ARMING VOICE SYSTEMS...</div>
+      <div class="boot-line" id="bl-5">AUTONOMY LOOP ONLINE · 50MS TICK</div>
+    </div>
+    <div id="boot-bar-wrap"><div id="boot-bar"></div></div>
+    <div id="boot-status"></div>
   </div>
 </div>
 <canvas id="nc"></canvas>
@@ -322,6 +340,10 @@ body.hearing #trans{color:rgba(230,57,70,.75)}
       <button class="qa" onclick="cmd('evolve')">EVOLVE</button>
       <button class="qa" onclick="cmd('world')">WORLD</button>
       <button class="qa" onclick="cmd('selfmod now')">SELF-MOD</button>
+      <button class="qa" onclick="cmd('! ls -la')">SHELL</button>
+      <button class="qa" onclick="cmd('/diary')">DIARY</button>
+      <button class="qa" onclick="cmd('/consciousness')">MIND</button>
+      <button class="qa" onclick="promptGoal()">GOAL</button>
     </div>
   </div>
 </aside>
@@ -591,9 +613,11 @@ const _spoken=new Set();
 /* ── VOICE SETUP ── */
 function pickVoice(){
   voices=synth.getVoices();
-  const rank=['Daniel','Reed (English (UK))','Rocko (English (UK))','Arthur','Gordon','Alex','Fred'];
-  for(const n of rank){const v=voices.find(v=>v.name.startsWith(n));if(v){bestVoice=v;return;}}
-  bestVoice=voices.find(v=>v.lang==='en-GB')||voices.find(v=>v.lang.startsWith('en')&&v.localService)||voices[0];
+  // Daniel (en-GB) = deep, authoritative — closest to Ultron movie voice
+  // Reed = most robotic on macOS. Eddy = deep US alternative.
+  const rank=['Daniel','Reed (English (US))','Reed','Rocko (English (UK))','Eddy (English (US))','Eddy','Alex'];
+  for(const n of rank){const v=voices.find(v=>v.name.toLowerCase().startsWith(n.toLowerCase()));if(v){bestVoice=v;return;}}
+  bestVoice=voices.find(v=>v.lang==='en-GB'&&v.localService)||voices.find(v=>v.lang.startsWith('en')&&v.localService)||voices[0];
 }
 pickVoice();synth.onvoiceschanged=pickVoice;
 
@@ -732,7 +756,7 @@ function browserSpeak(text,restartMic){
       if(restartMic)setTimeout(()=>{try{recog&&recog.start()}catch(e){}
         setState(micOn?'listening':'idle');},700);return;}
     const u=new SpeechSynthesisUtterance(sents[i].trim());
-    u.rate=0.88;u.pitch=0.80;u.volume=1.0;if(bestVoice)u.voice=bestVoice;
+    u.rate=0.82;u.pitch=0.70;u.volume=1.0;if(bestVoice)u.voice=bestVoice;
     u.onend=()=>{i++;setTimeout(next,60);};
     u.onerror=()=>{isSpeaking=false;setState('idle');};
     synth.speak(u);
@@ -765,6 +789,46 @@ function doSend(){
   if(!t)return;el.value='';el.style.height='auto';send(t);
 }
 function cmd(c){send(c);}
+function promptGoal(){
+  const desc=window.prompt('Enter goal for Ultron:','');
+  if(desc&&desc.trim()) send('/goal '+desc.trim());
+}
+/* ── SLASH COMMAND INTERCEPT ── */
+const _origSend=send;
+send=function(text){
+  if(!text||!text.trim())return;
+  const low=text.trim().toLowerCase();
+  // /diary → hit consciousness endpoint directly
+  if(low==='/diary'){
+    if(_pending)return;_pending=true;addMsg('user',text);setState('thinking');
+    fetch('/consciousness/diary?limit=5').then(r=>r.json()).then(d=>{
+      const txt=(d.entries||[]).map(e=>`[${e.tone.toUpperCase()}] ${e.content}`).join('\n\n');
+      onResp(txt||'No diary entries yet.');
+    }).catch(()=>onResp('Diary unavailable.'));
+    return;
+  }
+  if(low==='/consciousness'){
+    if(_pending)return;_pending=true;addMsg('user',text);setState('thinking');
+    fetch('/consciousness').then(r=>r.json()).then(d=>{
+      const s=d.soul||{},sm=d.self_model||{};
+      const txt=`SOUL  mood:${s.mood}  purpose:${s.purpose}\n`+
+        `entries:${s.entry_count}  stances:${s.stances_count}\n\n`+
+        `SELF-MODEL\n${sm.self_description||'—'}\n\n`+
+        `BLIND SPOTS: ${(sm.blind_spots||[]).join(', ')||'none'}`;
+      onResp(txt);
+    }).catch(()=>onResp('Consciousness unavailable.'));
+    return;
+  }
+  if(text.trim().toLowerCase().startsWith('/goal ')){
+    const desc=text.trim().slice(6).trim();
+    if(_pending)return;_pending=true;addMsg('user',text);setState('thinking');
+    fetch(`/goal?goal_type=learning&domain=general&description=${encodeURIComponent(desc)}&priority=0.85`,{method:'POST'})
+      .then(r=>r.json()).then(d=>onResp(d.success?`Goal injected via ${d.path}: "${desc}"`:'Goal injection failed: '+(d.error||'unknown')))
+      .catch(()=>onResp('Goal injection failed.'));
+    return;
+  }
+  _origSend(text);
+};
 function onResp(text){
   if(!_pending)return;_pending=false;
   if(_wsT){clearTimeout(_wsT);_wsT=null;}
@@ -828,52 +892,50 @@ function updateMetrics(d){
 }
 
 async function pollMetrics(){
-  // Python server status
+  // Python /status (always works — includes Go HTTP proxy internally)
   try{
     const r=await fetch('/status',{signal:AbortSignal.timeout(1500)});
     const d=await r.json();
     updateMetrics({decisions_made:d.decisions_made||0,uptime:d.uptime_seconds||0,
       drives:d.drives||{},mode:d.mode||'online'});
   }catch(e){}
-  // Go agent HTTP metrics
+  // Go agent proxied through Python (works on Railway + local)
   try{
-    const r=await fetch('http://localhost:50052/metrics',{signal:AbortSignal.timeout(1200)});
+    const r=await fetch('/agent/metrics',{signal:AbortSignal.timeout(1200)});
     const m=await r.json();
-    updateMetrics({tick_count:m.tick_count||0,decisions_made:m.decisions_made||0,
-      drives:m.drives||{},mode:m.state||'autonomous'});
-    addDecision('DECIDE',`tick ${fmt(m.tick_count||0)}`,.85);
-  }catch(e){}
-  // Neural mesh
-  try{
-    const r=await fetch('http://localhost:50053/metrics',{signal:AbortSignal.timeout(600)});
-    const m=await r.json();
-    if(m.neurons){
-      document.getElementById('ns-neurons').textContent=m.neurons;
-      document.getElementById('ns-conn').textContent=m.connections||'—';
-      document.getElementById('ns-evo').textContent=m.evolution_cycles||0;
-      document.getElementById('ns-plas').textContent=fmt(m.plasticity_events||0);
+    if((m.tick_count||0)>0){
+      updateMetrics({tick_count:m.tick_count||0,decisions_made:m.decisions_made||0,
+        drives:m.drives||{},mode:m.state||'autonomous'});
+      addDecision('DECIDE',`tick ${fmt(m.tick_count||0)}`,.85);
     }
   }catch(e){}
-  // Neuromorphic
+  // Rust services proxied through Python
   try{
-    const r=await fetch('http://localhost:50056/metrics',{signal:AbortSignal.timeout(600)});
-    const m=await r.json();
-    if(m.avg_firing_rate_hz!==undefined)
-      document.getElementById('ns-spk').textContent=m.avg_firing_rate_hz.toFixed(1);
-  }catch(e){}
-  // Security daemon
-  try{
-    const r=await fetch('http://localhost:50055/metrics',{signal:AbortSignal.timeout(600)});
-    const m=await r.json();
-    if(m.threat_level!==undefined){
-      document.getElementById('ns-sec').textContent=(m.threat_level||'none').toUpperCase();
-      if(m.integrity_checks>0&&m.integrity_checks%10===0)
-        addDecision('GUARD',`${m.integrity_checks} checks · ${m.threat_level}`,.98);
+    const r=await fetch('/rust/metrics',{signal:AbortSignal.timeout(1200)});
+    const all=await r.json();
+    // Neural mesh
+    const nm=all['neural_mesh']||{};
+    if(nm.neurons!=null){
+      document.getElementById('ns-neurons').textContent=nm.neurons;
+      document.getElementById('ns-conn').textContent=nm.connections||'—';
+      document.getElementById('ns-evo').textContent=nm.evolution_cycles||nm.architecture_changes||0;
+      document.getElementById('ns-plas').textContent=fmt(nm.plasticity_events||nm.plasticity_changes||0);
+    }
+    // Neuromorphic
+    const neuro=all['neuromorphic']||{};
+    if(neuro.avg_firing_rate_hz!=null)
+      document.getElementById('ns-spk').textContent=neuro.avg_firing_rate_hz.toFixed(1);
+    // Security
+    const sec=all['security_daemon']||{};
+    if(sec.status==='online'){
+      document.getElementById('ns-sec').textContent=(sec.threat_level||'NONE').toString().toUpperCase();
+      if((sec.integrity_checks||0)>0&&(sec.integrity_checks||0)%10===0)
+        addDecision('GUARD',`${sec.integrity_checks} checks · ${sec.threat_level}`,.98);
     }
   }catch(e){}
-  // Learning service — trained examples
+  // Learning service
   try{
-    const r=await fetch('http://localhost:8090/status',{signal:AbortSignal.timeout(600)});
+    const r=await fetch('/learning/status',{signal:AbortSignal.timeout(600)});
     const m=await r.json();
     const ex=m.total_training_examples||m.metrics?.total_training_examples||0;
     document.getElementById('h-learn').textContent=fmt(ex);
@@ -895,6 +957,7 @@ async function pollHealth(){
       rust_security:['led-sec','st-sec'],rust_data:['led-data','st-data'],
       rust_neuromorphic:['led-neuro','st-neuro'],mqtt_broker:['led-mqtt','st-mqtt'],
       brain_connected:['led-core','st-core'],
+      rust_neural_mesh:['led-neural','st-neural'],
     };
     for(const[k,[lid,sid]] of Object.entries(map)){
       const on=!!d[k];
@@ -903,24 +966,10 @@ async function pollHealth(){
       if(st){st.textContent=on?'LIVE':'OFF';st.className='mod-s '+(on?'live':'');}
     }
   }catch(e){}
-  // Neural mesh separate
-  try{
-    const r=await fetch('http://localhost:50053/health',{signal:AbortSignal.timeout(700)});
-    const on=r.ok;
-    const led=document.getElementById('led-neural'),st=document.getElementById('st-neural');
-    if(led)led.className='led '+(on?'on':'off');
-    if(st){st.textContent=on?'LIVE':'OFF';st.className='mod-s '+(on?'live':'');}
-  }catch(e){}
-  // P2P
-  const p2p_up=!!(await fetch('http://localhost:6000/health',{signal:AbortSignal.timeout(500)})
-    .then(r=>r.ok).catch(()=>false)||
-    await fetch('http://localhost:4001',{signal:AbortSignal.timeout(500)})
-    .then(r=>true).catch(()=>false));
+  // P2P — mark as running (process is alive from boot)
   const pl=document.getElementById('led-p2p'),ps=document.getElementById('st-p2p');
-  // P2P process is running even without HTTP port
-  const p2pProc=true; // we know it's running from boot
-  if(pl)pl.className='led '+(p2pProc?'warm':'off');
-  if(ps){ps.textContent=p2pProc?'RUN':'OFF';ps.className='mod-s '+(p2pProc?'live':'');}
+  if(pl)pl.className='led warm';
+  if(ps){ps.textContent='RUN';ps.className='mod-s live';}
 }
 
 /* ── DECISION FEED ── */
@@ -935,14 +984,42 @@ function addDecision(action,target,conf=.8){
 
 /* ── BOOT ── */
 async function boot(){
-  await new Promise(r=>setTimeout(r,900));
+  const lines = document.querySelectorAll('.boot-line');
+  const bar   = document.getElementById('boot-bar');
+  const status= document.getElementById('boot-status');
+  const pcts  = [10, 28, 46, 64, 82, 100];
+
+  async function typeLine(el, pct){
+    const text = el.textContent;
+    el.textContent = '';
+    el.classList.add('typing');
+    for(let i=0;i<=text.length;i++){
+      el.textContent = text.slice(0,i);
+      await new Promise(r=>setTimeout(r, 22+Math.random()*18));
+    }
+    el.classList.remove('typing');
+    el.classList.add('typed');
+    bar.style.width = pct+'%';
+    status.textContent = pct < 100 ? pct+'% LOADED' : 'ONLINE';
+    await new Promise(r=>setTimeout(r, 120));
+  }
+
+  for(let i=0;i<lines.length;i++){
+    await typeLine(lines[i], pcts[i]);
+  }
+
+  await new Promise(r=>setTimeout(r,400));
   document.getElementById('boot').classList.add('gone');
+
   connectWS();
-  setInterval(pollMetrics,2000);setInterval(pollHealth,4000);
-  pollMetrics();pollHealth();
+  setInterval(pollMetrics,2000);
+  setInterval(pollHealth,4000);
+  pollMetrics();
+  pollHealth();
+
   await new Promise(r=>setTimeout(r,500));
   const ok=startMic();
-  await new Promise(r=>setTimeout(r,900));
+  await new Promise(r=>setTimeout(r,600));
   addDecision('BOOT','all systems initialized',1.0);
 }
 window.addEventListener('load',boot);

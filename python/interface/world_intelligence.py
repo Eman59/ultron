@@ -543,6 +543,9 @@ class WorldIntelligenceEngine:
             # Persist to disk
             self._save_state()
 
+            # ── Push world events into the Go OODA loop ──────────────
+            self._inject_into_ooda_loop()
+
             elapsed = time.time() - start
             news_count = len(news_items)
             print(f"[WORLD-INTEL] Refresh #{self._refresh_count} complete — "
@@ -553,8 +556,7 @@ class WorldIntelligenceEngine:
             print(f"[WORLD-INTEL] Refresh error: {e}")
 
     def _generate_summary(self) -> str:
-        """Generate a brief summary of the world state using LLM."""
-        # Build a compact prompt from top items
+        """Generate a brief summary of the world state using LLM (with full fallback chain)."""
         top_news = [n["title"] for n in self._state.news[:8]]
         weather = self._state.weather
         crypto = self._state.crypto
@@ -571,36 +573,23 @@ class WorldIntelligenceEngine:
         if not prompt_parts:
             return "No data available yet."
 
-        # Use Cloudflare Workers AI for summary
+        summary_prompt = (
+            "Summarize the current world state in 2 sentences. Be direct, no filler:\n"
+            + "\n".join(prompt_parts)
+        )
+
+        # Try the shared brain module first (uses full 70B→8B→Ollama chain)
         try:
-            import os as _os
-            summary_prompt = (
-                "Summarize the current world state in 2 sentences. Be direct, no filler:\n"
-                + "\n".join(prompt_parts)
-            )
-            _account = _os.environ.get("CF_ACCOUNT_ID", "")
-            _token   = _os.environ.get("CF_API_TOKEN", "")
-            _model   = _os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
-            if not _account or not _token:
-                raise Exception("CF creds missing")
-            _url = f"https://api.cloudflare.com/client/v4/accounts/{_account}/ai/run/{_model}"
-            import urllib.request as _ur
-            payload = json.dumps({
-                "messages": [
-                    {"role": "system", "content": "You are a world-state summarizer. Be ultra-concise. 2 sentences max."},
-                    {"role": "user",   "content": summary_prompt},
-                ],
-                "max_tokens": 100,
-                "temperature": 0.3,
-            }).encode()
-            req = _ur.Request(_url, data=payload, headers={"Content-Type": "application/json", "Authorization": f"Bearer {_token}"}, method="POST")
-            with _ur.urlopen(req, timeout=10) as resp:
-                result = json.loads(resp.read().decode())
-                if result.get("success"):
-                    return result.get("result", {}).get("response", "").strip()[:300]
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from python.interface.real_brain import call_brain
+            result = call_brain(summary_prompt, max_tokens=120)
+            if result and not result.startswith("[ALL PROVIDERS"):
+                return result.strip()[:300]
         except Exception:
             pass
-        # Fallback: just concatenate top 3 headlines
+
+        # Hard fallback: concatenate headlines
         return " | ".join(top_news[:3]) if top_news else "Monitoring..."
 
     def _save_state(self):
@@ -625,6 +614,94 @@ class WorldIntelligenceEngine:
                 self._state.summary = data.get("summary", "")
         except Exception:
             pass
+
+    def _inject_into_ooda_loop(self):
+        """
+        Push the current world state as observations into the Go agent's
+        OODA loop via the HTTP /inject endpoint (port 50052).
+
+        This is the key connection: world intelligence → Go world model.
+        The Go agent will process these as external observations during
+        the OBSERVE phase of its 50ms tick.
+        """
+        agent_http = os.environ.get("ULTRON_AGENT_HTTP", "http://localhost:50052")
+        inject_url = f"{agent_http}/inject"
+
+        observations = []
+
+        # 1. Threat signals from alerts (seismic / disaster)
+        alerts = self._state.alerts
+        if alerts:
+            observations.append({
+                "type": "threat",
+                "data": {
+                    "source": "world_intel_alerts",
+                    "alert_count": len(alerts),
+                    "top_alert": alerts[0].get("title", "") if alerts else "",
+                    "threat_level": min(0.6, len(alerts) * 0.1),
+                },
+            })
+
+        # 2. Data opportunity: pending news items to process
+        news_count = len(self._state.news)
+        if news_count > 0:
+            observations.append({
+                "type": "data",
+                "data": {
+                    "source": "world_intel_news",
+                    "pending": news_count * 100,   # maps to WorldState.PendingData
+                    "learning_potential": min(0.9, news_count / 50.0),
+                    "summary": self._state.summary[:200],
+                },
+            })
+
+        # 3. Resource signal: crypto / energy price as proxy for compute cost
+        crypto = self._state.crypto
+        if crypto:
+            btc = crypto.get("bitcoin", {})
+            change = btc.get("change_24h", 0) or 0
+            # Falling prices = cheaper energy/resources
+            resource_signal = max(0.0, min(1.0, 0.5 + float(change) / 100.0))
+            observations.append({
+                "type": "resource",
+                "data": {
+                    "source": "world_intel_crypto",
+                    "btc_usd": btc.get("usd", 0),
+                    "btc_change_24h": change,
+                    "resource_signal": resource_signal,
+                },
+            })
+
+        # 4. Network signal: system state (bandwidth, etc.)
+        sys_state = self._state.system_state
+        if sys_state:
+            observations.append({
+                "type": "network",
+                "data": {
+                    "source": "world_intel_system",
+                    "health": sys_state.get("network_health", 0.9),
+                    "peers": sys_state.get("active_connections", 0),
+                },
+            })
+
+        # Push all observations
+        injected = 0
+        for obs in observations:
+            try:
+                payload = json.dumps(obs).encode("utf-8")
+                req = urllib.request.Request(
+                    inject_url, data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=1.0) as resp:
+                    if resp.status == 200:
+                        injected += 1
+            except Exception:
+                pass   # Go agent may not be running — this is best-effort
+
+        if injected > 0:
+            print(f"[WORLD-INTEL] Injected {injected}/{len(observations)} observations into OODA loop")
 
 
 # ═══════════════════════════════════════════════════════════════
