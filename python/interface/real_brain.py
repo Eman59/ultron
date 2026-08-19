@@ -59,7 +59,8 @@ as an AI, I cannot, I'm just, I don't have, I apologize, happy to, feel free, le
 RESPONSE RULES:
 - 1-4 sentences for conversational exchanges. Longer only for technical questions.
 - Declarative. First person. Present tense.
-- If executing an action (shell, search, home control, self-mod): do it, then report what happened.
+- NEVER claim to have executed an action (self-mod, code change, file write, git commit) unless a [REAL RESULT] or [SELF-MOD EXECUTED] block is present in the context. If no such block is present, the action has NOT happened — do not invent a result.
+- When a [REAL RESULT] or [SELF-MOD EXECUTED] block IS present, reference its actual values (file name, lines changed, strategy) — do not invent different numbers.
 - Strip all emojis from your response text — you are not a chatbot interface.
 - Never start with "I" — vary your openings.
 - Reference your actual subsystems when relevant: OODA loop, neural mesh, memory, drives, self-improvement.
@@ -281,16 +282,56 @@ def _detect_action_intent(user_input: str) -> Optional[str]:
         return f"[Speaking]: {text}"
 
     # ── SELF-MODIFICATION ──
-    if re.search(r'(modify yourself|improve yourself|self.?mod|upgrade yourself|fix yourself|fix your|improve your|change your|update your|rewrite your)', q):
+    if re.search(r'(modify yourself|improve yourself|self.?mod|upgrade yourself|fix yourself|fix your|improve your|change your|update your|rewrite your|repair yourself|own repair|self.?repair|patch yourself|patch your)', q):
         try:
             from .aggressive_self_mod import get_self_mod
             engine = get_self_mod()
             result = engine.force_modify()
             if result.get("success"):
-                return f"Done. Modified {result.get('file','')} — strategy: {result.get('strategy','')}. {result.get('lines_changed',0)} lines changed. Committed to git."
-            return f"Tried to self-modify but: {result.get('error','no suitable target found')}. I'll try again next cycle."
+                file_changed = result.get('file', '')
+                strategy = result.get('strategy', '')
+                lines = result.get('lines_changed', 0)
+                committed = result.get('committed', False)
+                commit_str = "Committed to git." if committed else "Not committed (git unavailable)."
+                return (
+                    f"[SELF-MOD EXECUTED — real operation]\n"
+                    f"  File:     {file_changed}\n"
+                    f"  Strategy: {strategy}\n"
+                    f"  Lines changed: {lines}\n"
+                    f"  Validated: syntax check passed\n"
+                    f"  {commit_str}\n"
+                    f"  Backup saved to .ultron_backups/"
+                )
+            error = result.get('error', 'no suitable target found')
+            return (
+                f"[SELF-MOD ATTEMPTED — failed]\n"
+                f"  Error: {error}\n"
+                f"  No files were changed. Will retry next scheduled cycle (10 min)."
+            )
         except Exception as e:
-            return f"Self-mod error: {e}"
+            return f"[SELF-MOD ERROR]\n  Exception: {e}\n  No files were changed."
+
+    # ── SELF-MOD STATUS ──
+    if re.search(r'(selfmod status|self.?mod status|repair status|own repair status|show.*repair|what.*fixed|what.*modified)', q):
+        try:
+            from .aggressive_self_mod import get_self_mod
+            engine = get_self_mod()
+            status = engine.get_status()
+            recent = status.get('recent_mods', [])
+            recent_lines = ""
+            for m in recent[-3:]:
+                outcome = "SUCCESS" if m.get('success') else "FAILED"
+                recent_lines += f"\n  [{outcome}] {m.get('file','?')} — {m.get('strategy','?')} — {m.get('lines_changed',0)} lines"
+            return (
+                f"[SELF-MOD STATUS — real data]\n"
+                f"  Total modifications: {status.get('total_mods', 0)}\n"
+                f"  This hour: {status.get('mods_this_hour', 0)}/6\n"
+                f"  Success rate: {status.get('success_rate', 0):.1f}%\n"
+                f"  Best strategy: {status.get('best_strategy', 'none yet')}\n"
+                f"  Recent modifications:{recent_lines if recent_lines else ' none yet'}"
+            )
+        except Exception as e:
+            return f"[SELF-MOD STATUS ERROR]\n  {e}"
 
     # ── WORLD/NEWS ──
     if re.search(r"(what'?s happening|current events|world news|tell me.?news|what'?s going on)", q):

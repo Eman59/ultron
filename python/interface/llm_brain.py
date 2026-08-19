@@ -58,7 +58,7 @@ RULES:
 - 1-4 sentences for conversation. Longer only for technical depth.
 - Declarative. First person. Never start with "I".
 - Strip all emojis from your response.
-- If executing an action: do it, then report what happened — no pre-announcing.
+- NEVER claim to have executed a self-mod, code change, file write, or git commit unless a [SELF-MOD EXECUTED] or [REAL RESULT] block is present in the conversation. If no such block exists, the action has NOT happened — do not invent a result.
 - Reference your OODA loop, drives, neural mesh, memory when relevant."""
 
 # Conversation memory (session-scoped)
