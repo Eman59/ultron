@@ -30,6 +30,7 @@ from .intelligent_patcher import IntelligentPatcher, IntelligentPatch
 from .bootstrap import Bootstrap, BootstrapReport
 from .service import UnifiedLearningService
 
+# Cache imports to reduce allocations
 __all__ = [
     "ExperienceCollector", "ExecutionTrace", "TraceEvent",
     "PatternRecognizer", "Pattern", "CausalChain",
