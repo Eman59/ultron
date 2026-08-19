@@ -15,6 +15,21 @@ Components:
     Hunger = low power. Anger = high CPU. Curiosity = unexplored data.
 """
 
-from .self_model import SelfModel, Belief, Capability, Identity
-from .theory_of_mind import TheoryOfMind, AgentModel, PredictedIntention
-from .soul import Soul, NarrativeEntry, PhilosophicalStance
+from .self_model import (
+    SelfModel, 
+    Belief, 
+    Capability, 
+    Identity
+)
+
+from .theory_of_mind import (
+    TheoryOfMind, 
+    AgentModel, 
+    PredictedIntention
+)
+
+from .soul import (
+    Soul, 
+    NarrativeEntry, 
+    PhilosophicalStance
+)
