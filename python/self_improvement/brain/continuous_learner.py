@@ -526,25 +526,19 @@ class ContinuousLearner:
         if version.benchmark_score > self._metrics.best_benchmark_score:
             self._metrics.best_benchmark_score = version.benchmark_score
         
-        # Register with Ollama if available
-        self._register_with_ollama(version)
+        # Export model info
+        self._export_model_info(version)
 
-    def _register_with_ollama(self, version: ModelVersion):
-        """Register the new model with local Ollama instance."""
+    def _export_model_info(self, version: ModelVersion):
+        """Save model metadata for reference."""
         try:
-            register_cmd = self.pipeline.export_to_ollama(
+            info_path = self.pipeline.export_model_info(
                 model_path=version.model_path,
                 model_name=f"ultron-brain:v{version.version:03d}",
             )
-            # Also set as latest
-            latest_cmd = self.pipeline.export_to_ollama(
-                model_path=version.model_path,
-                model_name="ultron-brain:latest",
-            )
-            print(f"  Ollama registration commands generated")
-            print(f"    {register_cmd}")
+            print(f"  Model info saved: {info_path}")
         except Exception:
-            pass  # Ollama might not be available
+            pass  # Non-critical
 
     def rollback(self) -> bool:
         """Rollback to the previous model version."""

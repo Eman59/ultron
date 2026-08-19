@@ -51,9 +51,8 @@ class LLMProvider(Enum):
     """Supported LLM providers."""
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
-    OLLAMA = "ollama"          # Local, free
+    CLOUDFLARE = "cloudflare"  # Free Workers AI
     TOGETHER = "together"      # Fast cloud
-    GROQ = "groq"              # Ultra-fast inference
     DEEPSEEK = "deepseek"      # Cheap, good at code
 
 
@@ -389,30 +388,20 @@ class LLMBrain:
                 priority=3,
             ))
         
-        # Groq (ultra-fast)
-        groq_key = os.environ.get("GROQ_API_KEY", "")
-        if groq_key:
+        # Cloudflare Workers AI (free, always available)
+        cf_account = os.environ.get("CF_ACCOUNT_ID", "")
+        cf_token   = os.environ.get("CF_API_TOKEN", "")
+        if cf_account and cf_token:
             self._providers.append(ProviderConfig(
-                provider=LLMProvider.GROQ,
-                api_key=groq_key,
-                base_url="https://api.groq.com/openai/v1",
-                model="llama-3.1-70b-versatile",
-                fallback_model="llama-3.1-8b-instant",
-                cost_per_1k_input=0.0001,
-                cost_per_1k_output=0.0001,
+                provider=LLMProvider.CLOUDFLARE,
+                api_key=cf_token,
+                base_url=f"https://api.cloudflare.com/client/v4/accounts/{cf_account}/ai/run",
+                model=os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct"),
+                fallback_model="@cf/meta/llama-3.1-8b-instruct",
+                cost_per_1k_input=0.0,
+                cost_per_1k_output=0.0,
                 priority=4,
             ))
-        
-        # Ollama (local, free, always available)
-        self._providers.append(ProviderConfig(
-            provider=LLMProvider.OLLAMA,
-            base_url=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
-            model=os.environ.get("OLLAMA_MODEL", "deepseek-coder-v2:latest"),
-            fallback_model="codellama:13b",
-            cost_per_1k_input=0.0,
-            cost_per_1k_output=0.0,
-            priority=10 if not self._prefer_local else 0,
-        ))
         
         # Sort by priority
         self._providers.sort(key=lambda p: p.priority)
@@ -638,7 +627,7 @@ Why does this pattern occur? Is it beneficial or harmful? What should we do abou
         return LLMResponse(
             request_id=request.id,
             content="",
-            provider_used=LLMProvider.OLLAMA,
+            provider_used=LLMProvider.CLOUDFLARE,
             model_used="none",
             success=False,
             error="All providers failed or budget exceeded",
@@ -649,8 +638,8 @@ Why does this pattern occur? Is it beneficial or harmful? What should we do abou
         """Call a specific LLM provider."""
         start = time.time()
         
-        if config.provider == LLMProvider.OLLAMA:
-            return self._call_ollama(config, request, full_prompt, start)
+        if config.provider == LLMProvider.CLOUDFLARE:
+            return self._call_cloudflare(config, request, full_prompt, start)
         elif config.provider == LLMProvider.ANTHROPIC:
             return self._call_anthropic(config, request, full_prompt, start)
         else:
@@ -783,46 +772,42 @@ Why does this pattern occur? Is it beneficial or harmful? What should we do abou
         response.code_blocks = self._extract_code_blocks(content)
         return response
 
-    def _call_ollama(self, config: ProviderConfig, request: LLMRequest,
+    def _call_cloudflare(self, config: ProviderConfig, request: LLMRequest,
                       full_prompt: str, start: float) -> LLMResponse:
-        """Call local Ollama API."""
+        """Call Cloudflare Workers AI."""
         messages = []
         if request.system_prompt:
             messages.append({"role": "system", "content": request.system_prompt})
         if request.conversation_id:
             messages.extend(self._memory.get_history(request.conversation_id))
         messages.append({"role": "user", "content": full_prompt})
-        
+
         payload = {
-            "model": config.model,
             "messages": messages,
-            "stream": False,
-            "options": {
-                "temperature": request.temperature,
-                "num_predict": request.max_tokens,
-            },
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
         }
-        
-        url = f"{config.base_url}/api/chat"
-        headers = {"Content-Type": "application/json"}
-        
+
+        url = f"{config.base_url}/{config.model}"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {config.api_key}",
+        }
+
         response_data = self._http_post(url, payload, headers, timeout=request.timeout_seconds)
-        
-        if "error" in response_data:
-            # Try fallback model
-            payload["model"] = config.fallback_model
-            response_data = self._http_post(url, payload, headers, timeout=request.timeout_seconds)
-            if "error" in response_data:
-                return LLMResponse(
-                    request_id=request.id, content="",
-                    provider_used=config.provider, model_used=config.model,
-                    success=False, error=str(response_data.get("error", "Ollama not available")),
-                )
-        
-        content = response_data.get("message", {}).get("content", "")
-        tokens_in = response_data.get("prompt_eval_count", 0)
-        tokens_out = response_data.get("eval_count", 0)
-        
+
+        if not response_data.get("success"):
+            return LLMResponse(
+                request_id=request.id, content="",
+                provider_used=config.provider, model_used=config.model,
+                success=False, error=str(response_data.get("errors", "Cloudflare AI error")),
+            )
+
+        content = response_data.get("result", {}).get("response", "")
+        usage = response_data.get("result", {}).get("usage", {})
+        tokens_in  = usage.get("prompt_tokens", 0)
+        tokens_out = usage.get("completion_tokens", 0)
+
         response = LLMResponse(
             request_id=request.id,
             content=content,
@@ -831,7 +816,7 @@ Why does this pattern occur? Is it beneficial or harmful? What should we do abou
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             latency_ms=(time.time() - start) * 1000,
-            cost_usd=0.0,  # Local = free
+            cost_usd=0.0,  # Free tier
             success=True,
         )
         response.code_blocks = self._extract_code_blocks(content)
@@ -862,8 +847,8 @@ Why does this pattern occur? Is it beneficial or harmful? What should we do abou
     def _select_providers(self, priority: Priority) -> List[ProviderConfig]:
         """Select providers based on priority."""
         if priority == Priority.BACKGROUND:
-            # Only use free local models
-            return [p for p in self._providers if p.provider == LLMProvider.OLLAMA]
+            # Only use free models
+            return [p for p in self._providers if p.provider == LLMProvider.CLOUDFLARE]
         elif priority == Priority.CRITICAL:
             # Use best models first (Anthropic/OpenAI)
             return sorted(self._providers, key=lambda p: p.priority)

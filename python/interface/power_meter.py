@@ -38,23 +38,14 @@ def get_power_percentages() -> Dict[str, Any]:
     # ═══════════════════════════════════════════════════════════
     intel_score = 0
 
-    # LLM available? (Groq or Ollama)
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if groq_key:
-        intel_score += 35  # Groq = fast cloud LLM
+    # LLM available? (Cloudflare Workers AI)
+    cf_account = os.environ.get("CF_ACCOUNT_ID", "")
+    cf_token   = os.environ.get("CF_API_TOKEN", "")
+    if cf_account and cf_token:
+        intel_score += 35  # Cloudflare Workers AI active
 
-    if not groq_key:
-        try:
-            import urllib.request
-            with urllib.request.urlopen("http://localhost:11434/api/tags", timeout=2) as resp:
-                data = json.loads(resp.read().decode())
-                models = [m["name"] for m in data.get("models", [])]
-                if any("14b" in m or "70b" in m for m in models):
-                    intel_score += 35
-                elif models:
-                    intel_score += 20
-        except Exception:
-            pass
+    if not (cf_account and cf_token):
+        pass  # No local LLM fallback
 
     # Memory file exists and has data?
     memory_file = PROJECT_ROOT / "data" / "brain_memory.json"
@@ -349,7 +340,7 @@ def get_power_percentages() -> Dict[str, Any]:
     if is_cloud:
         # On cloud: modules are running, code is deployed, LLM works via API
         # Give proper credit for capabilities that exist but check differently
-        scores["intelligence"] = max(scores.get("intelligence", 0), 70)  # Groq LLM works
+        scores["intelligence"] = max(scores.get("intelligence", 0), 70)  # Cloudflare Workers AI active
         scores["self_improvement"] = max(scores.get("self_improvement", 0), 50)  # Engine deployed
         scores["autonomy"] = max(scores.get("autonomy", 0), 55)  # Daemon runs on cloud
         scores["world_awareness"] = max(scores.get("world_awareness", 0), 80)  # Feeds work

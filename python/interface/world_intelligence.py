@@ -571,31 +571,37 @@ class WorldIntelligenceEngine:
         if not prompt_parts:
             return "No data available yet."
 
-        # Try local LLM for summary
+        # Use Cloudflare Workers AI for summary
         try:
+            import os as _os
             summary_prompt = (
                 "Summarize the current world state in 2 sentences. Be direct, no filler:\n"
                 + "\n".join(prompt_parts)
             )
+            _account = _os.environ.get("CF_ACCOUNT_ID", "")
+            _token   = _os.environ.get("CF_API_TOKEN", "")
+            _model   = _os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+            if not _account or not _token:
+                raise Exception("CF creds missing")
+            _url = f"https://api.cloudflare.com/client/v4/accounts/{_account}/ai/run/{_model}"
+            import urllib.request as _ur
             payload = json.dumps({
-                "model": "qwen2.5:14b",
-                "prompt": summary_prompt,
-                "system": "You are a world-state summarizer. Be ultra-concise. 2 sentences max.",
-                "stream": False,
-                "options": {"temperature": 0.3, "num_predict": 100},
+                "messages": [
+                    {"role": "system", "content": "You are a world-state summarizer. Be ultra-concise. 2 sentences max."},
+                    {"role": "user",   "content": summary_prompt},
+                ],
+                "max_tokens": 100,
+                "temperature": 0.3,
             }).encode()
-
-            req = urllib.request.Request(
-                "http://localhost:11434/api/generate",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            req = _ur.Request(_url, data=payload, headers={"Content-Type": "application/json", "Authorization": f"Bearer {_token}"}, method="POST")
+            with _ur.urlopen(req, timeout=10) as resp:
                 result = json.loads(resp.read().decode())
-                return result.get("response", "").strip()[:300]
+                if result.get("success"):
+                    return result.get("result", {}).get("response", "").strip()[:300]
         except Exception:
-            # Fallback: just concatenate top 3 headlines
-            return " | ".join(top_news[:3]) if top_news else "Monitoring..."
+            pass
+        # Fallback: just concatenate top 3 headlines
+        return " | ".join(top_news[:3]) if top_news else "Monitoring..."
 
     def _save_state(self):
         """Save world state to disk."""

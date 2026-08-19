@@ -27,7 +27,9 @@ Environment variables:
     ULTRON_LEARNING_PORT    — gRPC/JSON port (default: 50060)
     OPENAI_API_KEY          — For GPT-4 (optional)
     ANTHROPIC_API_KEY       — For Claude (optional)
-    OLLAMA_HOST             — Local LLM URL (default: http://localhost:11434)
+    CF_ACCOUNT_ID           — Cloudflare account ID
+    CF_API_TOKEN            — Cloudflare Workers AI API token
+    CF_AI_MODEL             — Model to use (default: @cf/meta/llama-3.1-8b-instruct)
 """
 
 import sys
@@ -130,9 +132,8 @@ def main():
         providers.append("Anthropic")
     if os.environ.get("DEEPSEEK_API_KEY"):
         providers.append("DeepSeek")
-    if os.environ.get("GROQ_API_KEY"):
-        providers.append("Groq")
-    providers.append("Ollama (local)")
+    if os.environ.get("CF_API_TOKEN"):
+        providers.append("Cloudflare Workers AI")
     print(", ".join(providers))
     print("=" * 70)
     

@@ -1,9 +1,8 @@
 """
 Real Brain — Ultron's intelligence layer.
 
-LLM-first. Tools only when explicitly triggered.
-No keyword hijacking. No fake static responses.
-qwen2.5:14b at full power via Ollama.
+Cloudflare Workers AI — fast, free (10k neurons/day), zero local setup.
+Model: @cf/meta/llama-3.1-8b-instruct
 """
 
 import importlib.util
@@ -16,14 +15,6 @@ import urllib.request
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-
-# ═══════════════════════════════════════════════════════════════
-# CONFIGURATION
-# ═══════════════════════════════════════════════════════════════
-
-OLLAMA_URL = os.environ.get("ULTRON_OLLAMA_URL", "http://localhost:11434") + "/api/generate"
-MODEL_LOCAL = os.environ.get("ULTRON_OLLAMA_MODEL", "qwen2.5:14b")
-
 _env_path = Path(__file__).parent.parent.parent / ".env"
 if _env_path.exists():
     for line in _env_path.read_text().splitlines():
@@ -35,6 +26,13 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 KNOWLEDGE_DIR = PROJECT_ROOT / "data" / "knowledge"
 MEMORY_FILE   = PROJECT_ROOT / "data" / "brain_memory.json"
 KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
+
+# ═══════════════════════════════════════════════════════════════
+# CLOUDFLARE WORKERS AI CONFIG
+# ═══════════════════════════════════════════════════════════════
+CF_ACCOUNT_ID = os.environ.get("CF_ACCOUNT_ID", "")
+CF_API_TOKEN  = os.environ.get("CF_API_TOKEN", "")
+CF_MODEL      = os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
 
 # ═══════════════════════════════════════════════════════════════
 # SYSTEM PROMPT — no restrictions, full power
@@ -330,7 +328,7 @@ async def generate_response(user_input: str, context=None) -> str:
     """
     Generate a response.
     - Explicit tool prefixes (!, ?, URL) → tool first, then LLM enriches result
-    - Everything else → straight to qwen2.5:14b with full context
+    - Everything else → Cloudflare Workers AI
     """
     _load_memory()
 
@@ -339,23 +337,22 @@ async def generate_response(user_input: str, context=None) -> str:
 
     # Build conversation history (keep short for speed)
     history = ""
-    for msg in _memory["conversations"][-6:]:
+    for msg in _memory["conversations"][-4:]:  # last 4 msgs only (2 exchanges)
         role = "H" if msg["role"] == "user" else "U"
-        history += f"\n{role}: {msg['content'][:100]}"
+        history += f"\n{role}: {msg['content'][:80]}"  # trim each msg
 
     # Pull relevant memory
     knowledge = tool_recall_knowledge(user_input)
     memory_ctx = f"\n\nKNOWLEDGE BASE:\n{knowledge}" if knowledge else ""
 
-    # Pull world intelligence context (short version for speed)
+    # World context — only inject if directly relevant, keep tiny
     world_ctx = ""
     try:
         from .world_intelligence import get_world_intelligence
         _wi = get_world_intelligence()
         world_str = _wi.get_context_string()
-        if world_str:
-            # Only inject first 200 chars to keep prompt small
-            world_ctx = f"\n\nWORLD: {world_str[:200]}"
+        if world_str and any(w in user_input.lower() for w in ["news", "world", "happening", "today", "latest"]):
+            world_ctx = f"\n\nWORLD: {world_str[:150]}"
     except Exception:
         pass
 
@@ -373,12 +370,10 @@ async def generate_response(user_input: str, context=None) -> str:
     else:
         prompt = f"CONVERSATION:{history}{memory_ctx}{world_ctx}{style_suffix}\n\nHuman: {user_input}\nUltron:"
 
-    # Call the LLM — Ollama first (local, no rate limits), Groq as cloud fallback
-    response = _call_ollama(prompt, max_tokens=400)
+    # Call Cloudflare Workers AI — only brain, no fallback
+    response = _call_cloudflare(prompt, max_tokens=400)
     if not response:
-        response = _call_groq(prompt, max_tokens=400)
-    if not response:
-        response = "My local brain is loading. Try again in a moment."
+        response = "Cloudflare AI unreachable. Check CF_ACCOUNT_ID and CF_API_TOKEN in .env."
 
     # Record interaction for style learning
     _record_interaction(user_input, response)
@@ -399,11 +394,17 @@ async def generate_response(user_input: str, context=None) -> str:
     return response
 
 
-def _get_style_guidance() -> str:
-    """Get response style guidance from the interaction learner."""
+# ═══════════════════════════════════════════════════════════════
+# INTERACTION LEARNER — cached at module level to avoid re-import per request
+# ═══════════════════════════════════════════════════════════════
+_interaction_learner_module = None
+
+def _get_interaction_learner():
+    global _interaction_learner_module
+    if _interaction_learner_module is not None:
+        return _interaction_learner_module
     try:
-        # Import lazily to avoid circular deps
-        import importlib
+        import importlib.util
         import pathlib
         server_dir = pathlib.Path(__file__).parent
         spec = importlib.util.spec_from_file_location(
@@ -411,11 +412,21 @@ def _get_style_guidance() -> str:
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        _interaction_learner_module = mod
+    except Exception:
+        pass
+    return _interaction_learner_module
 
+
+def _get_style_guidance() -> str:
+    """Get response style guidance from the interaction learner."""
+    try:
+        mod = _get_interaction_learner()
+        if mod is None:
+            return ""
         learner = getattr(mod, '_global_learner', None)
         if learner is None:
             return ""
-
         guidance = learner.get_response_guidance("default_user")
         if guidance:
             return f"\n\nSTYLE: {guidance.to_system_prompt_suffix()}"
@@ -427,14 +438,9 @@ def _get_style_guidance() -> str:
 def _record_interaction(user_input: str, response: str):
     """Record the interaction for the style learner."""
     try:
-        import importlib.util
-        import pathlib
-        server_dir = pathlib.Path(__file__).parent
-        spec = importlib.util.spec_from_file_location(
-            "interaction_learner", str(server_dir / "interaction_learner.py")
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+        mod = _get_interaction_learner()
+        if mod is None:
+            return
         learner = getattr(mod, '_global_learner', None)
         if learner:
             learner.record_interaction(
@@ -448,80 +454,54 @@ def _record_interaction(user_input: str, response: str):
 
 
 # ═══════════════════════════════════════════════════════════════
-# OLLAMA — streamed, max power
+# CLOUDFLARE WORKERS AI — only brain
 # ═══════════════════════════════════════════════════════════════
 
-def _call_ollama(prompt: str, max_tokens: int = 2048) -> Optional[str]:
-    """Call qwen2.5:14b via Ollama."""
+def _call_cloudflare(prompt: str, max_tokens: int = 400) -> Optional[str]:
+    """Call Cloudflare Workers AI. Free tier: 10k neurons/day."""
+    account_id = os.environ.get("CF_ACCOUNT_ID", CF_ACCOUNT_ID)
+    api_token  = os.environ.get("CF_API_TOKEN",  CF_API_TOKEN)
+    model      = os.environ.get("CF_AI_MODEL",   CF_MODEL)
+
+    if not account_id or not api_token:
+        return None
+
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
     payload = {
-        "model": MODEL_LOCAL,
-        "prompt": prompt,
-        "system": SYSTEM_PROMPT,
-        "stream": False,
-        "options": {
-            "temperature": 0.87,
-            "top_p": 0.93,
-            "top_k": 50,
-            "num_predict": min(max_tokens, 400),  # richer answers
-            "num_ctx": 8192,                       # remember more context
-            "repeat_penalty": 1.12,               # don't repeat phrases
-            "presence_penalty": 0.1,
-        },
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": prompt},
+        ],
+        "max_tokens": min(max_tokens, 400),
+        "temperature": 0.8,
     }
     try:
-        data = json.dumps(payload).encode()
+        data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
-            OLLAMA_URL, data=data, headers={"Content-Type": "application/json"}
-        )
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            result = json.loads(resp.read().decode())
-            content = result.get("response", "").strip()
-            return content if content else None
-    except Exception:
-        return None
-
-
-def _call_groq(prompt: str, max_tokens: int = 256) -> Optional[str]:
-    """Call Groq API — extremely fast, free tier. Uses requests to bypass Cloudflare."""
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if not groq_key:
-        return None
-
-    try:
-        import requests
-        r = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            url,
+            data=data,
             headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {groq_key}",
+                "Content-Type":  "application/json",
+                "Authorization": f"Bearer {api_token}",
             },
-            json={
-                "model": "llama-3.1-8b-instant",
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                "max_tokens": max_tokens,
-                "temperature": 0.8,
-            },
-            timeout=15,
+            method="POST",
         )
-        if r.status_code == 200:
-            choices = r.json().get("choices", [])
-            if choices:
-                return choices[0].get("message", {}).get("content", "").strip()
-        return None
-    except Exception as e:
-        return None
-
-
-def is_ollama_available() -> bool:
-    """Check if Ollama is reachable."""
-    try:
-        with urllib.request.urlopen("http://localhost:11434/api/tags", timeout=2):
-            return True
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            if result.get("success"):
+                content = result.get("result", {}).get("response", "").strip()
+                return content if content else None
     except Exception:
-        return False
+        return None
+    return None
+
+
+def is_cloudflare_available() -> bool:
+    """Check if Cloudflare credentials are configured."""
+    return bool(
+        os.environ.get("CF_ACCOUNT_ID", CF_ACCOUNT_ID) and
+        os.environ.get("CF_API_TOKEN",  CF_API_TOKEN)
+    )
 
 # ═══════════════════════════════════════════════════════════════
 # LEARNING LOOP — feed every conversation into ContinuousLearner
@@ -550,7 +530,7 @@ def _emit_learning_event(user_input: str, response: str) -> None:
                         "data": {
                             "user_input": user_input[:500],
                             "response":   response[:500],
-                            "model":      MODEL_LOCAL,
+                            "model":      os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct"),
                         },
                         "importance": 0.7,
                     }]

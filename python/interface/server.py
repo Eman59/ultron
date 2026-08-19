@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from enum import Enum
 
 from .grpc_bridge import GRPCBridge, GRPCConfig, ConnectionState
-from .real_brain import generate_response, is_ollama_available
+from .real_brain import generate_response, is_cloudflare_available
 
 # ═══════════════════════════════════════════════════════════════
 # SOUL — started at boot so diary generates
@@ -374,10 +374,10 @@ async def lifespan(app: FastAPI):
     print("=" * 55)
     print("  ULTRON PERSONAL INTERFACE — ONLINE")
     if connected:
-        print("  Mode: LIVE (Go Core Agent + Ollama)")
+        print("  Mode: LIVE (Go Core Agent + Cloudflare AI)")
     else:
-        print("  Mode: PYTHON + OLLAMA (qwen2.5:14b)")
-    print(f"  LLM: {'Ollama ready' if is_ollama_available() else 'Ollama offline!'}")
+        print("  Mode: PYTHON + CLOUDFLARE AI")
+    print(f"  LLM: {'Cloudflare AI ready' if is_cloudflare_available() else 'Cloudflare AI — set CF_ACCOUNT_ID and CF_API_TOKEN!'}")
 
     # Print wired modules
     wired = []
@@ -710,7 +710,7 @@ async def health():
         "status": "alive",
         "uptime": time.time() - _start_time,
         "brain_connected": bridge.is_connected,
-        "llm_active": is_ollama_available(),
+        "llm_active": is_cloudflare_available(),
         # Python modules
         "soul":             _soul is not None,
         "self_model":       _self_model is not None,
@@ -876,7 +876,7 @@ async def system_status_full():
         "supply_chain": _supply_chain is not None,
         "intuition_engine": _intuition_engine is not None,
         "grpc_bridge": bridge.is_connected,
-        "ollama": is_ollama_available(),
+        "cf_ai": is_cloudflare_available(),
     }
     online = sum(1 for v in modules.values() if v)
     return {
@@ -965,7 +965,7 @@ async def execute_command(body: dict):
                 "drives": drives,
             }
         uptime = int(time.time() - _start_time)
-        return {"response": f"PYTHON+OLLAMA mode | Uptime: {uptime}s | LLM: {'ready' if is_ollama_available() else 'offline'}", "drives": None}
+        return {"response": f"PYTHON + CLOUDFLARE AI mode | Uptime: {uptime}s | LLM: {'ready' if is_cloudflare_available() else 'set CF_ACCOUNT_ID + CF_API_TOKEN'}", "drives": None}
 
     # ── DRIVES ──────────────────────────────────────────────────
     elif action in ("drives",):
@@ -1485,15 +1485,24 @@ def _analyze_pdf(file_path):
 
 
 def _analyze_image(file_path, content):
-    import base64 as _b64, urllib.request, json as _json
+    import base64 as _b64, urllib.request, json as _json, os as _os
     img_b64 = _b64.b64encode(content).decode()
-    payload = {"model": "llava", "prompt": "Describe this image in detail.", "images": [img_b64], "stream": False, "options": {"num_predict": 300}}
-    try:
-        req = urllib.request.Request("http://localhost:11434/api/generate", data=_json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return _json.loads(resp.read().decode()).get("response", "Image received.")
-    except Exception:
-        return f"Image received ({len(content)/1024:.0f} KB). Run 'ollama pull llava' for visual analysis."
+    account = _os.environ.get("CF_ACCOUNT_ID", "")
+    token   = _os.environ.get("CF_API_TOKEN", "")
+    # Use llava vision model on Cloudflare if available, otherwise plain describe
+    model = "@cf/llava-hf/llava-1.5-7b-hf"
+    if account and token:
+        try:
+            url = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"
+            payload = _json.dumps({"image": img_b64, "prompt": "Describe this image in detail.", "max_tokens": 300}).encode()
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"}, method="POST")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = _json.loads(resp.read().decode())
+                if result.get("success"):
+                    return result.get("result", {}).get("description", "Image received.")
+        except Exception:
+            pass
+    return f"Image received ({len(content)/1024:.0f} KB). Visual analysis unavailable."
 
 
 def _analyze_text(file_path):
@@ -1699,7 +1708,7 @@ from .responses import RESPONSES as _RESPONSES
 
 
 def _intelligent_response(request: UserRequest) -> UltronDecision:
-    """Generate an intelligent response using local LLM (Ollama)."""
+    """Generate an intelligent response using Cloudflare Workers AI."""
     query_lower = request.query.lower()
     
     # ━━━━ DETECT SELF-MODIFICATION COMMANDS ━━━━
@@ -1742,87 +1751,67 @@ def _intelligent_response(request: UserRequest) -> UltronDecision:
             decision_id=f"ultron_{_decision_counter}_{int(time.time())}",
             action="respond",
             target="user",
-            details={"source": "ollama", "model": "qwen2.5:14b"},
+            details={"source": "cloudflare", "model": os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")},
             confidence=0.95,
             reasoning=llm_response,
             alternatives=[],
             requires_approval=False,
         )
     
-    # Fallback to template responses if Ollama is down
+    # Fallback to template responses if Cloudflare AI is unavailable
     return _template_response(request)
 
 
 def _sync_generate(query: str, context: dict):
-    """Synchronous wrapper for LLM call — Ollama FIRST (fast), OpenRouter for fallback."""
-    import urllib.request
+    """Synchronous LLM call via Cloudflare Workers AI."""
     import json as _json
     import os
-    
+
     from .llm_brain import ULTRON_SYSTEM_PROMPT
     from .code_access import get_architecture_summary
-    
+
+    account_id = os.environ.get("CF_ACCOUNT_ID", "")
+    api_token  = os.environ.get("CF_API_TOKEN", "")
+    model      = os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+
+    if not account_id or not api_token:
+        return None
+
     arch = get_architecture_summary()
     state_ctx = ""
     if context:
         state_ctx = f"\nSTATE: decisions={context.get('decisions_made',0)}, uptime={context.get('uptime',0):.0f}s"
-    
+
     prompt = f"{query}{state_ctx}\nARCHITECTURE: {arch['total_files']} files, {arch['total_lines']} lines"
 
-    # Try LOCAL Ollama first (1-2 seconds, always available)
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
+    payload = {
+        "messages": [
+            {"role": "system", "content": ULTRON_SYSTEM_PROMPT},
+            {"role": "user",   "content": prompt},
+        ],
+        "max_tokens": 300,
+        "temperature": 0.8,
+    }
     try:
-        payload = {
-            "model": "qwen2.5:14b",
-            "prompt": prompt,
-            "system": ULTRON_SYSTEM_PROMPT,
-            "stream": False,
-            "options": {"temperature": 0.7, "top_p": 0.9, "num_predict": 300}
-        }
-        data = _json.dumps(payload).encode('utf-8')
-        req = urllib.request.Request(
-            "http://localhost:11434/api/generate",
+        import urllib.request as _ur
+        data = _json.dumps(payload).encode("utf-8")
+        req = _ur.Request(
+            url,
             data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST"
+            headers={
+                "Content-Type":  "application/json",
+                "Authorization": f"Bearer {api_token}",
+            },
+            method="POST",
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = _json.loads(resp.read().decode('utf-8'))
-            response = result.get("response", "").strip()
-            if response:
-                return response
+        with _ur.urlopen(req, timeout=15) as resp:
+            result = _json.loads(resp.read().decode("utf-8"))
+            if result.get("success"):
+                content = result.get("result", {}).get("response", "").strip()
+                return content if content else None
     except Exception:
-        pass
-
-    # Fallback: OpenRouter (slower but smarter, only if Ollama fails)
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
-    if openrouter_key:
-        try:
-            payload = {
-                "model": "meta-llama/llama-3.1-8b-instruct",
-                "messages": [
-                    {"role": "system", "content": ULTRON_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                "max_tokens": 300,
-                "temperature": 0.7,
-            }
-            data = _json.dumps(payload).encode('utf-8')
-            req = urllib.request.Request(
-                "https://openrouter.ai/api/v1/chat/completions",
-                data=data,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {openrouter_key}",
-                    "HTTP-Referer": "http://localhost:8000",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                result = _json.loads(resp.read().decode('utf-8'))
-                choices = result.get("choices", [])
-                if choices:
-                    return choices[0].get("message", {}).get("content", "").strip()
-        except Exception:
-            pass
+        return None
 
     return None
 

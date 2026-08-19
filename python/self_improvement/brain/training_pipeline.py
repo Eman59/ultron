@@ -687,11 +687,9 @@ print("\\n✓ Ultron brain training complete!")
         
         return str(script_path)
 
-    def export_to_ollama(self, model_path: str, model_name: str = "ultron-brain") -> str:
+    def export_model_info(self, model_path: str, model_name: str = "ultron-brain") -> str:
         """
-        Export a trained model to Ollama for local inference.
-        
-        This creates a Modelfile and registers it with Ollama.
+        Export model metadata — saves info about the trained model.
         """
         modelfile_path = Path(model_path) / "Modelfile"
         
@@ -723,11 +721,9 @@ You have deep knowledge of the Ultron architecture:
 Always be precise, technical, and action-oriented.\"\"\"
 """
         modelfile_path.write_text(modelfile_content)
-        
-        # Command to register with Ollama
-        register_cmd = f"ollama create {model_name} -f {modelfile_path}"
-        
-        return register_cmd
+
+        # Return path to model info file
+        return str(modelfile_path)
 
     def get_status(self) -> Dict[str, Any]:
         """Get pipeline status."""

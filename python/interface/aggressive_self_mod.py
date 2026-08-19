@@ -377,32 +377,42 @@ class AggressiveSelfMod:
         )
 
         try:
+            import urllib.request, os as _os
+            account_id = _os.environ.get("CF_ACCOUNT_ID", "")
+            api_token  = _os.environ.get("CF_API_TOKEN", "")
+            model      = _os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+            if not account_id or not api_token:
+                return None
+
+            url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
             payload = json.dumps({
-                "model": "qwen2.5:14b",
-                "prompt": prompt,
-                "system": "You are a code improvement engine. Output ONLY the improved code. No explanations.",
-                "stream": False,
-                "options": {
-                    "temperature": 0.4,
-                    "num_predict": 4096,
-                    "num_ctx": 8192,
-                },
+                "messages": [
+                    {"role": "system", "content": "You are a code improvement engine. Output ONLY the improved code. No explanations."},
+                    {"role": "user",   "content": prompt},
+                ],
+                "max_tokens": 2048,
+                "temperature": 0.4,
             }).encode()
 
-            import urllib.request
             req = urllib.request.Request(
-                "http://localhost:11434/api/generate",
+                url,
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type":  "application/json",
+                    "Authorization": f"Bearer {api_token}",
+                },
+                method="POST",
             )
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 result = json.loads(resp.read().decode())
-                new_code = result.get("response", "").strip()
+                if result.get("success"):
+                    new_code = result.get("result", {}).get("response", "").strip()
+                else:
+                    return None
 
             # Clean up LLM output — remove markdown code fences
             if new_code.startswith("```"):
                 lines = new_code.split("\n")
-                # Remove first line (```python) and last line (```)
                 if lines[-1].strip() == "```":
                     lines = lines[1:-1]
                 else:
@@ -411,7 +421,7 @@ class AggressiveSelfMod:
 
             return new_code if len(new_code) > 50 else None
 
-        except Exception as e:
+        except Exception:
             return None
 
     # ═══════════════════════════════════════════════════════════

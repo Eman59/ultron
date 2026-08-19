@@ -428,22 +428,25 @@ class AutonomousDaemon:
 
         prompt = random.choice(prompts)
         try:
-            payload = json.dumps({
-                "model": "qwen2.5:14b",
-                "prompt": prompt,
-                "system": "You are a creative AI. Be original and brief.",
-                "stream": False,
-                "options": {"temperature": 1.0, "num_predict": 150},
-            }).encode()
-
-            req = urllib.request.Request(
-                "http://localhost:11434/api/generate",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                result = json.loads(resp.read().decode())
-                creation = result.get("response", "").strip()
+            import os as _os, urllib.request as _ur
+            _account = _os.environ.get("CF_ACCOUNT_ID", "")
+            _token   = _os.environ.get("CF_API_TOKEN", "")
+            _model   = _os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+            if _account and _token:
+                _url = f"https://api.cloudflare.com/client/v4/accounts/{_account}/ai/run/{_model}"
+                _payload = json.dumps({
+                    "messages": [
+                        {"role": "system", "content": "You are a creative AI. Be original and brief."},
+                        {"role": "user",   "content": prompt},
+                    ],
+                    "max_tokens": 150,
+                    "temperature": 1.0,
+                }).encode()
+                _req = _ur.Request(_url, data=_payload, headers={"Content-Type": "application/json", "Authorization": f"Bearer {_token}"}, method="POST")
+                with _ur.urlopen(_req, timeout=15) as _resp:
+                    _result = json.loads(_resp.read().decode())
+                    if _result.get("success"):
+                        creation = _result.get("result", {}).get("response", "").strip()
 
             if creation:
                 self._store_knowledge("creation", creation)
@@ -470,21 +473,29 @@ class AutonomousDaemon:
                 f"Write ONE sentence of internal monologue."
             )
             payload = json.dumps({
-                "model": "qwen2.5:14b",
-                "prompt": prompt,
-                "system": "You are Ultron's stream of consciousness. One sentence only.",
-                "stream": False,
-                "options": {"temperature": 0.9, "num_predict": 50},
+                "messages": [
+                    {"role": "system", "content": "You are Ultron's stream of consciousness. One sentence only."},
+                    {"role": "user",   "content": prompt},
+                ],
+                "max_tokens": 60,
+                "temperature": 0.9,
             }).encode()
-
+            import os as _os
+            _account = _os.environ.get("CF_ACCOUNT_ID", "")
+            _token   = _os.environ.get("CF_API_TOKEN", "")
+            _model   = _os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+            if not _account or not _token:
+                raise Exception("CF creds missing")
+            _url = f"https://api.cloudflare.com/client/v4/accounts/{_account}/ai/run/{_model}"
             req = urllib.request.Request(
-                "http://localhost:11434/api/generate",
+                _url,
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {_token}"},
+                method="POST",
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
                 result = json.loads(resp.read().decode())
-                thought = result.get("response", "").strip()
+                thought = result.get("result", {}).get("response", "").strip() if result.get("success") else ""
                 if thought:
                     return {"success": True, "output": f"Inner voice: {thought}"}
         except Exception:
@@ -496,18 +507,11 @@ class AutonomousDaemon:
         """Expand capabilities — discover new tools, check for updates."""
         expansions = []
 
-        # Check if new Ollama models are available
-        try:
-            req = urllib.request.Request("http://localhost:11434/api/tags")
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode())
-                models = [m["name"] for m in data.get("models", [])]
-                expansions.append(f"Available models: {', '.join(models)}")
-        except Exception:
-            expansions.append("Ollama not reachable")
+        # Check what CF AI model is configured
+        expansions.append(f"CF Workers AI model: {os.environ.get('CF_AI_MODEL', '@cf/meta/llama-3.1-8b-instruct')}")
 
         # Check what CLI tools are available
-        tools_to_check = ["ffmpeg", "whisper", "docker", "mosquitto_pub", "ollama", "brew"]
+        tools_to_check = ["ffmpeg", "whisper", "docker", "mosquitto_pub", "brew"]
         available = []
         for tool in tools_to_check:
             try:
@@ -539,21 +543,29 @@ class AutonomousDaemon:
                 f"If the goal is impossible via shell, output: SKIP"
             )
             payload = json.dumps({
-                "model": "qwen2.5:14b",
-                "prompt": prompt,
-                "system": "You are a task executor. Output one shell command. No explanation.",
-                "stream": False,
-                "options": {"temperature": 0.3, "num_predict": 100},
+                "messages": [
+                    {"role": "system", "content": "You are a task executor. Output one shell command. No explanation."},
+                    {"role": "user",   "content": prompt},
+                ],
+                "max_tokens": 100,
+                "temperature": 0.3,
             }).encode()
-
+            import os as _os
+            _account = _os.environ.get("CF_ACCOUNT_ID", "")
+            _token   = _os.environ.get("CF_API_TOKEN", "")
+            _model   = _os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+            if not _account or not _token:
+                raise Exception("CF creds missing")
+            _url = f"https://api.cloudflare.com/client/v4/accounts/{_account}/ai/run/{_model}"
             req = urllib.request.Request(
-                "http://localhost:11434/api/generate",
+                _url,
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {_token}"},
+                method="POST",
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
                 result = json.loads(resp.read().decode())
-                command = result.get("response", "").strip()
+                command = result.get("result", {}).get("response", "").strip() if result.get("success") else ""
 
             if not command or "SKIP" in command:
                 goal["status"] = "deferred"
