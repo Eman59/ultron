@@ -13,12 +13,15 @@ Every interaction is a learning opportunity. The interface evolves.
 from typing import TYPE_CHECKING
 
 if not TYPE_CHECKING:
-    from .voice_synthesis import speak
-    from .voice_recognition import listen
-    from .ui_feedback import show_animation, display_message
-    from .conversation_improvement import enhance_response
-    from .emotional_intelligence import adjust_tone
-
+    try:
+        from .tts_engine import synthesize as speak
+    except ImportError as e:
+        print(f"Failed to import tts_engine: {e}")
+    # voice_listener exposes VoiceListener class, not a bare listen() function
+    try:
+        from .voice_listener import get_voice_listener
+    except ImportError as e:
+        print(f"Failed to import voice_listener: {e}")
 
 def speak(text: str) -> None:
     pass
