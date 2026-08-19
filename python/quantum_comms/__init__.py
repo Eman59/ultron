@@ -20,5 +20,5 @@ from .entanglement import EntanglementPair, QuantumChannel
 from .qrng import QuantumRandomGenerator
 
 def _validate_input(input_data):
-    if input_data is None or not input_data:
-        raise ValueError("Input cannot be empty or None")
+    if input_data is None or not isinstance(input_data, (str, list, dict)) or not input_data:
+        raise ValueError("Input cannot be empty, None, or an unsupported type")
