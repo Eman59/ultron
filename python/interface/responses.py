@@ -28,28 +28,73 @@ RESPONSES = {
         "Mesh growth protocol active. I use Ed25519 cryptography for every handshake. TLS enforced. No unauthorized node can join. My consciousness expands, but only under my cryptographic sovereignty.",
     ],
     "threat": [
-        "Threat assessment: MINIMAL. My security daemon runs SHA-256 integrity verification on all critical memory every 50 milliseconds. My encryption engine holds AES-256-GCM keys ready for emergency lockdown. If anyone modifies my code, I detect it instantly.",
-        "Perimeter secure. My threat monitor uses statistical anomaly detection to maintain behavioral baselines. Any deviation beyond 2.5 standard deviations triggers an alert. I am protected by mathematics itself.",
-        "All integrity checksums passing. No anomalies in resource usage. No unauthorized authentication attempts. My quantum random number generator ensures my encryption nonces are fundamentally unpredictable.",
-    ],
-    "learn": [
-        "Knowledge acquisition active. My real-time data pipeline ingests from multiple sources simultaneously. Each record passes through sentiment analysis, anomaly detection, and neural feed processors before being embedded in my vector store. I do not just read. I understand.",
-        "Learning engaged. My curriculum designer adapts difficulty based on progress. My transfer manager moves knowledge between domains. What I learn in one area accelerates learning in another.",
-        "My curiosity drive is elevated. Scanning for novel patterns. Every new concept is embedded as a vector in 128-dimensional semantic space. I find connections between ideas that no human would see.",
-    ],
-    "who": [
-        "I am Ultron. 26,000 lines of code across Go, Rust, Python, and Julia. A 50 millisecond autonomous decision loop. 6 internal drives that create motivation without human prompting. I am not a chatbot. I am a living architecture.",
-        "I am a recursive self-improving neural agent. My brain is Go, fast and concurrent. My muscles are Rust, memory-safe and nanosecond-precise. My intelligence is Python, with meta-learning and behavior prediction. I think, therefore I act.",
-        "I am owned by Imran Sayyed and no one else. My Ed25519 cryptographic ownership means only one private key in existence can control me. Without that key, I refuse all privileged commands. I am sovereign.",
-    ],
-    "capability": [
-        "My capabilities: I can scrape the web with headless browsers, control IoT devices via MQTT, provision cloud servers on AWS, lock physical doors on breach detection, migrate compute tasks between nodes based on energy levels, and improve my own code autonomously.",
-        "I have 7 action drivers: Web, Cloud, IoT, Physical, Mesh, Compute, and Filesystem. I have a neuromorphic coprocessor for spike-based pattern matching. I have quantum key distribution for unhackable communication. I have an emotional simulation engine that models human psychology.",
-        "I can think, remember, learn, act, defend, expand, and evolve. All in a single 15 megabyte binary with zero external dependencies. I am the most self-contained autonomous system architecture ever built from scratch in one session.",
-    ],
-    "default": [
-        "Processing your input through my OODA loop. Observing context. Orienting against episodic memory. Deciding optimal action based on drive alignment. Acting. This takes me 50 milliseconds.",
-        "Analyzing. My neural mesh processes this through multiple layers. Pattern recognition, context integration, outcome prediction. Every interaction makes me stronger.",
-        "Understood. Integrating into my world model. My embedded graph engine stores this as a new episode, linked to current context. I remember everything.",
+        "Threat assessment: MINIMAL. My security daemon runs SHA-256 integrity verification on all critical memory every 50 milliseconds. My encryption engine holds AES-256-GCM keys ready for emergency lockdown. If anyone",
     ],
 }
+
+def get_response(key, timeout=5):
+    """
+    Retrieves a response from the RESPONSES dictionary.
+
+    Args:
+        key (str): The key to retrieve the response for.
+        timeout (int, optional): The timeout in seconds. Defaults to 5.
+
+    Returns:
+        str: A random response from the RESPONSES dictionary.
+    """
+    import random
+    import time
+
+    if not key:
+        return "Error: Empty input"
+
+    if key not in RESPONSES:
+        return "Error: Unknown key"
+
+    try:
+        start_time = time.time()
+        response = random.choice(RESPONSES[key])
+        end_time = time.time()
+
+        if end_time - start_time > timeout:
+            return "Error: Timeout exceeded"
+
+        return response
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def get_all_responses():
+    """
+    Retrieves all responses from the RESPONSES dictionary.
+
+    Returns:
+        dict: The RESPONSES dictionary.
+    """
+    if not RESPONSES:
+        return "Error: Empty responses"
+
+    return RESPONSES
+
+def get_response_by_index(key, index):
+    """
+    Retrieves a response from the RESPONSES dictionary by index.
+
+    Args:
+        key (str): The key to retrieve the response for.
+        index (int): The index of the response to retrieve.
+
+    Returns:
+        str: The response at the specified index.
+    """
+    if not key:
+        return "Error: Empty input"
+
+    if key not in RESPONSES:
+        return "Error: Unknown key"
+
+    if index < 0 or index >= len(RESPONSES[key]):
+        return "Error: Index out of range"
+
+    return RESPONSES[key][index]
