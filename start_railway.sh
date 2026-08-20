@@ -33,10 +33,55 @@ start_process() {
     shift
     echo "  [BOOT] Starting $name..."
     "$@" >> "$PROJECT_ROOT/data/logs/${name}.log" 2>&1 &
-    echo "  [BOOT] $name PID: $!"
+    local pid=$!
+    echo "  [BOOT] $name PID: $pid"
+    echo "$pid" >> "$PROJECT_ROOT/data/logs/pids.txt"
 }
 
-# ── 1. Go Core Agent (if binary exists) ──────────────────────
+# ── Rust binary directory (cargo release output) ──────────────
+RUST_BIN="$PROJECT_ROOT/rust/target/release"
+
+# ── 1. Rust Neural Mesh Service (port 50053) ─────────────────
+# Binary name: ultron-neural-service  (from ultron_neural_service crate)
+NEURAL_BIN="$RUST_BIN/ultron-neural-service"
+if [ -x "$NEURAL_BIN" ]; then
+    start_process "neural_mesh" "$NEURAL_BIN"
+    echo "  [OK] Rust Neural Mesh started (port 50053)"
+else
+    echo "  [SKIP] Rust Neural Mesh binary not found ($NEURAL_BIN)"
+fi
+
+# ── 2. Rust Security Daemon (port 50055) ─────────────────────
+# Binary name: ultron-security-daemon  (from security_daemon crate)
+SEC_BIN="$RUST_BIN/ultron-security-daemon"
+if [ -x "$SEC_BIN" ]; then
+    start_process "security_daemon" "$SEC_BIN"
+    echo "  [OK] Rust Security Daemon started (port 50055)"
+else
+    echo "  [SKIP] Rust Security Daemon binary not found ($SEC_BIN)"
+fi
+
+# ── 3. Rust Real-Time Data Pipeline (port 50054) ─────────────
+# Binary name: ultron-real-time-data  (from real_time_data crate)
+DATA_BIN="$RUST_BIN/ultron-real-time-data"
+if [ -x "$DATA_BIN" ]; then
+    start_process "data_pipeline" "$DATA_BIN"
+    echo "  [OK] Rust Data Pipeline started (port 50054)"
+else
+    echo "  [SKIP] Rust Data Pipeline binary not found ($DATA_BIN)"
+fi
+
+# ── 4. Rust Neuromorphic Engine (port 50056) ─────────────────
+# Binary name: ultron-neuromorphic  (from neuromorphic crate)
+NEURO_BIN="$RUST_BIN/ultron-neuromorphic"
+if [ -x "$NEURO_BIN" ]; then
+    start_process "neuromorphic" "$NEURO_BIN"
+    echo "  [OK] Rust Neuromorphic started (port 50056)"
+else
+    echo "  [SKIP] Rust Neuromorphic binary not found ($NEURO_BIN)"
+fi
+
+# ── 5. Go Core Agent (if binary exists) ──────────────────────
 GO_AGENT="$PROJECT_ROOT/go/core_agent/ultron_agent"
 if [ -x "$GO_AGENT" ]; then
     start_process "go_agent" "$GO_AGENT"
@@ -45,7 +90,7 @@ else
     echo "  [SKIP] Go Agent binary not found at $GO_AGENT"
 fi
 
-# ── 2. Go Watchdog (if binary exists) ────────────────────────
+# ── 6. Go Watchdog (if binary exists) ────────────────────────
 GO_WATCHDOG="$PROJECT_ROOT/go/core_agent/ultron-watchdog"
 if [ -x "$GO_WATCHDOG" ]; then
     export ULTRON_BINARY="$GO_AGENT"
@@ -56,20 +101,23 @@ else
     echo "  [SKIP] Watchdog binary not found"
 fi
 
-# ── 3. P2P Distributed Consciousness Network (if binary exists) ──
+# ── 7. P2P Network (if binary exists) ────────────────────────
 GO_P2P="$PROJECT_ROOT/go/p2p_network/ultron-p2p"
 if [ -x "$GO_P2P" ]; then
     start_process "p2p_network" "$GO_P2P"
     echo "  [OK] P2P Consciousness Network started"
 else
-    echo "  [SKIP] P2P binary not found at $GO_P2P"
+    echo "  [SKIP] P2P binary not found"
 fi
 
-# ── 4. Learning Service (Python) ─────────────────────────────
+# ── 8. Learning Service (Python) ─────────────────────────────
 start_process "learning" python3 -m python.self_improvement.learning "$PROJECT_ROOT"
 echo "  [OK] Learning service started"
 
-# ── 5. Main Web Server (Python — foreground, Railway needs this) ──
+# Give background processes a moment to bind their ports
+sleep 2
+
+# ── 9. Main Web Server (Python — foreground, Railway needs this) ──
 echo ""
 echo "  [BOOT] Starting Ultron Web Interface (foreground)..."
 echo "═══════════════════════════════════════════════════════════"

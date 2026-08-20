@@ -2,12 +2,12 @@
 builder = "nixpacks"
 
 [build.nixpacks]
-providers = ["python"]
-aptPkgs = ["curl", "ffmpeg", "sox"]
+providers = ["python", "rust"]
+aptPkgs = ["curl", "ffmpeg", "sox", "pkg-config", "libssl-dev", "build-essential"]
 
 [build.nixpacks.cmds]
 install = "pip install fastapi uvicorn grpcio grpcio-tools protobuf numpy PyPDF2 python-multipart optuna paho-mqtt scikit-learn"
-build = "chmod +x start_railway.sh"
+build = "chmod +x start_railway.sh && cd rust && cargo build --release --workspace 2>&1 | tail -20 && echo '[RUST BUILD DONE]' && cd .."
 
 [deploy]
 startCommand = "./start_railway.sh"
