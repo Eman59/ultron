@@ -17,5 +17,4 @@ watchdog: ULTRON_BINARY=$(pwd)/go/core_agent/ultron_agent ULTRON_SNAPSHOT_DIR=$(
 learning: python3 -m python.self_improvement.learning.service $(pwd)
 
 # ── P2P Distributed Consciousness Network (libp2p mesh) ─────────
-# p2p: go/p2p_network/ultron-p2p
-# Uncomment when p2p binary is built: cd go/p2p_network && go build -o ultron-p2p .
+p2p: go/p2p_network/ultron-p2p

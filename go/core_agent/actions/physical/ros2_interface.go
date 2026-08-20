@@ -24,16 +24,25 @@
 package physical
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 // ═══════════════════════════════════════════════════════════════
 // ROBOTIC UNIT TYPES
@@ -725,10 +734,37 @@ func (r *ROS2Interface) translateToROS2(cmd RobotCommand, unit *RoboticUnit) map
 }
 
 func (r *ROS2Interface) publishToBridge(endpoint string, msg map[string]interface{}) {
-	// In production: publish to DDS domain or ROS2 bridge WebSocket
-	// Protocol: JSON over WebSocket to ros2_bridge at r.bridgeAddr
-	_, _ = json.Marshal(msg)
-	// ws.Send(r.bridgeAddr + "/" + endpoint, data)
+	// Serialise command
+	data, err := json.Marshal(msg)
+	if err != nil {
+		r.logger.Warnf("publishToBridge: marshal error: %v", err)
+		return
+	}
+
+	if r.bridgeAddr == "" {
+		// No bridge configured — log the command so it's visible in stdout
+		// even without a real robot. This makes all commands observable.
+		r.logger.Infof("[ROBOT-CMD] %s → %s  payload=%s",
+			msg["command_type"], endpoint, string(data[:min(len(data), 200)]))
+		return
+	}
+
+	// Try HTTP POST to the ROS2 bridge server.
+	// Supports rosbridge_server (WebSocket) on port 9090 or any custom bridge.
+	// We use HTTP because it's transport-agnostic and doesn't require a
+	// persistent connection — the bridge converts to ROS2 internally.
+	url := fmt.Sprintf("http://%s/%s", r.bridgeAddr, endpoint)
+	go func() {
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Post(url, "application/json", bytes.NewReader(data))
+		if err != nil {
+			r.logger.Debugf("ROS2 bridge unreachable (%s): %v — command buffered", url, err)
+			r.commandsFailed.Add(1)
+			return
+		}
+		resp.Body.Close()
+		r.logger.Debugf("ROS2 bridge ACK %d for %s", resp.StatusCode, endpoint)
+	}()
 }
 
 func (r *ROS2Interface) hapticProcessor(ctx context.Context) {

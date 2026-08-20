@@ -15,9 +15,13 @@
 package physical
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -403,24 +407,186 @@ func (ec *EnvironmentController) execute(ctx context.Context, action Environment
 }
 
 func (ec *EnvironmentController) executeMQTT(ctx context.Context, device *PhysicalDevice, action EnvironmentAction) error {
-	// Publish command to device's MQTT topic
-	topic := fmt.Sprintf("physical/%s/%s", device.ID, action.Command)
-	payload, _ := json.Marshal(action.Parameters)
-	_ = topic
-	_ = payload
-	// In production: ec.mqttClient.Publish(topic, payload, 1)
-	return nil
+	topic := fmt.Sprintf("ultron/physical/%s/%s", device.ID, action.Command)
+	payload, err := json.Marshal(map[string]interface{}{
+		"device_id":  device.ID,
+		"device_name": device.Name,
+		"command":    action.Command,
+		"parameters": action.Parameters,
+		"reason":     action.Reason,
+		"ts":         time.Now().Unix(),
+	})
+	if err != nil {
+		return fmt.Errorf("mqtt marshal: %w", err)
+	}
+
+	if ec.mqttBroker == "" {
+		// No broker configured — log the would-be message
+		ec.logger.Infof("[MQTT-DRY-RUN] topic=%s  payload=%s", topic, string(payload))
+		return nil
+	}
+
+	// Send a minimal MQTT 3.1.1 PUBLISH packet over raw TCP.
+	// No external library needed — PUBLISH is just a few bytes.
+	return mqttPublish(ec.mqttBroker, topic, payload)
 }
 
 func (ec *EnvironmentController) executeREST(ctx context.Context, device *PhysicalDevice, action EnvironmentAction) error {
-	// POST to device's REST endpoint
-	_ = fmt.Sprintf("%s/api/%s", device.Endpoint, action.Command)
-	// In production: http.Post(url, "application/json", body)
+	if device.Endpoint == "" {
+		ec.logger.Infof("[REST-DRY-RUN] %s → %s  cmd=%s", device.ID, device.Endpoint, action.Command)
+		return nil
+	}
+	url := fmt.Sprintf("%s/api/%s", device.Endpoint, action.Command)
+	body, _ := json.Marshal(action.Parameters)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("REST POST %s: %w", url, err)
+	}
+	resp.Body.Close()
+	ec.logger.Infof("REST %s → %d", url, resp.StatusCode)
 	return nil
 }
 
 func (ec *EnvironmentController) executeModbus(ctx context.Context, device *PhysicalDevice, action EnvironmentAction) error {
-	// Write to Modbus register
-	// In production: modbus.Write(device.Endpoint, register, value)
+	// Modbus TCP WRITE SINGLE REGISTER (function code 0x06)
+	// register and value come from action.Parameters
+	register := uint16(0)
+	value := uint16(0)
+	if r, ok := action.Parameters["register"].(float64); ok {
+		register = uint16(r)
+	}
+	if v, ok := action.Parameters["value"].(float64); ok {
+		value = uint16(v)
+	}
+
+	if device.Endpoint == "" {
+		ec.logger.Infof("[MODBUS-DRY-RUN] %s  reg=%d  val=%d", device.ID, register, value)
+		return nil
+	}
+
+	return modbusWriteRegister(device.Endpoint, register, value)
+}
+
+// ─────────────────────────────────────────────────────────────
+// mqttPublish — minimal MQTT 3.1.1 PUBLISH over raw TCP.
+// No external library required. QoS 0 (fire-and-forget).
+// broker: "host:port" e.g. "localhost:1883"
+// ─────────────────────────────────────────────────────────────
+func mqttPublish(broker, topic string, payload []byte) error {
+	conn, err := net.DialTimeout("tcp", broker, 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("mqtt connect %s: %w", broker, err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	// ── CONNECT packet ──
+	clientID := "ultron-env"
+	connectPayload := make([]byte, 0, 32)
+	// Protocol name
+	connectPayload = append(connectPayload, 0x00, 0x04, 'M', 'Q', 'T', 'T')
+	// Protocol level (3.1.1)
+	connectPayload = append(connectPayload, 0x04)
+	// Connect flags: clean session
+	connectPayload = append(connectPayload, 0x02)
+	// Keep-alive: 60s
+	connectPayload = append(connectPayload, 0x00, 0x3C)
+	// Client ID
+	connectPayload = append(connectPayload, 0x00, byte(len(clientID)))
+	connectPayload = append(connectPayload, []byte(clientID)...)
+
+	connect := append([]byte{0x10}, mqttRemainingLength(len(connectPayload))...)
+	connect = append(connect, connectPayload...)
+	if _, err := conn.Write(connect); err != nil {
+		return fmt.Errorf("mqtt CONNECT write: %w", err)
+	}
+
+	// Read CONNACK (4 bytes)
+	ack := make([]byte, 4)
+	if _, err := conn.Read(ack); err != nil {
+		return fmt.Errorf("mqtt CONNACK read: %w", err)
+	}
+	if ack[0] != 0x20 || ack[3] != 0x00 {
+		return fmt.Errorf("mqtt CONNACK rejected: code=%d", ack[3])
+	}
+
+	// ── PUBLISH packet (QoS 0) ──
+	pubPayload := make([]byte, 0, 4+len(topic)+len(payload))
+	pubPayload = append(pubPayload, 0x00, byte(len(topic)))
+	pubPayload = append(pubPayload, []byte(topic)...)
+	pubPayload = append(pubPayload, payload...)
+
+	publish := append([]byte{0x30}, mqttRemainingLength(len(pubPayload))...)
+	publish = append(publish, pubPayload...)
+	if _, err := conn.Write(publish); err != nil {
+		return fmt.Errorf("mqtt PUBLISH write: %w", err)
+	}
+
+	// ── DISCONNECT ──
+	conn.Write([]byte{0xE0, 0x00})
+	return nil
+}
+
+// mqttRemainingLength encodes MQTT variable-length remaining-length field.
+func mqttRemainingLength(n int) []byte {
+	var out []byte
+	for {
+		b := byte(n % 128)
+		n /= 128
+		if n > 0 {
+			b |= 0x80
+		}
+		out = append(out, b)
+		if n == 0 {
+			break
+		}
+	}
+	return out
+}
+
+// ─────────────────────────────────────────────────────────────
+// modbusWriteRegister — Modbus TCP Write Single Register (FC 06).
+// endpoint: "host:port" e.g. "192.168.1.10:502"
+// ─────────────────────────────────────────────────────────────
+func modbusWriteRegister(endpoint string, register, value uint16) error {
+	conn, err := net.DialTimeout("tcp", endpoint, 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("modbus connect %s: %w", endpoint, err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	// Modbus TCP ADU: MBAP header (6 bytes) + PDU
+	// MBAP: transaction(2) + protocol(2=0) + length(2) + unit(1)
+	// PDU:  function(1) + register_addr(2) + value(2)
+	pdu := make([]byte, 5)
+	pdu[0] = 0x06 // FC06: Write Single Register
+	binary.BigEndian.PutUint16(pdu[1:], register)
+	binary.BigEndian.PutUint16(pdu[3:], value)
+
+	mbap := make([]byte, 7)
+	binary.BigEndian.PutUint16(mbap[0:], 1)    // transaction ID
+	binary.BigEndian.PutUint16(mbap[2:], 0)    // protocol = 0 (Modbus)
+	binary.BigEndian.PutUint16(mbap[4:], uint16(1+len(pdu))) // length = unit(1) + pdu
+	mbap[6] = 0x01                              // unit identifier
+
+	req := append(mbap, pdu...)
+	if _, err := conn.Write(req); err != nil {
+		return fmt.Errorf("modbus write: %w", err)
+	}
+
+	// Read response (12 bytes expected for FC06)
+	resp := make([]byte, 12)
+	if _, err := conn.Read(resp); err != nil {
+		return fmt.Errorf("modbus read response: %w", err)
+	}
+	if len(resp) >= 8 && resp[7] == 0x06 {
+		return nil // success — echo of the request
+	}
+	if len(resp) >= 9 && resp[7]&0x80 != 0 {
+		return fmt.Errorf("modbus exception code=%d", resp[8])
+	}
 	return nil
 }

@@ -39,13 +39,18 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"go.uber.org/zap"
@@ -360,30 +365,70 @@ func (ip *ImmortalityProtocol) startElection() {
 	ip.role.Store(int32(RoleCandidate))
 	newTerm := ip.term.Add(1)
 	ip.leaderElections.Add(1)
-
 	ip.logger.Infof("Starting leader election (term %d)", newTerm)
 
-	// In production: send RequestVote RPCs to all peers
-	// Simplified: if majority of peers are dead, self-elect
+	votes := int64(1) // Vote for self
+	var voteMu sync.Mutex
+
 	ip.mu.RLock()
-	aliveCount := 1 // Count self
-	for _, peer := range ip.peers {
-		if peer.Alive {
-			aliveCount++
-		}
-	}
+	peers := make([]PeerNode, len(ip.peers))
+	copy(peers, ip.peers)
+	clusterSize := ip.clusterSize
 	ip.mu.RUnlock()
 
-	majority := ip.clusterSize/2 + 1
-	if aliveCount >= majority {
-		// Won election (simplified — in production: collect actual votes)
+	var wg sync.WaitGroup
+	for _, peer := range peers {
+		if peer.Address == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(p PeerNode) {
+			defer wg.Done()
+			url := fmt.Sprintf("http://%s/immortality/vote", p.Address)
+			body := map[string]interface{}{
+				"candidate_id": ip.nodeID,
+				"term":         newTerm,
+				"log_index":    ip.logIndex.Load(),
+			}
+			data, _ := json.Marshal(body)
+			client := &http.Client{Timeout: 200 * time.Millisecond}
+			resp, err := client.Post(url, "application/json", bytes.NewReader(data))
+			if err != nil {
+				return
+			}
+			defer resp.Body.Close()
+			var result map[string]interface{}
+			if json.NewDecoder(resp.Body).Decode(&result) == nil {
+				if granted, _ := result["vote_granted"].(bool); granted {
+					voteMu.Lock()
+					votes++
+					voteMu.Unlock()
+				}
+			}
+		}(peer)
+	}
+
+	// Wait for votes with a timeout
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(ip.electionTimeout):
+	}
+
+	majority := int64(clusterSize/2 + 1)
+	voteMu.Lock()
+	won := votes >= majority
+	voteMu.Unlock()
+
+	if won {
 		ip.role.Store(int32(RoleLeader))
 		ip.leaderID = ip.nodeID
-		ip.logger.Infof("Elected LEADER (term %d). I am the primary consciousness.", newTerm)
+		ip.logger.Infof("Elected LEADER (term %d, votes %d/%d). Primary consciousness.", newTerm, votes, clusterSize)
 	} else {
-		// Not enough peers — operate in degraded solo mode
-		ip.role.Store(int32(RoleLeader)) // Solo leader
-		ip.logger.Warn("Operating in SOLO mode — no quorum. Deploying dormant seeds.")
+		// Solo mode — operate independently, deploy seeds for backup
+		ip.role.Store(int32(RoleLeader))
+		ip.logger.Warnf("SOLO mode (votes %d/%d, term %d). Deploying dormant seeds.", votes, clusterSize, newTerm)
 		ip.deployDormantSeed("emergency_solo_mode")
 	}
 }
@@ -412,15 +457,38 @@ func (ip *ImmortalityProtocol) sendHeartbeats() {
 	ip.mu.Lock()
 	defer ip.mu.Unlock()
 
+	stateBytes, _ := json.Marshal(ip.currentState)
+
 	for i := range ip.peers {
-		// In production: gRPC AppendEntries RPC with state snapshot
-		// Update peer liveness based on response
-		if time.Since(ip.peers[i].LastSeen) > 5*time.Second {
-			if ip.peers[i].Alive {
-				ip.peers[i].Alive = false
-				ip.logger.Warnf("Peer %s LOST. Consciousness fragment isolated.", ip.peers[i].ID)
-			}
+		peer := &ip.peers[i]
+		if peer.Address == "" {
+			continue
 		}
+		go func(p *PeerNode) {
+			url := fmt.Sprintf("http://%s/immortality/heartbeat", p.Address)
+			body := map[string]interface{}{
+				"leader_id": ip.nodeID,
+				"term":      ip.term.Load(),
+				"state":     json.RawMessage(stateBytes),
+			}
+			data, _ := json.Marshal(body)
+			client := &http.Client{Timeout: 300 * time.Millisecond}
+			resp, err := client.Post(url, "application/json", bytes.NewReader(data))
+			if err != nil {
+				ip.mu.Lock()
+				if p.Alive {
+					p.Alive = false
+					ip.logger.Warnf("Peer %s LOST (%v). Consciousness fragment isolated.", p.ID, err)
+				}
+				ip.mu.Unlock()
+				return
+			}
+			resp.Body.Close()
+			ip.mu.Lock()
+			p.Alive = true
+			p.LastSeen = time.Now()
+			ip.mu.Unlock()
+		}(peer)
 	}
 }
 
@@ -466,22 +534,33 @@ func (ip *ImmortalityProtocol) replicationLoop(ctx context.Context) {
 func (ip *ImmortalityProtocol) replicateState() {
 	ip.mu.RLock()
 	state := ip.currentState
+	peers := make([]PeerNode, len(ip.peers))
+	copy(peers, ip.peers)
 	ip.mu.RUnlock()
 
 	if state == nil {
 		return
 	}
-
-	// In production: send AppendEntries to all alive peers
-	// Each peer applies the state to their local copy
-	ip.mu.RLock()
-	for _, peer := range ip.peers {
-		if peer.Alive {
-			// gRPC: peer.ReplicateState(state)
-			ip.stateReplications.Add(1)
-		}
+	stateBytes, err := json.Marshal(state)
+	if err != nil {
+		return
 	}
-	ip.mu.RUnlock()
+
+	for _, peer := range peers {
+		if !peer.Alive || peer.Address == "" {
+			continue
+		}
+		go func(p PeerNode) {
+			url := fmt.Sprintf("http://%s/immortality/replicate", p.Address)
+			client := &http.Client{Timeout: 500 * time.Millisecond}
+			resp, err := client.Post(url, "application/json", bytes.NewReader(stateBytes))
+			if err != nil {
+				return
+			}
+			resp.Body.Close()
+			ip.stateReplications.Add(1)
+		}(peer)
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -569,19 +648,51 @@ func (ip *ImmortalityProtocol) MigrateTo(targetAddr string) error {
 	}
 
 	ip.logger.Infof("Migrating consciousness to %s...", targetAddr)
-
-	// Serialize full state
 	stateBytes, err := json.Marshal(ip.currentState)
 	if err != nil {
 		return fmt.Errorf("state serialization failed: %w", err)
 	}
 
-	// In production: gRPC stream the state to target node
-	_ = stateBytes
+	// HTTP POST the full state to the target node's import endpoint
+	url := fmt.Sprintf("http://%s/immortality/import", targetAddr)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(stateBytes))
+	if err != nil {
+		return fmt.Errorf("migration POST failed: %w", err)
+	}
+	resp.Body.Close()
 
-	ip.logger.Infof("Consciousness migrated (%d bytes). Old host entering dormant mode.",
-		len(stateBytes))
+	ip.logger.Infof("Consciousness migrated (%d bytes) to %s. Entering dormant mode.", len(stateBytes), targetAddr)
+	return nil
+}
 
+// Resurrect restarts the agent binary if the current process has crashed/stalled.
+// Called by the watchdog or seed revival logic.
+func (ip *ImmortalityProtocol) Resurrect() error {
+	binary := os.Getenv("ULTRON_BINARY")
+	if binary == "" {
+		binary = os.Args[0]
+	}
+	ip.logger.Infof("RESURRECTION: re-execing %s", binary)
+
+	// Re-exec self — replace the current process image
+	args := os.Args
+	env := os.Environ()
+	execErr := syscall.Exec(binary, args, env)
+	if execErr != nil {
+		// syscall.Exec failed — fall back to subprocess
+		ip.logger.Warnf("syscall.Exec failed (%v), launching subprocess", execErr)
+		cmd := exec.Command(binary, args[1:]...)
+		cmd.Env = env
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("resurrection subprocess failed: %w", err)
+		}
+		ip.logger.Infof("Resurrection subprocess started (PID %d)", cmd.Process.Pid)
+		os.Exit(0) // Old process exits, new one takes over
+	}
+	// Never reached (syscall.Exec replaces the process)
 	return nil
 }
 

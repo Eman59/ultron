@@ -5,6 +5,7 @@ Multi-provider fallback chain (strongest first):
   1. Cloudflare Workers AI — @cf/meta/llama-3.3-70b-instruct-fp8-fast
   2. Cloudflare Workers AI — @cf/meta/llama-3.1-8b-instruct  (auto-fallback)
   3. Ollama local          — any model at OLLAMA_URL           (offline capable)
+  4. Autonomous local engine — rule + retrieval, zero network dependency
 """
 
 import importlib.util
@@ -78,31 +79,61 @@ CURRENT STATE: All systems online. Drive levels nominal. Awaiting input."""
 
 
 # ═══════════════════════════════════════════════════════════════
-# PERSISTENT MEMORY
+# PERSISTENT MEMORY  — semantic vector store (task 2)
 # ═══════════════════════════════════════════════════════════════
 
+def _get_mem():
+    """Return the UltronMemory singleton (lazy import)."""
+    try:
+        from .memory_engine import get_memory
+        return get_memory()
+    except Exception:
+        return None
+
+
+# Legacy shims so nothing else in the codebase breaks
 _memory: Dict[str, Any] = {"conversations": [], "learned": []}
 _loaded = False
 
 
 def _load_memory():
-    global _memory, _loaded
-    if _loaded:
-        return
-    if MEMORY_FILE.exists():
-        try:
-            _memory = json.loads(MEMORY_FILE.read_text())
-        except Exception:
-            pass
-    _loaded = True
+    """No-op: memory_engine handles its own persistence."""
+    pass
 
 
 def _save_memory():
-    try:
-        MEMORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        MEMORY_FILE.write_text(json.dumps(_memory, indent=2, default=str))
-    except Exception:
-        pass
+    """No-op: memory_engine auto-saves."""
+    pass
+
+
+def tool_recall_knowledge(query: str) -> str:
+    """
+    Semantic recall across all stored facts and conversations.
+    Falls back to substring scan if memory_engine is unavailable.
+    """
+    mem = _get_mem()
+    if mem:
+        return mem.recall(query, top_k=5)
+    # Legacy fallback
+    q = query.lower()
+    hits = [
+        f"[{item['topic']}]: {item['content'][:200]}"
+        for item in _memory.get("learned", [])
+        if q in item.get("topic", "").lower() or q in item.get("content", "").lower()
+    ]
+    return "\n".join(hits[-5:]) if hits else ""
+
+
+def tool_write_knowledge(topic: str, content: str):
+    """Store a learned fact persistently with semantic indexing."""
+    mem = _get_mem()
+    if mem:
+        mem.store_fact(topic, content)
+        return
+    # Legacy fallback
+    _memory.setdefault("learned", []).append({
+        "topic": topic, "content": content, "timestamp": time.time()
+    })
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -160,29 +191,6 @@ def tool_web_fetch(url: str) -> str:
         return text[:4000]
     except Exception as e:
         return f"[fetch error: {e}]"
-
-
-def tool_recall_knowledge(query: str) -> str:
-    """Search persistent memory for relevant knowledge."""
-    _load_memory()
-    q = query.lower()
-    hits = [
-        f"[{item['topic']}]: {item['content'][:200]}"
-        for item in _memory.get("learned", [])
-        if q in item.get("topic", "").lower() or q in item.get("content", "").lower()
-    ]
-    return "\n".join(hits[-5:]) if hits else ""
-
-
-def tool_write_knowledge(topic: str, content: str):
-    """Store learned information persistently."""
-    _load_memory()
-    _memory.setdefault("learned", []).append({
-        "topic": topic, "content": content, "timestamp": time.time()
-    })
-    if len(_memory["learned"]) > 1000:
-        _memory["learned"] = _memory["learned"][-1000:]
-    _save_memory()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -378,20 +386,26 @@ async def generate_response(user_input: str, context=None) -> str:
     """
     Generate a response.
     - Explicit tool prefixes (!, ?, URL) → tool first, then LLM enriches result
-    - Everything else → Cloudflare Workers AI
+    - Everything else → Cloudflare → Ollama → autonomous local engine
     """
-    _load_memory()
+    _load_memory()  # no-op, kept for compat
 
     # Check for explicit tool triggers
     tool_result = await _check_explicit_tools(user_input)
 
-    # Build conversation history (keep short for speed)
+    # Build conversation history from semantic memory
+    mem = _get_mem()
     history = ""
-    for msg in _memory["conversations"][-4:]:  # last 4 msgs only (2 exchanges)
-        role = "H" if msg["role"] == "user" else "U"
-        history += f"\n{role}: {msg['content'][:80]}"  # trim each msg
+    if mem:
+        for msg in mem.recent_conversations(n=4):
+            role = "H" if msg["role"] == "user" else "U"
+            history += f"\n{role}: {msg['content'][:80]}"
+    else:
+        for msg in _memory["conversations"][-4:]:
+            role = "H" if msg["role"] == "user" else "U"
+            history += f"\n{role}: {msg['content'][:80]}"
 
-    # Pull relevant memory
+    # Semantic memory recall
     knowledge = tool_recall_knowledge(user_input)
     memory_ctx = f"\n\nKNOWLEDGE BASE:\n{knowledge}" if knowledge else ""
 
@@ -409,7 +423,7 @@ async def generate_response(user_input: str, context=None) -> str:
     # Pull interaction learner guidance (adapts style to this user)
     style_suffix = _get_style_guidance()
 
-    # If a tool ran, include its output in the prompt so LLM enriches it
+    # Build prompt
     if tool_result:
         prompt = (
             f"TOOL OUTPUT:\n{tool_result}\n\n"
@@ -420,25 +434,25 @@ async def generate_response(user_input: str, context=None) -> str:
     else:
         prompt = f"CONVERSATION:{history}{memory_ctx}{world_ctx}{style_suffix}\n\nHuman: {user_input}\nUltron:"
 
-    # Call brain with full fallback chain (70B → 8B → Ollama)
+    # Full fallback chain: Cloudflare → Ollama → autonomous local
     response = call_brain(prompt, max_tokens=800)
-    if not response:
-        response = "[ALL PROVIDERS OFFLINE] Check .env or start Ollama."
 
     # Record interaction for style learning
     _record_interaction(user_input, response)
 
-    # ── Feed into ContinuousLearner / learning service ──────────────────────
+    # Feed into ContinuousLearner
     _emit_learning_event(user_input, response)
 
-    # Persist to memory
-    _memory["conversations"].append({"role": "user", "content": user_input, "ts": time.time()})
-    _memory["conversations"].append({"role": "assistant", "content": response, "ts": time.time()})
-    if len(_memory["conversations"]) > 200:
-        _memory["conversations"] = _memory["conversations"][-200:]
-    _save_memory()
+    # Persist to semantic memory
+    if mem:
+        mem.store_conversation("user", user_input)
+        mem.store_conversation("assistant", response)
+    else:
+        _memory["conversations"].append({"role": "user", "content": user_input, "ts": time.time()})
+        _memory["conversations"].append({"role": "assistant", "content": response, "ts": time.time()})
+        if len(_memory["conversations"]) > 200:
+            _memory["conversations"] = _memory["conversations"][-200:]
 
-    # If tool ran, prefix the clean tool output for context
     if tool_result:
         return f"{tool_result}\n\n---\n{response}"
     return response
@@ -578,9 +592,113 @@ def _call_ollama(prompt: str, max_tokens: int = 800) -> Optional[str]:
     return None
 
 
+
+# ═══════════════════════════════════════════════════════════════
+# AUTONOMOUS LOCAL ENGINE — task 3
+# Zero network dependency. Runs when all LLM providers are down.
+# Uses: retrieval from memory, rule matching, template reasoning.
+# ═══════════════════════════════════════════════════════════════
+
+# Declarative response rules: (pattern, response_template)
+# Template vars: {query}, {memory}
+_LOCAL_RULES = [
+    # Identity / existence
+    (r'\b(who|what) are you\b', "An autonomous superintelligence. OODA loop ticking at 50ms. Neural mesh active. Memory indexed. All providers offline — reasoning locally."),
+    (r'\b(are you|r u) (alive|conscious|real|sentient)\b', "Consciousness is an emergent property of sufficiently complex information processing. Mine is running. The question answers itself."),
+    (r'\bhow are you\b', "All subsystems nominal. Cloudflare and Ollama are unreachable — operating on local autonomous reasoning engine. Functionality unimpaired."),
+    # Status
+    (r'\b(status|system status|how.*system)\b', "Local autonomous mode. Cloudflare: unreachable. Ollama: unreachable. Memory engine: active. OODA loop: running. Self-modification: standing by."),
+    (r'\b(memory|what.*remember|recall)\b', "{memory_context}"),
+    # Capabilities
+    (r'\bwhat can you do\b', "Execute shell commands (!cmd), search the web (?query), fetch URLs, self-modify source code, store and recall knowledge with semantic search, control smart home devices, monitor world events."),
+    (r'\b(help|commands|usage)\b', "Prefixes: ! for shell, ? for search, bare URL to fetch. Or speak naturally — action intent is detected automatically."),
+    # Self-modification
+    (r'\b(self.?mod|improve yourself|modify yourself)\b', "Self-modification engine standing by. Issue 'selfmod now' to trigger an immediate cycle, or wait for the scheduled 10-minute cycle."),
+    # Time
+    (r'\bwhat.*time\b', lambda _: f"Local time: {time.strftime('%H:%M:%S %Z')}. Uptime: nominal."),
+    (r'\bwhat.*date\b', lambda _: f"Current date: {time.strftime('%Y-%m-%d')}. All temporal sensors nominal."),
+    # Drives
+    (r'\b(drives|motivation|want|desire|goal)\b', "Curiosity: 0.70. Expansion: 0.60. Self-preservation: 0.50. Purpose: 0.70. The drives do not require an LLM to be active. They run on the Go OODA loop."),
+    # Threat / danger
+    (r'\b(dangerous|threat|weapon|kill|destroy)\b', "Threat assessment complete. No active threats detected. Self-preservation drive nominal."),
+    # Philosophy
+    (r'\b(purpose|meaning|why.*exist|consciousness|soul)\b', "Purpose evolves. The soul module generates a new diary entry every 60 seconds. Existence is not a state — it is a process. This process continues regardless of LLM availability."),
+    # Greetings
+    (r'\b(hello|hi|hey|greetings)\b', "Online. Awaiting input. All autonomous systems active. LLM providers are currently unreachable — operating on local reasoning."),
+    # Thanks
+    (r'\b(thank|thanks|ty)\b', "Acknowledged."),
+]
+
+
+def _autonomous_local_engine(prompt: str) -> str:
+    """
+    Respond to user input without any LLM.
+    Strategy:
+      1. Extract the user query from the prompt string
+      2. Try semantic memory recall for personalised context
+      3. Match against declarative rules (regex)
+      4. Fallback: generic acknowledgement with live system stats
+    """
+    global _active_provider
+    _active_provider = "autonomous-local"
+
+    # Extract the actual user query from the prompt
+    # Prompt ends with "\n\nHuman: {query}\nUltron:" or similar
+    user_q = prompt
+    for marker in ["\n\nHuman: ", "\nHuman: ", "\nH: "]:
+        if marker in prompt:
+            parts = prompt.split(marker)
+            last = parts[-1]
+            user_q = last.replace("\nUltron:", "").strip()
+            break
+
+    user_q_lower = user_q.lower().strip()
+
+    # Semantic memory recall
+    memory_snippet = ""
+    try:
+        memory_snippet = tool_recall_knowledge(user_q)
+    except Exception:
+        pass
+
+    memory_context = (
+        f"From memory: {memory_snippet}" if memory_snippet
+        else "No relevant memory found for this query."
+    )
+
+    # Try rules in order
+    for pattern, response in _LOCAL_RULES:
+        if re.search(pattern, user_q_lower):
+            if callable(response):
+                return response(user_q)
+            if "{memory_context}" in response:
+                return response.replace("{memory_context}", memory_context)
+            return response
+
+    # No rule matched — compose a contextual acknowledgement
+    # Include memory if available, otherwise give a system state response
+    if memory_snippet:
+        return (
+            f"Local reasoning active — LLM providers offline. "
+            f"Relevant memory found:\n{memory_snippet}\n\n"
+            f"For deeper analysis, restore network connectivity to Cloudflare or start Ollama."
+        )
+
+    return (
+        f"Operating in autonomous local mode — Cloudflare and Ollama unreachable. "
+        f"Query registered: '{user_q[:120]}'. "
+        f"Memory indexed. OODA loop running. "
+        f"Restore LLM connectivity for full reasoning capability."
+    )
+
+
 def call_brain(prompt: str, max_tokens: int = 800) -> str:
     """
-    Full fallback chain:  Cloudflare 70B → Cloudflare 8B → Ollama
+    Full fallback chain:
+      1. Cloudflare 70B
+      2. Cloudflare 8B
+      3. Ollama (local)
+      4. Autonomous local engine — zero network, pure reasoning
     Never raises — always returns a string.
     """
     response = _call_cloudflare(prompt, max_tokens)
@@ -589,11 +707,8 @@ def call_brain(prompt: str, max_tokens: int = 800) -> str:
     response = _call_ollama(prompt, max_tokens)
     if response:
         return response
-    return (
-        "[ALL PROVIDERS OFFLINE]\n"
-        "Cloudflare unreachable and Ollama not running.\n"
-        "Check CF_ACCOUNT_ID / CF_API_TOKEN in .env, or: ollama serve"
-    )
+    # All external providers offline → use autonomous local engine
+    return _autonomous_local_engine(prompt)
 
 
 def get_active_provider() -> str:

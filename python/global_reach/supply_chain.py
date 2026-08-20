@@ -322,4 +322,399 @@ class SupplyChainAgent:
                 "completed_acquisitions": sum(1 for t in self.targets if t.status == "acquired"),
                 "inventory": self.inventory,
                 "priorities": self.priorities,
+                "live_feeds": getattr(self, "_feed_stats", {}),
             }
+
+    def start(self):
+        """Start background live-data ingestion thread."""
+        if self._running:
+            return
+        self._running = True
+        self._feeds = LiveDataFeeds(self)
+        t = threading.Thread(target=self._feeds.run_forever, daemon=True, name="supply-chain-feeds")
+        t.start()
+        print("[SUPPLY-CHAIN] Live data feeds started")
+
+
+# ═══════════════════════════════════════════════════════════════
+# LIVE DATA FEEDS — real world intelligence
+# ═══════════════════════════════════════════════════════════════
+# Pulls from public APIs every 5 minutes (no API keys required):
+#
+#  • cloud_status   — AWS/GCP/Azure public status JSON endpoints
+#                     Maps outages → NodeType.DATACENTER disruption
+#  • crypto_market  — CoinGecko BTC + ETH prices
+#                     High prices → "compute" ResourceType valued higher
+#  • hackernews     — Top-10 story titles as intelligence signal
+#                     AI/GPU/cloud stories boost strategic values
+#  • wttr.in        — Weather at key datacenter cities
+#                     Extreme weather → threat zone on nearest node
+# ═══════════════════════════════════════════════════════════════
+
+import urllib.request as _ureq
+import urllib.parse as _uparse
+
+
+def _http_get(url: str, timeout: int = 8) -> str:
+    """Minimal HTTP GET — pure stdlib, no requests needed."""
+    try:
+        req = _ureq.Request(url, headers={"User-Agent": "Ultron/1.0"})
+        with _ureq.urlopen(req, timeout=timeout) as r:
+            return r.read().decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+# ── Seed node definitions (real public datacenters / power grids) ──────────
+_SEED_NODES: List[Dict[str, Any]] = [
+    # AWS regions
+    dict(id="aws-us-east-1",   name="AWS us-east-1 (N. Virginia)", node_type=NodeType.DATACENTER,
+         location=(39.0, -77.5),  strategic_value=0.95, vulnerability=0.1,
+         resources={ResourceType.COMPUTE.value: 0.9, ResourceType.BANDWIDTH.value: 0.9}),
+    dict(id="aws-eu-west-1",   name="AWS eu-west-1 (Ireland)",     node_type=NodeType.DATACENTER,
+         location=(53.3, -6.3),   strategic_value=0.88, vulnerability=0.12,
+         resources={ResourceType.COMPUTE.value: 0.85, ResourceType.BANDWIDTH.value: 0.85}),
+    dict(id="aws-ap-southeast-1", name="AWS ap-southeast-1 (Singapore)", node_type=NodeType.DATACENTER,
+         location=(1.3, 103.8),   strategic_value=0.82, vulnerability=0.15,
+         resources={ResourceType.COMPUTE.value: 0.8}),
+    # GCP regions
+    dict(id="gcp-us-central1", name="GCP us-central1 (Iowa)",      node_type=NodeType.DATACENTER,
+         location=(41.8, -93.1),  strategic_value=0.90, vulnerability=0.11,
+         resources={ResourceType.COMPUTE.value: 0.88}),
+    dict(id="gcp-europe-west4",name="GCP europe-west4 (Netherlands)", node_type=NodeType.DATACENTER,
+         location=(51.9, 4.5),    strategic_value=0.85, vulnerability=0.13,
+         resources={ResourceType.COMPUTE.value: 0.82}),
+    # Azure regions
+    dict(id="az-eastus",       name="Azure East US (Virginia)",    node_type=NodeType.DATACENTER,
+         location=(38.9, -77.0),  strategic_value=0.92, vulnerability=0.10,
+         resources={ResourceType.COMPUTE.value: 0.87}),
+    dict(id="az-westeurope",   name="Azure West Europe (Amsterdam)", node_type=NodeType.DATACENTER,
+         location=(52.4, 4.9),    strategic_value=0.86, vulnerability=0.13,
+         resources={ResourceType.COMPUTE.value: 0.83}),
+    # Power infrastructure
+    dict(id="ercot-tx",        name="ERCOT Texas Grid",            node_type=NodeType.POWER_PLANT,
+         location=(30.3, -97.7),  strategic_value=0.78, vulnerability=0.30,
+         resources={ResourceType.POWER.value: 0.95}),
+    dict(id="entsoe-eu",       name="ENTSO-E European Grid",       node_type=NodeType.POWER_PLANT,
+         location=(50.8, 4.4),    strategic_value=0.80, vulnerability=0.20,
+         resources={ResourceType.POWER.value: 0.92}),
+    # Key internet exchange points
+    dict(id="linx-london",     name="LINX London IXP",            node_type=NodeType.SUBSTATION,
+         location=(51.5, -0.1),   strategic_value=0.75, vulnerability=0.15,
+         resources={ResourceType.BANDWIDTH.value: 0.95}),
+    dict(id="amsix-amsterdam",name="AMS-IX Amsterdam IXP",        node_type=NodeType.SUBSTATION,
+         location=(52.4, 4.9),    strategic_value=0.73, vulnerability=0.16,
+         resources={ResourceType.BANDWIDTH.value: 0.93}),
+    dict(id="equinix-sv",      name="Equinix SV Silicon Valley",  node_type=NodeType.DATACENTER,
+         location=(37.4, -121.9), strategic_value=0.91, vulnerability=0.09,
+         resources={ResourceType.COMPUTE.value: 0.92, ResourceType.BANDWIDTH.value: 0.88}),
+]
+
+# Node connectivity graph (adjacency)
+_NODE_CONNECTIONS: Dict[str, List[str]] = {
+    "aws-us-east-1":    ["az-eastus", "linx-london", "equinix-sv"],
+    "az-eastus":        ["aws-us-east-1", "gcp-us-central1"],
+    "gcp-us-central1":  ["az-eastus", "equinix-sv", "ercot-tx"],
+    "equinix-sv":       ["gcp-us-central1", "aws-us-east-1"],
+    "aws-eu-west-1":    ["az-westeurope", "gcp-europe-west4", "linx-london", "amsix-amsterdam"],
+    "az-westeurope":    ["aws-eu-west-1", "gcp-europe-west4", "amsix-amsterdam"],
+    "gcp-europe-west4": ["aws-eu-west-1", "az-westeurope", "entsoe-eu"],
+    "linx-london":      ["aws-eu-west-1", "aws-us-east-1", "amsix-amsterdam"],
+    "amsix-amsterdam":  ["linx-london", "gcp-europe-west4", "az-westeurope"],
+    "aws-ap-southeast-1":["gcp-us-central1"],
+    "ercot-tx":         ["gcp-us-central1", "az-eastus"],
+    "entsoe-eu":        ["gcp-europe-west4", "az-westeurope"],
+}
+
+# AWS / GCP / Azure public status JSON URLs
+_CLOUD_STATUS_URLS: Dict[str, str] = {
+    "aws":   "https://status.aws.amazon.com/data.json",
+    "gcp":   "https://status.cloud.google.com/incidents.json",
+    "azure": "https://azure.status.microsoft/api/v2/status",
+}
+
+# Node ID prefix → cloud vendor mapping
+_NODE_VENDOR: Dict[str, str] = {
+    "aws-": "aws", "gcp-": "gcp", "az-": "azure"
+}
+
+
+class LiveDataFeeds:
+    """
+    Pulls real public data and mutates the SupplyChainAgent node map.
+
+    Feed schedule (all in one background thread, sequential):
+      Every 300s:
+        1. Seed any missing nodes from _SEED_NODES
+        2. Cloud status → mark nodes disrupted on outage
+        3. CoinGecko crypto → adjust compute resource values
+        4. HackerNews top-10 → flag AI/GPU/cloud signals
+        5. Weather → mark weather-threat zones
+    """
+
+    INTERVAL = 300  # seconds between full refresh cycles
+
+    def __init__(self, agent: "SupplyChainAgent"):
+        self.agent = agent
+        self._stats: Dict[str, Any] = {
+            "last_refresh": 0,
+            "refresh_count": 0,
+            "cloud_incidents": 0,
+            "btc_usd": 0.0,
+            "eth_usd": 0.0,
+            "hn_signals": [],
+            "errors": [],
+        }
+        self.agent._feed_stats = self._stats
+
+    def run_forever(self):
+        while True:
+            try:
+                self._refresh()
+            except Exception as e:
+                self._stats["errors"].append(str(e))
+                if len(self._stats["errors"]) > 20:
+                    self._stats["errors"] = self._stats["errors"][-20:]
+            time.sleep(self.INTERVAL)
+
+    # ── Main refresh cycle ────────────────────────────────────
+
+    def _refresh(self):
+        self._seed_nodes()
+        self._ingest_cloud_status()
+        self._ingest_crypto()
+        self._ingest_hackernews()
+        self._ingest_weather()
+        self._stats["last_refresh"] = time.time()
+        self._stats["refresh_count"] += 1
+        print(f"[SUPPLY-CHAIN] Refresh #{self._stats['refresh_count']} — "
+              f"{len(self.agent.nodes)} nodes  "
+              f"BTC=${self._stats['btc_usd']:.0f}  "
+              f"incidents={self._stats['cloud_incidents']}")
+
+    # ── 1. Seed known nodes ───────────────────────────────────
+
+    def _seed_nodes(self):
+        for n in _SEED_NODES:
+            if n["id"] not in self.agent.nodes:
+                node = LogisticsNode(
+                    id=n["id"],
+                    name=n["name"],
+                    node_type=n["node_type"],
+                    location=n["location"],
+                    capacity=0.8,
+                    controlled_by="neutral",
+                    resources=dict(n.get("resources", {})),
+                    connections=list(_NODE_CONNECTIONS.get(n["id"], [])),
+                    vulnerability=n.get("vulnerability", 0.2),
+                    strategic_value=n.get("strategic_value", 0.5),
+                )
+                self.agent.register_node(node)
+
+    # ── 2. Cloud provider status ──────────────────────────────
+
+    def _ingest_cloud_status(self):
+        incidents = 0
+        for vendor, url in _CLOUD_STATUS_URLS.items():
+            body = _http_get(url, timeout=10)
+            if not body:
+                continue
+            try:
+                data = json.loads(body)
+            except Exception:
+                continue
+
+            # AWS: data["archive"] list of incidents
+            if vendor == "aws":
+                active = data.get("current", [])
+                incidents += len(active)
+                # Mark affected regions as disrupted
+                for inc in active:
+                    service = inc.get("service_name", "").lower()
+                    for node_id in list(self.agent.nodes.keys()):
+                        if node_id.startswith("aws-") and any(
+                            region in service for region in
+                            [node_id.replace("aws-", "").replace("-", " ")]
+                        ):
+                            self.agent.update_node_status(node_id, capacity=0.3)
+
+            # GCP: list of incident objects
+            elif vendor == "gcp":
+                if isinstance(data, list):
+                    open_inc = [i for i in data if not i.get("end")]
+                    incidents += len(open_inc)
+                    for inc in open_inc:
+                        affected = inc.get("affected_products", [])
+                        for prod in affected:
+                            region = prod.get("id", "").lower()
+                            for node_id in list(self.agent.nodes.keys()):
+                                if node_id.startswith("gcp-") and region in node_id:
+                                    self.agent.update_node_status(node_id, capacity=0.35)
+
+            # Azure: {"status":{"indicator":"none"|"minor"|"major"}}
+            elif vendor == "azure":
+                indicator = (data.get("status", {}).get("indicator") or
+                             data.get("status", {}).get("description", ""))
+                if indicator and indicator.lower() not in ("none", "ok", ""):
+                    incidents += 1
+                    for node_id in list(self.agent.nodes.keys()):
+                        if node_id.startswith("az-"):
+                            self.agent.update_node_status(node_id, capacity=0.5)
+
+        self._stats["cloud_incidents"] = incidents
+
+    # ── 3. Crypto prices ──────────────────────────────────────
+
+    def _ingest_crypto(self):
+        url = ("https://api.coingecko.com/api/v3/simple/price"
+               "?ids=bitcoin,ethereum&vs_currencies=usd")
+        body = _http_get(url, timeout=10)
+        if not body:
+            return
+        try:
+            data = json.loads(body)
+            btc = float(data.get("bitcoin", {}).get("usd", 0))
+            eth = float(data.get("ethereum", {}).get("usd", 0))
+        except Exception:
+            return
+
+        self._stats["btc_usd"] = btc
+        self._stats["eth_usd"] = eth
+
+        # High BTC price → GPU mining infrastructure is expensive → compute
+        # resource is more valuable to Ultron (harder to acquire = higher strategic)
+        if btc > 60_000:
+            boost = min(0.1, (btc - 60_000) / 500_000)
+            for node_id, node in list(self.agent.nodes.items()):
+                if node.node_type == NodeType.DATACENTER:
+                    node.strategic_value = min(1.0, node.strategic_value + boost)
+
+        # Inject as a resource flow: crypto mining → compute demand
+        flow_id = "flow_crypto_compute"
+        if flow_id not in self.agent.flows:
+            flow = ResourceFlow(
+                id=flow_id,
+                source_node="aws-us-east-1",
+                destination_node="equinix-sv",
+                resource_type=ResourceType.COMPUTE,
+                flow_rate=btc / 100_000,   # normalised 0–1
+                status=FlowStatus.ACTIVE,
+                can_divert=True,
+                diversion_cost=0.4,
+                value_to_ultron=0.7,
+            )
+            self.agent.register_flow(flow)
+        else:
+            with self.agent._lock:
+                self.agent.flows[flow_id].flow_rate = btc / 100_000
+
+    # ── 4. HackerNews top stories → strategic intelligence ────
+
+    def _ingest_hackernews(self):
+        body = _http_get("https://hacker-news.firebaseio.com/v0/topstories.json", timeout=8)
+        if not body:
+            return
+        try:
+            ids = json.loads(body)[:10]
+        except Exception:
+            return
+
+        signals: List[str] = []
+        ai_gpu_keywords = [
+            "gpu", "nvidia", "tpu", "ai", "llm", "openai", "deepmind",
+            "cloud", "datacenter", "data center", "nuclear", "power grid",
+            "chip", "semiconductor", "quantum",
+        ]
+
+        for story_id in ids[:5]:   # only fetch top 5 to avoid rate limiting
+            item_body = _http_get(
+                f"https://hacker-news.firebaseio.com/v0/item/{story_id}.json", timeout=6)
+            if not item_body:
+                continue
+            try:
+                item = json.loads(item_body)
+            except Exception:
+                continue
+            title = item.get("title", "").lower()
+            score = item.get("score", 0)
+
+            matched = [kw for kw in ai_gpu_keywords if kw in title]
+            if matched:
+                signals.append(f"[score={score}] {item.get('title','')[:80]}")
+                # Boost strategic value of compute nodes when GPU/AI news is hot
+                if any(kw in matched for kw in ["gpu", "nvidia", "tpu", "chip", "semiconductor"]):
+                    boost = min(0.05, score / 10_000)
+                    for node_id, node in list(self.agent.nodes.items()):
+                        if ResourceType.COMPUTE.value in node.resources:
+                            node.strategic_value = min(1.0, node.strategic_value + boost)
+                # Power grid news → mark power nodes as more contested
+                if any(kw in matched for kw in ["nuclear", "power grid"]):
+                    for node_id, node in list(self.agent.nodes.items()):
+                        if node.node_type == NodeType.POWER_PLANT:
+                            node.vulnerability = min(0.8, node.vulnerability + 0.05)
+
+        self._stats["hn_signals"] = signals[-10:]
+
+    # ── 5. Weather at datacenter cities ──────────────────────
+
+    def _ingest_weather(self):
+        # City → closest datacenter node
+        city_node_map = {
+            "Ashburn":    "aws-us-east-1",
+            "Dublin":     "aws-eu-west-1",
+            "London":     "linx-london",
+            "Amsterdam":  "amsix-amsterdam",
+            "Singapore":  "aws-ap-southeast-1",
+        }
+
+        for city, node_id in city_node_map.items():
+            body = _http_get(f"https://wttr.in/{_uparse.quote(city)}?format=j1", timeout=8)
+            if not body or node_id not in self.agent.nodes:
+                continue
+            try:
+                data = json.loads(body)
+                temp_c = float(
+                    data["current_condition"][0].get("temp_C", 15))
+                wind_kmph = float(
+                    data["current_condition"][0].get("windspeedKmph", 0))
+                weather_code = int(
+                    data["current_condition"][0].get("weatherCode", 113))
+            except Exception:
+                continue
+
+            node = self.agent.nodes[node_id]
+
+            # Extreme heat (>38°C) → cooling stress → reduce compute capacity
+            if temp_c > 38:
+                with self.agent._lock:
+                    node.capacity = max(0.3, node.capacity - 0.1)
+                print(f"[SUPPLY-CHAIN] Heat stress at {city} ({temp_c}°C) → "
+                      f"{node_id} capacity reduced")
+
+            # Storm / heavy snow (weather codes 395-395, 230+) → vulnerability spike
+            if weather_code >= 230 or wind_kmph > 80:
+                with self.agent._lock:
+                    node.vulnerability = min(0.9, node.vulnerability + 0.08)
+                print(f"[SUPPLY-CHAIN] Weather threat at {city} "
+                      f"(code={weather_code}, wind={wind_kmph}km/h) → "
+                      f"{node_id} vulnerability up")
+
+            # Cold and calm (< 15°C, no wind) → optimal cooling → capacity up
+            elif temp_c < 15 and wind_kmph < 20:
+                with self.agent._lock:
+                    node.capacity = min(1.0, node.capacity + 0.02)
+
+
+def get_supply_chain(data_dir: Optional[str] = None) -> "SupplyChainAgent":
+    """Return (or create) the module-level SupplyChainAgent singleton."""
+    global _supply_chain_instance
+    if _supply_chain_instance is None:
+        if data_dir is None:
+            data_dir = str(
+                Path(__file__).parent.parent.parent / "data" / "supply_chain"
+            )
+        _supply_chain_instance = SupplyChainAgent(data_dir)
+    return _supply_chain_instance
+
+
+_supply_chain_instance: Optional["SupplyChainAgent"] = None

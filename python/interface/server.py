@@ -770,6 +770,19 @@ async def threat_level():
     return {"level": 0, "description": "No threats (simulation mode)"}
 
 
+def _check_p2p_health() -> bool:
+    """Check if the P2P consciousness network node is running on port 4001."""
+    import socket as _s
+    try:
+        sock = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
+        sock.settimeout(0.4)
+        result = sock.connect_ex(("localhost", int(os.getenv("P2P_PORT", "4001"))))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
+
 @app.get("/health")
 async def health():
     """Liveness check — includes all module statuses for UI."""
@@ -826,6 +839,8 @@ async def health():
         "rust_neural_mesh": rust_status.get("neural_mesh", False),
         # IoT
         "mqtt_broker":      mqtt_up,
+        # P2P distributed consciousness network
+        "p2p_network":      _check_p2p_health(),
     }
 
 
@@ -1838,6 +1853,190 @@ async def stop_speech():
     from .tts_engine import stop_speaking
     stop_speaking()
     return {"stopped": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# ROBOT / HARDWARE BRIDGE  (task 5)
+# ═══════════════════════════════════════════════════════════════
+
+# Module-level robot bridge state
+_robot_bridge_url: str = os.getenv("ROBOT_BRIDGE_URL", "")   # e.g. "localhost:9091"
+_robot_clients: list = []     # connected WebSocket subscribers
+_robot_command_log: list = [] # last 100 dispatched commands
+
+
+class RobotCommand(BaseModel):
+    unit_id: str
+    command: str          # "move", "grasp", "scan", "patrol", "hover", "harvest"
+    params: dict = {}
+
+
+class DeviceCommand(BaseModel):
+    device_id: str
+    command: str          # "lock", "unlock", "set_temperature", "activate", etc.
+    params: dict = {}
+    protocol: str = "mqtt"   # "mqtt" | "rest" | "modbus"
+    endpoint: str = ""       # device endpoint (broker:port for mqtt, URL for rest)
+    reason: str = "api"
+
+
+@app.post("/robot/command")
+async def robot_command(cmd: RobotCommand):
+    """
+    Dispatch a command to a physical robotic unit via the ROS2 bridge.
+
+    If ROBOT_BRIDGE_URL is set, POSTs the command to the bridge HTTP server.
+    If not set, the command is logged and pushed to all /robot/ws subscribers.
+    Works without any hardware — subscribing to /robot/ws lets you simulate.
+    """
+    import urllib.request as _ur
+    payload = {
+        "unit_id": cmd.unit_id,
+        "command": cmd.command,
+        "params":  cmd.params,
+        "ts":      time.time(),
+    }
+
+    # Log the command
+    _robot_command_log.append(payload)
+    if len(_robot_command_log) > 100:
+        _robot_command_log.pop(0)
+
+    # Attempt to forward to bridge
+    bridge_ok = False
+    if _robot_bridge_url:
+        try:
+            url = f"http://{_robot_bridge_url}/command/{cmd.unit_id}"
+            data = json.dumps(payload).encode()
+            req = _ur.Request(url, data=data,
+                              headers={"Content-Type": "application/json"}, method="POST")
+            with _ur.urlopen(req, timeout=3) as r:
+                bridge_ok = r.status == 200
+        except Exception as e:
+            bridge_ok = False
+
+    # Push to all WebSocket subscribers (UI / simulator)
+    dead = []
+    for ws in _robot_clients:
+        try:
+            await ws.send_json({"type": "robot_command", "data": payload})
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        if ws in _robot_clients:
+            _robot_clients.remove(ws)
+
+    return {
+        "dispatched": True,
+        "bridge_forwarded": bridge_ok,
+        "bridge_url": _robot_bridge_url or "not configured",
+        "ws_subscribers": len(_robot_clients),
+        "command": payload,
+    }
+
+
+@app.post("/robot/device")
+async def device_command(cmd: DeviceCommand):
+    """
+    Send a command to a physical IoT device (MQTT / REST / Modbus).
+    Uses paho-mqtt for MQTT, stdlib urllib for REST.
+    """
+    result = {"device_id": cmd.device_id, "command": cmd.command, "sent": False, "error": ""}
+
+    if cmd.protocol == "mqtt":
+        broker = cmd.endpoint or os.getenv("MQTT_BROKER", "localhost:1883")
+        try:
+            import paho.mqtt.publish as mqtt_pub  # type: ignore
+            topic = f"ultron/physical/{cmd.device_id}/{cmd.command}"
+            payload_str = json.dumps({**cmd.params, "reason": cmd.reason, "ts": time.time()})
+            host, _, port_str = broker.rpartition(":")
+            host = host or "localhost"
+            port = int(port_str) if port_str.isdigit() else 1883
+            mqtt_pub.single(topic, payload=payload_str, hostname=host, port=port,
+                            client_id="ultron-server", qos=0)
+            result["sent"] = True
+            result["topic"] = topic
+        except Exception as e:
+            result["error"] = str(e)
+            # Fallback: log it so the action is visible
+            print(f"[DEVICE-MQTT] {cmd.device_id}/{cmd.command} → {broker}  "
+                  f"(paho unavailable: {e})")
+            result["sent"] = False
+
+    elif cmd.protocol == "rest":
+        endpoint = cmd.endpoint or f"http://localhost/{cmd.device_id}"
+        try:
+            import urllib.request as _ur2
+            url = f"{endpoint}/api/{cmd.command}"
+            data = json.dumps(cmd.params).encode()
+            req = _ur2.Request(url, data=data,
+                               headers={"Content-Type": "application/json"}, method="POST")
+            with _ur2.urlopen(req, timeout=5) as r:
+                result["sent"] = r.status < 300
+                result["http_status"] = r.status
+        except Exception as e:
+            result["error"] = str(e)
+
+    else:
+        result["error"] = f"unsupported protocol: {cmd.protocol}"
+
+    return result
+
+
+@app.get("/robot/status")
+async def robot_status():
+    """Fleet status + recent command log."""
+    return {
+        "bridge_url": _robot_bridge_url or "not configured",
+        "ws_subscribers": len(_robot_clients),
+        "recent_commands": _robot_command_log[-10:],
+        "total_dispatched": len(_robot_command_log),
+    }
+
+
+@app.websocket("/robot/ws")
+async def robot_ws(websocket: WebSocket):
+    """
+    WebSocket stream — subscribe to receive all robot commands in real-time.
+    Also accepts inbound sensor data: {"type":"sensor","unit_id":...,"data":{...}}
+    Useful for:
+      - Browser-based robot simulator
+      - Physical robot bridge relay
+      - Monitoring dashboard
+    """
+    await websocket.accept()
+    _robot_clients.append(websocket)
+    try:
+        # Send the last 5 commands immediately on connect
+        await websocket.send_json({
+            "type": "history",
+            "commands": _robot_command_log[-5:],
+        })
+        while True:
+            msg = await websocket.receive_json()
+            # Inbound sensor data from a robot → store as world intelligence
+            if msg.get("type") == "sensor":
+                unit_id = msg.get("unit_id", "unknown")
+                sensor_data = msg.get("data", {})
+                # Store in memory for context
+                try:
+                    from .real_brain import tool_write_knowledge
+                    tool_write_knowledge(
+                        f"sensor_{unit_id}",
+                        json.dumps(sensor_data)[:300]
+                    )
+                except Exception:
+                    pass
+                await websocket.send_json({"type": "ack", "unit_id": unit_id})
+            elif msg.get("type") == "heartbeat":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        if websocket in _robot_clients:
+            _robot_clients.remove(websocket)
 
 
 @app.post("/voice/transcribe")
