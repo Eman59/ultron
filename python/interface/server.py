@@ -1779,19 +1779,41 @@ def _analyze_text(file_path):
         return f"Text file, read failed: {e}"
 
 
-@app.post("/tts")
-async def text_to_speech(text: str):
-    """Generate high-quality speech using macOS native TTS."""
-    from .tts_engine import synthesize
-    wav_path = synthesize(text)
-    if wav_path and os.path.exists(wav_path):
-        return FileResponse(wav_path, media_type="audio/wav")
-    return {"error": "TTS generation failed"}
+@app.get("/tts/stream")
+async def tts_stream(text: str):
+    """
+    Stream synthesized speech back to the browser as audio/wav or audio/mpeg.
+    Works on any platform — macOS, Linux, Windows.
+    Also fires speak_directly() for local Mac speakers simultaneously.
+    """
+    from .tts_engine import synthesize_for_browser, speak_directly
+    import asyncio
+
+    if not text or not text.strip():
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "no text"}, status_code=400)
+
+    # Run TTS synthesis in a thread pool so we don't block the event loop
+    loop = asyncio.get_event_loop()
+    path, mime = await loop.run_in_executor(None, synthesize_for_browser, text.strip())
+
+    # Also play through local speakers (macOS only; no-op elsewhere)
+    speak_directly(text.strip())
+
+    if path and os.path.exists(path):
+        return FileResponse(path, media_type=mime,
+                            headers={"Cache-Control": "no-store"})
+    # Nothing synthesized — let the browser fall back to Web Speech API
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"error": "synthesis_failed"}, status_code=503)
 
 
 @app.post("/speak")
 async def speak_out_loud(request: Request):
-    """Speak directly through Mac speakers — accepts JSON or form-encoded text."""
+    """
+    Fire-and-forget local speaker playback (Mac only).
+    Returns immediately; browser must not wait for speech to finish.
+    """
     try:
         ct = request.headers.get("content-type", "")
         if "application/json" in ct:
@@ -1805,7 +1827,6 @@ async def speak_out_loud(request: Request):
     if not text:
         return {"speaking": False, "error": "no text"}
 
-    # Go straight to macOS say — most reliable, no double-play risk
     from .tts_engine import speak_directly
     speak_directly(text)
     return {"speaking": True, "text": text, "engine": "system"}
@@ -1813,7 +1834,7 @@ async def speak_out_loud(request: Request):
 
 @app.post("/stop_speaking")
 async def stop_speech():
-    """Stop Ultron from speaking."""
+    """Stop Ultron from speaking (kills local TTS process + signals browser)."""
     from .tts_engine import stop_speaking
     stop_speaking()
     return {"stopped": True}
@@ -1821,52 +1842,107 @@ async def stop_speech():
 
 @app.post("/voice/transcribe")
 async def voice_transcribe(file: UploadFile = File(...)):
-    """Transcribe voice audio using Whisper."""
+    """
+    Transcribe voice audio using Whisper (or faster-whisper / whisper.cpp).
+
+    Accepts any format MediaRecorder produces: webm/opus, webm/pcm, mp4/aac,
+    ogg/opus, wav.  ffmpeg normalises everything to 16 kHz mono WAV before
+    handing to Whisper so the transcriber is format-agnostic.
+    """
     import tempfile
     import subprocess
-    
-    # Save uploaded audio
-    tmp = tempfile.NamedTemporaryFile(suffix='.webm', delete=False)
+
     content = await file.read()
-    tmp.write(content)
-    tmp.close()
-    
-    # Convert to wav using ffmpeg
-    wav_path = tmp.name.replace('.webm', '.wav')
+    if not content:
+        return {"text": "", "error": "empty file"}
+
+    # Detect file extension from upload filename (fallback: webm)
+    fname = (file.filename or "audio.webm").lower()
+    suffix = ".webm"
+    for ext in (".wav", ".mp3", ".mp4", ".m4a", ".ogg", ".opus", ".aac", ".webm"):
+        if fname.endswith(ext):
+            suffix = ext
+            break
+
+    # Write raw upload to a temp file
+    tmp_in = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp_in.write(content)
+    tmp_in.close()
+
+    wav_path = tmp_in.name.replace(suffix, ".wav")
+    text = ""
+    error = ""
+
     try:
-        subprocess.run(
-            ['ffmpeg', '-y', '-i', tmp.name, '-ar', '16000', '-ac', '1', wav_path],
-            capture_output=True, timeout=10
+        # ── Step 1: Convert to 16 kHz mono WAV via ffmpeg ──────────────────
+        ff = subprocess.run(
+            ["ffmpeg", "-y", "-i", tmp_in.name,
+             "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", wav_path],
+            capture_output=True, timeout=15,
         )
-    except Exception:
-        os.unlink(tmp.name)
-        return {"text": "", "error": "ffmpeg conversion failed"}
-    
-    # Transcribe with whisper
-    try:
-        result = subprocess.run(
-            ['whisper', wav_path, '--model', 'base', '--language', 'en',
-             '--output_format', 'txt', '--output_dir', '/tmp'],
-            capture_output=True, text=True, timeout=30
-        )
-        # Read transcription
-        txt_path = wav_path.rsplit('.', 1)[0] + '.txt'
-        if os.path.exists(txt_path):
-            text = open(txt_path).read().strip()
-            os.unlink(txt_path)
-        else:
-            text = result.stdout.strip()
-    except Exception as e:
-        text = ""
-    
-    # Cleanup
-    try:
-        os.unlink(tmp.name)
-        os.unlink(wav_path)
-    except Exception:
-        pass
-    
-    return {"text": text}
+        if ff.returncode != 0 or not os.path.exists(wav_path):
+            # Try without -sample_fmt in case older ffmpeg doesn't support it
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", tmp_in.name,
+                 "-ar", "16000", "-ac", "1", wav_path],
+                capture_output=True, timeout=15,
+            )
+
+        if not os.path.exists(wav_path):
+            return {"text": "", "error": "ffmpeg conversion failed"}
+
+        # ── Step 2: Transcribe — try backends in order ──────────────────────
+        #   a) faster-whisper (pip install faster-whisper) — fastest option
+        try:
+            from faster_whisper import WhisperModel  # type: ignore
+            model = WhisperModel("base", device="cpu", compute_type="int8")
+            segments, _ = model.transcribe(wav_path, language="en", beam_size=1)
+            text = " ".join(s.text for s in segments).strip()
+        except ImportError:
+            pass
+
+        #   b) openai-whisper (pip install openai-whisper)
+        if not text:
+            try:
+                import whisper as _whisper  # type: ignore
+                _model = _whisper.load_model("base")
+                result = _model.transcribe(wav_path, language="en", fp16=False)
+                text = result.get("text", "").strip()
+            except ImportError:
+                pass
+
+        #   c) whisper CLI (whisper.cpp or openai-whisper installed as binary)
+        if not text:
+            try:
+                out_dir = os.path.dirname(wav_path)
+                r = subprocess.run(
+                    ["whisper", wav_path, "--model", "base", "--language", "en",
+                     "--output_format", "txt", "--output_dir", out_dir],
+                    capture_output=True, text=True, timeout=45,
+                )
+                txt_file = wav_path.rsplit(".", 1)[0] + ".txt"
+                if os.path.exists(txt_file):
+                    text = open(txt_file).read().strip()
+                    os.unlink(txt_file)
+                elif r.stdout.strip():
+                    text = r.stdout.strip()
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        if not text:
+            error = "no_stt_backend"
+
+    except Exception as exc:
+        error = str(exc)
+
+    finally:
+        for p in (tmp_in.name, wav_path):
+            try:
+                os.unlink(p)
+            except Exception:
+                pass
+
+    return {"text": text, "error": error}
 
 
 @app.post("/self-modify")

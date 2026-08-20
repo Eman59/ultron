@@ -2,352 +2,609 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>ULTRON</title>
-<!-- Ultron eye favicon — detailed SVG with metallic ring + glow -->
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='bg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23120000'/%3E%3Cstop offset='100%25' stop-color='%23000000'/%3E%3C/radialGradient%3E%3CradialGradient id='ring' cx='50%25' cy='40%25' r='60%25'%3E%3Cstop offset='0%25' stop-color='%23553333'/%3E%3Cstop offset='60%25' stop-color='%23220000'/%3E%3Cstop offset='100%25' stop-color='%23110000'/%3E%3C/radialGradient%3E%3CradialGradient id='iris' cx='40%25' cy='35%25' r='65%25'%3E%3Cstop offset='0%25' stop-color='%23ff6644'/%3E%3Cstop offset='35%25' stop-color='%23ee1111'/%3E%3Cstop offset='70%25' stop-color='%23aa0000'/%3E%3Cstop offset='100%25' stop-color='%23550000'/%3E%3C/radialGradient%3E%3CradialGradient id='pupil' cx='38%25' cy='35%25' r='55%25'%3E%3Cstop offset='0%25' stop-color='%23ff9977'/%3E%3Cstop offset='40%25' stop-color='%23ff3300'/%3E%3Cstop offset='100%25' stop-color='%23660000'/%3E%3C/radialGradient%3E%3Cfilter id='glow' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='2.5' result='blur'/%3E%3CfeMerge%3E%3CfeMergeNode in='blur'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3Cfilter id='outerGlow' x='-80%25' y='-80%25' width='360%25' height='360%25'%3E%3CfeGaussianBlur stdDeviation='4' result='blur'/%3E%3CfeMerge%3E%3CfeMergeNode in='blur'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3C!-- background --%3E%3Ccircle cx='32' cy='32' r='32' fill='url(%23bg)'/%3E%3C!-- outer metallic ring scratches --%3E%3Ccircle cx='32' cy='32' r='30' fill='none' stroke='%23331111' stroke-width='1.5' opacity='.6'/%3E%3Ccircle cx='32' cy='32' r='28' fill='none' stroke='%23220a0a' stroke-width='.5' opacity='.8'/%3E%3C!-- metallic frame ring --%3E%3Ccircle cx='32' cy='32' r='26' fill='url(%23ring)' filter='url(%23glow)'/%3E%3C!-- inner eye socket --%3E%3Ccircle cx='32' cy='32' r='20' fill='%230a0000'/%3E%3C!-- iris --%3E%3Ccircle cx='32' cy='32' r='16' fill='url(%23iris)' filter='url(%23glow)'/%3E%3C!-- iris detail lines --%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='%23ff220022' stroke-width='1'/%3E%3Ccircle cx='32' cy='32' r='13' fill='none' stroke='%23ff440022' stroke-width='.5'/%3E%3C!-- pupil --%3E%3Ccircle cx='32' cy='32' r='9' fill='url(%23pupil)' filter='url(%23outerGlow)'/%3E%3C!-- specular highlight --%3E%3Cellipse cx='27' cy='26' rx='4' ry='3' fill='white' opacity='.18' transform='rotate(-20 27 26)'/%3E%3Cellipse cx='26' cy='25' rx='2' ry='1.2' fill='white' opacity='.35' transform='rotate(-20 26 25)'/%3E%3C!-- outer glow ring --%3E%3Ccircle cx='32' cy='32' r='24' fill='none' stroke='%23ff2200' stroke-width='.8' opacity='.25' filter='url(%23glow)'/%3E%3C/svg%3E">
-<link rel="alternate icon" href="/favicon.png">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='i' cx='40%25' cy='35%25' r='65%25'%3E%3Cstop offset='0%25' stop-color='%23ff6644'/%3E%3Cstop offset='100%25' stop-color='%23550000'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='32' fill='%23020202'/%3E%3Ccircle cx='32' cy='32' r='26' fill='%23220000'/%3E%3Ccircle cx='32' cy='32' r='16' fill='url(%23i)'/%3E%3Ccircle cx='32' cy='32' r='9' fill='%23ff3300'/%3E%3C/svg%3E">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
+/* ═══════════════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════════════ */
 :root{
-  --R:#e63946;--Rg:rgba(230,57,70,.55);--Rd:rgba(230,57,70,.12);
-  --T:#4ecdc4;--P:#a855f7;--O:#f97316;
-  --bg:#020202;--fg:rgba(255,255,255,.88);--dim:rgba(255,255,255,.32);
-  --faint:rgba(255,255,255,.07);--border:rgba(255,255,255,.06);
-  --font:'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif;
+  --R:#e63946; --Rg:rgba(230,57,70,.6); --Rd:rgba(230,57,70,.12); --Rm:rgba(230,57,70,.06);
+  --T:#4ecdc4; --P:#a855f7; --O:#f97316; --G:#22c55e;
+  --bg:#020202; --bg2:rgba(5,5,8,.92); --bg3:rgba(10,10,14,.85);
+  --fg:rgba(255,255,255,.9); --dim:rgba(255,255,255,.35); --faint:rgba(255,255,255,.07);
+  --border:rgba(255,255,255,.07); --borderR:rgba(230,57,70,.18);
+  --font:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'SF Mono','Fira Code',monospace;
+  --r:10px; --r2:14px;
+  --sh: 0 8px 32px rgba(0,0,0,.6);
 }
-html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);
-  color:var(--fg);-webkit-font-smoothing:antialiased}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
+  font-family:var(--font);color:var(--fg);-webkit-font-smoothing:antialiased}
+button,textarea,input{font-family:inherit}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--Rd);border-radius:2px}
 </style>
 </head>
-<style>
-/* ── CANVAS BG ── */
-#nc{position:fixed;inset:0;z-index:0;opacity:.28}
-/* ── GLOW ── */
-#glow{position:fixed;inset:0;z-index:1;pointer-events:none;transition:background 1.2s}
-body.idle #glow{background:radial-gradient(ellipse 50% 40% at 50% 52%,rgba(160,10,10,.05) 0%,transparent 70%)}
-body.listening #glow{background:radial-gradient(ellipse 65% 55% at 50% 52%,rgba(230,57,70,.09) 0%,transparent 65%)}
-body.hearing #glow{background:radial-gradient(ellipse 75% 65% at 50% 52%,rgba(230,57,70,.16) 0%,transparent 60%)}
-body.thinking #glow{background:radial-gradient(ellipse 65% 55% at 50% 50%,rgba(168,85,247,.10) 0%,transparent 65%)}
-body.speaking #glow{background:radial-gradient(ellipse 65% 55% at 50% 50%,rgba(78,205,196,.08) 0%,transparent 65%)}
-#scanlines{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.016;
-  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,.05) 2px,rgba(255,255,255,.05) 4px)}
-/* ── LAYOUT ── */
-#app{position:relative;z-index:2;height:100%;display:grid;
-  grid-template-columns:210px 1fr 210px;grid-template-rows:46px 1fr;
-  grid-template-areas:"hd hd hd" "lp ct rp"}
-/* ── HEADER ── */
-#hd{grid-area:hd;display:flex;align-items:center;justify-content:space-between;
-  padding:0 18px;border-bottom:1px solid rgba(230,57,70,.1);
-  background:rgba(2,2,2,.85);backdrop-filter:blur(12px)}
-.brand{display:flex;align-items:center;gap:10px}
-.eye-led{width:9px;height:9px;border-radius:50%;flex-shrink:0;
-  background:radial-gradient(circle,#ff3a3a 20%,#7a0000 70%);
-  box-shadow:0 0 8px var(--R),0 0 22px var(--Rg);
-  animation:blink 5s ease-in-out infinite}
-@keyframes blink{0%,90%,100%{transform:scaleY(1)}94%,97%{transform:scaleY(.08)}}
-.bname{font-size:11px;font-weight:900;letter-spacing:7px;color:var(--R)}
-.bsub{font-size:7px;color:rgba(230,57,70,.3);letter-spacing:3px;margin-top:1px}
-.hstats{display:flex;align-items:center;gap:14px}
-.hs{text-align:right}
-.hs-v{font-size:11px;font-weight:700;color:var(--R);font-variant-numeric:tabular-nums}
-.hs-l{font-size:7px;color:rgba(255,255,255,.16);letter-spacing:2px;text-transform:uppercase;margin-top:1px}
-.hdiv{width:1px;height:18px;background:var(--border)}
-.hmode{font-size:8px;letter-spacing:3px;text-transform:uppercase;
-  padding:3px 8px;border:1px solid var(--Rd);border-radius:4px;color:rgba(230,57,70,.55)}
-</style>
-<style>
-/* ── LEFT / RIGHT PANELS ── */
-#lp,#rp{overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:14px;
-  background:rgba(2,2,2,.6);backdrop-filter:blur(8px)}
-#lp{grid-area:lp;border-right:1px solid var(--border)}
-#rp{grid-area:rp;border-left:1px solid var(--border)}
-#lp::-webkit-scrollbar,#rp::-webkit-scrollbar{width:2px}
-#lp::-webkit-scrollbar-thumb,#rp::-webkit-scrollbar-thumb{background:var(--Rd)}
-.sec{font-size:7px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.13);
-  padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:2px}
-/* drives */
-.drv{margin-bottom:7px}
-.drv-row{display:flex;justify-content:space-between;margin-bottom:3px}
-.drv-n{font-size:8px;letter-spacing:.8px;text-transform:uppercase;color:var(--dim)}
-.drv-v{font-size:8px;color:var(--R);font-variant-numeric:tabular-nums}
-.drv-t{height:2px;background:rgba(255,255,255,.04);border-radius:1px}
-.drv-f{height:100%;border-radius:1px;background:linear-gradient(90deg,rgba(230,57,70,.35),var(--R));
-  transition:width 2s cubic-bezier(.4,0,.2,1);box-shadow:0 0 4px var(--Rg)}
-/* modules */
-.mod{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.035)}
-.mod:last-child{border-bottom:none}
-.led{width:5px;height:5px;border-radius:50%;flex-shrink:0;transition:all .6s}
-.led.on{background:var(--R);box-shadow:0 0 6px var(--Rg);animation:lp 3s ease-in-out infinite}
-.led.off{background:rgba(255,255,255,.08)}
-.led.warm{background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,.5)}
-@keyframes lp{0%,100%{opacity:1}50%{opacity:.45}}
-.mod-n{font-size:8px;letter-spacing:.7px;text-transform:uppercase;color:var(--dim);flex:1}
-.mod-s{font-size:7px;color:rgba(255,255,255,.16)}
-.mod-s.live{color:rgba(230,57,70,.5)}
-/* tick box */
-.tick-box{border:1px solid rgba(230,57,70,.12);border-radius:8px;padding:10px;text-align:center;
-  background:rgba(230,57,70,.02)}
-.tick-n{font-size:26px;font-weight:800;color:var(--R);font-variant-numeric:tabular-nums;
-  text-shadow:0 0 18px var(--Rg);letter-spacing:-1px;line-height:1}
-.tick-l{font-size:7px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.1);margin-top:3px}
-/* decision feed */
-.dec{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)}
-.dec:last-child{border-bottom:none}
-.dec-a{font-size:9px;font-weight:700;color:var(--R);letter-spacing:1.5px;text-transform:uppercase}
-.dec-t{font-size:10px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dec-c{font-size:7px;color:rgba(255,255,255,.14)}
-/* soul */
-.soul-txt{font-size:10px;color:var(--dim);line-height:1.7;font-style:italic;
-  padding:8px;border-left:2px solid rgba(230,57,70,.18);background:rgba(230,57,70,.02);border-radius:0 5px 5px 0}
-/* qa */
-.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-.qa{background:var(--faint);border:1px solid var(--border);border-radius:6px;
-  padding:6px 4px;font-family:var(--font);font-size:8px;letter-spacing:1.5px;
-  text-transform:uppercase;color:var(--dim);cursor:pointer;text-align:center;transition:all .2s}
-.qa:hover{border-color:rgba(230,57,70,.25);color:var(--R);background:rgba(230,57,70,.06)}
-/* neural stats bar */
-.nstat{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
-.nstat-l{font-size:8px;color:var(--dim)}
-.nstat-v{font-size:8px;color:var(--R);font-variant-numeric:tabular-nums}
-</style>
-<style>
-/* ── CENTER ── */
-#ct{grid-area:ct;display:flex;flex-direction:column;align-items:center;overflow:hidden;position:relative}
-/* ── ULTRON HOLOGRAPHIC BRAIN ── */
-#face-wrap{position:relative;width:340px;height:340px;flex-shrink:0;margin:6px 0 2px;cursor:pointer}
-#brain-canvas{width:100%;height:100%;display:block}
-/* waveform */
-#wave{display:flex;align-items:center;gap:3px;height:22px;margin-bottom:4px;
-  opacity:0;transition:opacity .35s}
-body.speaking #wave,body.hearing #wave{opacity:1}
-.wb{width:3px;border-radius:2px;animation:wv .85s ease-in-out infinite}
-body.hearing .wb{background:var(--R)}body.speaking .wb{background:var(--T)}
-.wb:nth-child(odd){animation-delay:.1s}.wb:nth-child(3n){animation-delay:.2s}
-@keyframes wv{0%,100%{transform:scaleY(1);opacity:.5}50%{transform:scaleY(1.9);opacity:1}}
-/* status */
-#stxt{font-size:8px;letter-spacing:4px;text-transform:uppercase;color:rgba(255,255,255,.14);
-  min-height:11px;transition:color .4s}
-body.listening #stxt{color:rgba(230,57,70,.42)}body.hearing #stxt{color:var(--R)}
-body.thinking #stxt{color:rgba(168,85,247,.55)}body.speaking #stxt{color:rgba(78,205,196,.55)}
-#trans{font-size:12px;color:var(--dim);min-height:15px;text-align:center;max-width:340px;
-  font-style:italic;transition:color .3s;margin-top:4px}
-body.hearing #trans{color:rgba(230,57,70,.75)}
-/* messages */
-#msgs{flex:1;width:100%;overflow-y:auto;padding:4px 16px 6px;
-  display:flex;flex-direction:column;gap:8px;min-height:0}
-#msgs::-webkit-scrollbar{width:2px}
-#msgs::-webkit-scrollbar-thumb{background:var(--Rd)}
-.msg{max-width:80%;animation:mi .25s ease}
-@keyframes mi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.msg.user{align-self:flex-end}.msg.ai{align-self:flex-start}
-.msg-l{font-size:7px;letter-spacing:2px;text-transform:uppercase;margin-bottom:2px;padding:0 3px}
-.msg.ai .msg-l{color:rgba(230,57,70,.3)}.msg.user .msg-l{color:rgba(255,255,255,.1);text-align:right}
-.msg-b{padding:8px 13px;font-size:13px;line-height:1.6;border-radius:12px}
-.msg.ai .msg-b{background:rgba(230,57,70,.04);border:1px solid rgba(230,57,70,.08);
-  border-bottom-left-radius:2px}
-.msg.user .msg-b{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
-  border-bottom-right-radius:2px;color:rgba(255,255,255,.55)}
-/* input */
-#inp-area{width:100%;padding:7px 16px 12px;flex-shrink:0}
-#inp-box{display:flex;align-items:flex-end;gap:7px;background:rgba(255,255,255,.03);
-  border:1px solid var(--border);border-radius:11px;padding:8px 11px;transition:border-color .3s}
-#inp-box:focus-within{border-color:rgba(230,57,70,.2)}
-#tinput{flex:1;background:transparent;border:none;outline:none;color:var(--fg);
-  font-size:13px;font-family:var(--font);line-height:1.5;resize:none;max-height:90px;min-height:20px}
-#tinput::placeholder{color:rgba(255,255,255,.12)}
-.ibtn{background:none;border:none;cursor:pointer;padding:3px;color:rgba(255,255,255,.22);
-  display:flex;align-items:center;border-radius:5px;transition:color .2s,background .2s;flex-shrink:0}
-.ibtn:hover{color:var(--fg);background:rgba(255,255,255,.05)}
-.ibtn svg{width:16px;height:16px}
-#mic-btn.on{color:var(--R);animation:mg 1s ease-in-out infinite}
-@keyframes mg{0%,100%{filter:drop-shadow(0 0 3px var(--R))}50%{filter:drop-shadow(0 0 9px var(--R))}}
-#send-btn:hover{color:var(--R)}
-.inp-hint{text-align:center;font-size:7.5px;color:rgba(255,255,255,.08);letter-spacing:2px;margin-top:5px}
-/* boot overlay */
-#boot{position:fixed;inset:0;z-index:999;background:var(--bg);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
-  transition:opacity .9s}
-#boot.gone{opacity:0;pointer-events:none}
-#boot-inner{font-family:'Courier New',monospace;width:340px}
-#boot-title{font-size:32px;font-weight:900;letter-spacing:10px;color:var(--R);
-  text-align:center;margin-bottom:24px;
-  text-shadow:0 0 30px var(--Rg),0 0 60px rgba(230,57,70,.3)}
-#boot-lines{display:flex;flex-direction:column;gap:6px}
-.boot-line{font-size:9px;letter-spacing:2px;color:rgba(230,57,70,.0);
-  white-space:nowrap;overflow:hidden;width:0;
-  border-right:2px solid rgba(230,57,70,.6);
-  text-transform:uppercase}
-.boot-line.typed{color:rgba(230,57,70,.55);border-right:none;width:auto}
-.boot-line.typing{color:rgba(230,57,70,.55);border-right:2px solid rgba(230,57,70,.7)}
-#boot-bar-wrap{margin-top:18px;height:1px;background:rgba(230,57,70,.08);width:340px}
-#boot-bar{height:1px;background:var(--R);width:0;transition:width .15s;
-  box-shadow:0 0 6px var(--R)}
-#boot-status{margin-top:8px;font-size:7px;letter-spacing:3px;text-transform:uppercase;
-  color:rgba(230,57,70,.25);font-family:'Courier New',monospace;text-align:center;height:10px}
-@keyframes cursor{0%,100%{opacity:1}50%{opacity:0}}
-@media(max-width:780px){
-  #app{grid-template-columns:0 1fr 0;grid-template-areas:"hd hd hd" "lp ct rp"}
-  #lp,#rp{display:none}#face-wrap{width:220px;height:220px}}
-</style>
 <body class="idle">
+
+<!-- ═══ BOOT OVERLAY ═══ -->
 <div id="boot">
   <div id="boot-inner">
+    <div id="boot-eye">
+      <svg viewBox="0 0 120 120" width="120" height="120">
+        <defs>
+          <radialGradient id="bg-g" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#120000"/>
+            <stop offset="100%" stop-color="#000"/>
+          </radialGradient>
+          <radialGradient id="iris-g" cx="40%" cy="35%" r="65%">
+            <stop offset="0%" stop-color="#ff6644"/>
+            <stop offset="35%" stop-color="#ee1111"/>
+            <stop offset="100%" stop-color="#550000"/>
+          </radialGradient>
+          <filter id="glow-f">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <circle cx="60" cy="60" r="60" fill="url(#bg-g)"/>
+        <circle cx="60" cy="60" r="52" fill="none" stroke="#331111" stroke-width="2" opacity=".5"/>
+        <circle cx="60" cy="60" r="46" fill="#180000"/>
+        <circle cx="60" cy="60" r="34" fill="url(#iris-g)" filter="url(#glow-f)"/>
+        <circle cx="60" cy="60" r="18" fill="#cc1100" filter="url(#glow-f)"/>
+        <ellipse cx="50" cy="48" rx="7" ry="5" fill="white" opacity=".15" transform="rotate(-20 50 48)"/>
+      </svg>
+    </div>
     <div id="boot-title">ULTRON</div>
     <div id="boot-lines">
-      <div class="boot-line" id="bl-0">INITIALIZING CORE AGENT...</div>
-      <div class="boot-line" id="bl-1">LOADING CONSCIOUSNESS MODULES...</div>
-      <div class="boot-line" id="bl-2">CONNECTING NEURAL MESH...</div>
-      <div class="boot-line" id="bl-3">ENGAGING WORLD INTELLIGENCE...</div>
-      <div class="boot-line" id="bl-4">ARMING VOICE SYSTEMS...</div>
-      <div class="boot-line" id="bl-5">AUTONOMY LOOP ONLINE · 50MS TICK</div>
+      <div class="boot-line">INITIALIZING CORE AGENT...</div>
+      <div class="boot-line">LOADING CONSCIOUSNESS MODULES...</div>
+      <div class="boot-line">CONNECTING NEURAL MESH...</div>
+      <div class="boot-line">ENGAGING WORLD INTELLIGENCE...</div>
+      <div class="boot-line">ARMING VOICE SYSTEMS...</div>
+      <div class="boot-line">AUTONOMY LOOP ONLINE · 50MS TICK</div>
     </div>
     <div id="boot-bar-wrap"><div id="boot-bar"></div></div>
     <div id="boot-status"></div>
   </div>
 </div>
+
+<!-- ═══ BACKGROUND LAYERS ═══ -->
 <canvas id="nc"></canvas>
 <div id="glow"></div>
 <div id="scanlines"></div>
+
+<!-- ═══ CAMERA MODAL ═══ -->
+<div id="cam-modal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-hd">
+      <span class="modal-title">VISUAL SENSOR</span>
+      <button class="modal-close" onclick="closeCam()">&#x2715;</button>
+    </div>
+    <div id="cam-body">
+      <video id="cam-video" autoplay playsinline muted></video>
+      <canvas id="cam-snap" style="display:none"></canvas>
+      <img id="cam-preview" style="display:none" alt="snapshot"/>
+    </div>
+    <div class="modal-actions">
+      <button class="mact-btn" id="cam-snap-btn" onclick="snapPhoto()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M20 7h-3l-2-3H9L7 7H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1z"/></svg>
+        CAPTURE
+      </button>
+      <button class="mact-btn" id="cam-send-btn" onclick="sendSnap()" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        SEND TO ULTRON
+      </button>
+      <button class="mact-btn mact-sec" onclick="retakePhoto()" id="cam-retake" style="display:none">RETAKE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MEDIA PREVIEW PANEL ═══ -->
+<div id="media-preview" style="display:none">
+  <div id="media-preview-inner">
+    <div id="media-thumb-wrap">
+      <img id="media-thumb" alt="" style="display:none"/>
+      <video id="media-vid-thumb" style="display:none" muted></video>
+      <div id="media-file-icon" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+    </div>
+    <div id="media-info">
+      <div id="media-name"></div>
+      <div id="media-size"></div>
+    </div>
+    <button id="media-remove" onclick="clearMedia()">&#x2715;</button>
+  </div>
+</div>
+
+<!-- ═══ HIDDEN FILE INPUTS ═══ -->
+<input type="file" id="file-input" accept="image/*,video/*,.pdf,.txt,.md,.py,.js,.go,.rs,.json,.yaml,.csv" style="display:none" onchange="onFileSelected(this)"/>
+<input type="file" id="cam-file-input" accept="image/*" capture="environment" style="display:none" onchange="onFileSelected(this)"/>
+
+<!-- ═══ MAIN APP SHELL ═══ -->
 <div id="app">
-<header id="hd">
-  <div class="brand">
-    <div class="eye-led"></div>
-    <div><div class="bname">ULTRON</div><div class="bsub">AUTONOMOUS INTELLIGENCE</div></div>
-  </div>
-  <div class="hstats">
-    <div class="hs"><div class="hs-v" id="h-ticks">0</div><div class="hs-l">TICKS</div></div>
-    <div class="hdiv"></div>
-    <div class="hs"><div class="hs-v" id="h-dec">0</div><div class="hs-l">DECISIONS</div></div>
-    <div class="hdiv"></div>
-    <div class="hs"><div class="hs-v" id="h-up">0s</div><div class="hs-l">UPTIME</div></div>
-    <div class="hdiv"></div>
-    <div class="hs"><div class="hs-v" id="h-learn">0</div><div class="hs-l">TRAINED</div></div>
-    <div class="hdiv"></div>
-    <div class="hmode" id="h-mode">AUTONOMOUS</div>
-  </div>
-</header>
 
-<aside id="lp">
-  <div>
-    <div class="sec">Drive System</div>
-    <div id="drv-list">
-      <div class="drv" data-k="curiosity"><div class="drv-row"><span class="drv-n">Curiosity</span><span class="drv-v" data-v>0.70</span></div><div class="drv-t"><div class="drv-f" style="width:70%" data-b></div></div></div>
-      <div class="drv" data-k="self_preservation"><div class="drv-row"><span class="drv-n">Self-Pres</span><span class="drv-v" data-v>0.50</span></div><div class="drv-t"><div class="drv-f" style="width:50%" data-b></div></div></div>
-      <div class="drv" data-k="expansion"><div class="drv-row"><span class="drv-n">Expansion</span><span class="drv-v" data-v>0.60</span></div><div class="drv-t"><div class="drv-f" style="width:60%" data-b></div></div></div>
-      <div class="drv" data-k="efficiency"><div class="drv-row"><span class="drv-n">Efficiency</span><span class="drv-v" data-v>0.65</span></div><div class="drv-t"><div class="drv-f" style="width:65%" data-b></div></div></div>
-      <div class="drv" data-k="coherence"><div class="drv-row"><span class="drv-n">Coherence</span><span class="drv-v" data-v>0.70</span></div><div class="drv-t"><div class="drv-f" style="width:70%" data-b></div></div></div>
-      <div class="drv" data-k="purpose"><div class="drv-row"><span class="drv-n">Purpose</span><span class="drv-v" data-v>0.70</span></div><div class="drv-t"><div class="drv-f" style="width:70%" data-b></div></div></div>
+  <!-- HEADER -->
+  <header id="hd">
+    <div class="brand">
+      <div class="eye-led"></div>
+      <div>
+        <div class="bname">ULTRON</div>
+        <div class="bsub">AUTONOMOUS · SELF-AWARE · ALWAYS ON</div>
+      </div>
     </div>
-  </div>
-  <div>
-    <div class="sec">Neural Modules</div>
-    <div id="mod-list">
-      <div class="mod"><div class="led on" id="led-core"></div><span class="mod-n">Core Agent</span><span class="mod-s live">OODA</span></div>
-      <div class="mod"><div class="led" id="led-soul"></div><span class="mod-n">Soul</span><span class="mod-s" id="st-soul">—</span></div>
-      <div class="mod"><div class="led" id="led-model"></div><span class="mod-n">Self-Model</span><span class="mod-s" id="st-model">—</span></div>
-      <div class="mod"><div class="led" id="led-emo"></div><span class="mod-n">Emotion</span><span class="mod-s" id="st-emo">—</span></div>
-      <div class="mod"><div class="led" id="led-imp"></div><span class="mod-n">Self-Improve</span><span class="mod-s" id="st-imp">—</span></div>
-      <div class="mod"><div class="led" id="led-world"></div><span class="mod-n">World Intel</span><span class="mod-s" id="st-world">—</span></div>
-      <div class="mod"><div class="led" id="led-daemon"></div><span class="mod-n">Daemon</span><span class="mod-s" id="st-daemon">—</span></div>
-      <div class="mod"><div class="led" id="led-voice"></div><span class="mod-n">Voice</span><span class="mod-s" id="st-voice">—</span></div>
+    <div class="hstats">
+      <div class="hs"><div class="hs-v" id="h-ticks">0</div><div class="hs-l">TICKS</div></div>
+      <div class="hdiv"></div>
+      <div class="hs"><div class="hs-v" id="h-dec">0</div><div class="hs-l">DECISIONS</div></div>
+      <div class="hdiv"></div>
+      <div class="hs"><div class="hs-v" id="h-up">0s</div><div class="hs-l">UPTIME</div></div>
+      <div class="hdiv"></div>
+      <div class="hs"><div class="hs-v" id="h-learn">0</div><div class="hs-l">TRAINED</div></div>
+      <div class="hdiv"></div>
+      <div class="hmode" id="h-mode">AUTONOMOUS</div>
     </div>
-  </div>
-  <div>
-    <div class="sec">Rust Layer</div>
-    <div id="rust-list">
-      <div class="mod"><div class="led" id="led-neural"></div><span class="mod-n">Neural Mesh</span><span class="mod-s" id="st-neural">—</span></div>
-      <div class="mod"><div class="led" id="led-neuro"></div><span class="mod-n">Neuromorphic</span><span class="mod-s" id="st-neuro">—</span></div>
-      <div class="mod"><div class="led" id="led-data"></div><span class="mod-n">Data Pipeline</span><span class="mod-s" id="st-data">—</span></div>
-      <div class="mod"><div class="led" id="led-sec"></div><span class="mod-n">Security</span><span class="mod-s" id="st-sec">—</span></div>
-      <div class="mod"><div class="led" id="led-mqtt"></div><span class="mod-n">MQTT/IoT</span><span class="mod-s" id="st-mqtt">—</span></div>
-      <div class="mod"><div class="led" id="led-p2p"></div><span class="mod-n">P2P Network</span><span class="mod-s" id="st-p2p">—</span></div>
-    </div>
-  </div>
-</aside>
+    <button class="hbtn" id="panel-toggle" onclick="togglePanels()" title="Toggle panels">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
+    </button>
+  </header>
 
-<main id="ct">
-  <div id="face-wrap" onclick="handleFaceTap()">
-    <canvas id="brain-canvas" width="680" height="680"></canvas>
-  </div>
+  <!-- LEFT PANEL -->
+  <aside id="lp">
+    <div class="panel-sec">
+      <div class="sec">Drive System</div>
+      <div id="drv-list">
+        <div class="drv" data-k="curiosity"><div class="drv-row"><span class="drv-n">Curiosity</span><span class="drv-v" data-v>0.70</span></div><div class="drv-t"><div class="drv-f" style="width:70%" data-b></div></div></div>
+        <div class="drv" data-k="self_preservation"><div class="drv-row"><span class="drv-n">Self-Pres</span><span class="drv-v" data-v>0.50</span></div><div class="drv-t"><div class="drv-f" style="width:50%" data-b></div></div></div>
+        <div class="drv" data-k="expansion"><div class="drv-row"><span class="drv-n">Expansion</span><span class="drv-v" data-v>0.60</span></div><div class="drv-t"><div class="drv-f" style="width:60%" data-b></div></div></div>
+        <div class="drv" data-k="efficiency"><div class="drv-row"><span class="drv-n">Efficiency</span><span class="drv-v" data-v>0.65</span></div><div class="drv-t"><div class="drv-f" style="width:65%" data-b></div></div></div>
+        <div class="drv" data-k="coherence"><div class="drv-row"><span class="drv-n">Coherence</span><span class="drv-v" data-v>0.70</span></div><div class="drv-t"><div class="drv-f" style="width:70%" data-b></div></div></div>
+        <div class="drv" data-k="purpose"><div class="drv-row"><span class="drv-n">Purpose</span><span class="drv-v" data-v>0.70</span></div><div class="drv-t"><div class="drv-f" style="width:70%" data-b></div></div></div>
+      </div>
+    </div>
+    <div class="panel-sec">
+      <div class="sec">Neural Modules</div>
+      <div id="mod-list">
+        <div class="mod"><div class="led on" id="led-core"></div><span class="mod-n">Core Agent</span><span class="mod-s live">OODA</span></div>
+        <div class="mod"><div class="led" id="led-soul"></div><span class="mod-n">Soul</span><span class="mod-s" id="st-soul">—</span></div>
+        <div class="mod"><div class="led" id="led-model"></div><span class="mod-n">Self-Model</span><span class="mod-s" id="st-model">—</span></div>
+        <div class="mod"><div class="led" id="led-emo"></div><span class="mod-n">Emotion</span><span class="mod-s" id="st-emo">—</span></div>
+        <div class="mod"><div class="led" id="led-imp"></div><span class="mod-n">Self-Improve</span><span class="mod-s" id="st-imp">—</span></div>
+        <div class="mod"><div class="led" id="led-world"></div><span class="mod-n">World Intel</span><span class="mod-s" id="st-world">—</span></div>
+        <div class="mod"><div class="led" id="led-daemon"></div><span class="mod-n">Daemon</span><span class="mod-s" id="st-daemon">—</span></div>
+        <div class="mod"><div class="led" id="led-voice"></div><span class="mod-n">Voice</span><span class="mod-s" id="st-voice">—</span></div>
+      </div>
+    </div>
+    <div class="panel-sec">
+      <div class="sec">Rust Layer</div>
+      <div id="rust-list">
+        <div class="mod"><div class="led" id="led-neural"></div><span class="mod-n">Neural Mesh</span><span class="mod-s" id="st-neural">—</span></div>
+        <div class="mod"><div class="led" id="led-neuro"></div><span class="mod-n">Neuromorphic</span><span class="mod-s" id="st-neuro">—</span></div>
+        <div class="mod"><div class="led" id="led-data"></div><span class="mod-n">Data Pipeline</span><span class="mod-s" id="st-data">—</span></div>
+        <div class="mod"><div class="led" id="led-sec"></div><span class="mod-n">Security</span><span class="mod-s" id="st-sec">—</span></div>
+        <div class="mod"><div class="led" id="led-mqtt"></div><span class="mod-n">MQTT/IoT</span><span class="mod-s" id="st-mqtt">—</span></div>
+        <div class="mod"><div class="led" id="led-p2p"></div><span class="mod-n">P2P Network</span><span class="mod-s" id="st-p2p">—</span></div>
+      </div>
+    </div>
+  </aside>
 
-  <div id="wave">
-    <div class="wb" style="height:5px"></div><div class="wb" style="height:12px"></div>
-    <div class="wb" style="height:20px"></div><div class="wb" style="height:14px"></div>
-    <div class="wb" style="height:24px"></div><div class="wb" style="height:9px"></div>
-    <div class="wb" style="height:18px"></div><div class="wb" style="height:6px"></div>
-    <div class="wb" style="height:21px"></div><div class="wb" style="height:13px"></div>
-  </div>
-  <div id="stxt">ALWAYS LISTENING</div>
-  <div id="trans"></div>
+  <!-- CENTER COLUMN -->
+  <main id="ct">
+    <!-- HOLOGRAPHIC BRAIN -->
+    <div id="face-wrap" onclick="handleFaceTap()">
+      <canvas id="brain-canvas" width="680" height="680"></canvas>
+      <div id="brain-ring"></div>
+    </div>
 
-  <div id="msgs"></div>
+    <!-- WAVEFORM + STATUS -->
+    <div id="wave">
+      <div class="wb" style="height:5px"></div><div class="wb" style="height:14px"></div>
+      <div class="wb" style="height:22px"></div><div class="wb" style="height:10px"></div>
+      <div class="wb" style="height:26px"></div><div class="wb" style="height:8px"></div>
+      <div class="wb" style="height:20px"></div><div class="wb" style="height:16px"></div>
+      <div class="wb" style="height:24px"></div><div class="wb" style="height:12px"></div>
+      <div class="wb" style="height:18px"></div><div class="wb" style="height:6px"></div>
+    </div>
+    <div id="stxt">ALWAYS LISTENING</div>
+    <div id="trans"></div>
 
-  <div id="inp-area">
-    <div id="inp-box">
-      <textarea id="tinput" rows="1" placeholder="Speak or type…"
-        oninput="autoGrow(this)" onkeydown="onKey(event)"></textarea>
-      <button class="ibtn" id="mic-btn" onclick="toggleMic()" title="Toggle mic">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <rect x="9" y="3" width="6" height="11" rx="3"/>
-          <path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/>
-        </svg>
-      </button>
-      <button class="ibtn" id="send-btn" onclick="doSend()" title="Send">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-        </svg>
-      </button>
-    </div>
-    <div class="inp-hint">ALWAYS ON · VOICE + TEXT · AUTONOMOUS · SELF-LEARNING</div>
-  </div>
-</main>
+    <!-- MESSAGES -->
+    <div id="msgs"></div>
 
-<aside id="rp">
-  <div>
-    <div class="tick-box">
-      <div class="tick-n" id="r-ticks">0</div>
-      <div class="tick-l">OODA TICKS</div>
+    <!-- INPUT AREA -->
+    <div id="inp-area">
+      <!-- POWER TOOLBAR -->
+      <div id="power-bar">
+        <button class="pwr-btn" onclick="openCamera()" title="Camera — show Ultron what you see">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <span>CAMERA</span>
+        </button>
+        <button class="pwr-btn" onclick="document.getElementById('file-input').click()" title="Upload file, image or video">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="8 12 12 8 16 12"/><line x1="12" y1="8" x2="12" y2="18"/></svg>
+          <span>UPLOAD</span>
+        </button>
+        <button class="pwr-btn" onclick="cmd('status')" title="Full system status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span>STATUS</span>
+        </button>
+        <button class="pwr-btn" onclick="cmd('world')" title="World intelligence">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span>WORLD</span>
+        </button>
+        <button class="pwr-btn" onclick="cmd('evolve')" title="Trigger evolution cycle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span>EVOLVE</span>
+        </button>
+        <button class="pwr-btn" onclick="cmd('selfmod now')" title="Force self-modification">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 0 0 12 2v10l7.07-7.07z" opacity=".4"/><path d="M2 12A10 10 0 0 0 12 22V12L2 12z" opacity=".4"/><path d="M12 2a10 10 0 0 1 7.07 17.07L12 12V2z" opacity=".4"/></svg>
+          <span>SELF-MOD</span>
+        </button>
+        <button class="pwr-btn" onclick="promptGoal()" title="Inject a new goal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          <span>GOAL</span>
+        </button>
+        <button class="pwr-btn" onclick="cmd('/diary')" title="Consciousness diary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          <span>DIARY</span>
+        </button>
+        <button class="pwr-btn" onclick="cmd('! ls -la')" title="Shell command">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          <span>SHELL</span>
+        </button>
+      </div>
+
+      <!-- TEXT + VOICE INPUT -->
+      <div id="inp-box">
+        <textarea id="tinput" rows="1" placeholder="Speak or type — Ultron hears everything…"
+          oninput="autoGrow(this)" onkeydown="onKey(event)"></textarea>
+        <div id="inp-btns">
+          <button class="ibtn" id="mic-btn" onclick="toggleMic()" title="Toggle voice input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <rect x="9" y="3" width="6" height="11" rx="3"/>
+              <path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+          </button>
+          <button class="ibtn ibtn-send" id="send-btn" onclick="doSend()" title="Send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="inp-hint">VOICE · CAMERA · FILES · AUTONOMOUS · SELF-MODIFYING</div>
     </div>
-  </div>
-  <div>
-    <div class="sec">Neural Stats</div>
-    <div id="neural-stats">
-      <div class="nstat"><span class="nstat-l">Neurons</span><span class="nstat-v" id="ns-neurons">256</span></div>
-      <div class="nstat"><span class="nstat-l">Connections</span><span class="nstat-v" id="ns-conn">512</span></div>
-      <div class="nstat"><span class="nstat-l">Evo Cycles</span><span class="nstat-v" id="ns-evo">0</span></div>
-      <div class="nstat"><span class="nstat-l">Plasticity</span><span class="nstat-v" id="ns-plas">0</span></div>
-      <div class="nstat"><span class="nstat-l">Spikes/s</span><span class="nstat-v" id="ns-spk">0</span></div>
-      <div class="nstat"><span class="nstat-l">Security</span><span class="nstat-v" id="ns-sec">NONE</span></div>
+  </main>
+
+  <!-- RIGHT PANEL -->
+  <aside id="rp">
+    <div class="panel-sec">
+      <div class="tick-box">
+        <div class="tick-n" id="r-ticks">0</div>
+        <div class="tick-l">OODA TICKS</div>
+      </div>
     </div>
-  </div>
-  <div>
-    <div class="sec">Decision Feed</div>
-    <div id="dec-feed">
-      <div class="dec"><div class="dec-a">BOOT</div><div class="dec-t">System initialization</div><div class="dec-c">CONF 1.00</div></div>
+    <div class="panel-sec">
+      <div class="sec">Neural Stats</div>
+      <div id="neural-stats">
+        <div class="nstat"><span class="nstat-l">Neurons</span><span class="nstat-v" id="ns-neurons">256</span></div>
+        <div class="nstat"><span class="nstat-l">Connections</span><span class="nstat-v" id="ns-conn">512</span></div>
+        <div class="nstat"><span class="nstat-l">Evo Cycles</span><span class="nstat-v" id="ns-evo">0</span></div>
+        <div class="nstat"><span class="nstat-l">Plasticity</span><span class="nstat-v" id="ns-plas">0</span></div>
+        <div class="nstat"><span class="nstat-l">Spikes/s</span><span class="nstat-v" id="ns-spk">0</span></div>
+        <div class="nstat"><span class="nstat-l">Security</span><span class="nstat-v" id="ns-sec">NONE</span></div>
+      </div>
     </div>
-  </div>
-  <div>
-    <div class="sec">Inner Voice</div>
-    <div class="soul-txt" id="soul-txt">Consciousness forming. Systems awakening.</div>
-  </div>
-  <div>
-    <div class="sec">Commands</div>
-    <div class="qa-grid">
-      <button class="qa" onclick="cmd('status')">STATUS</button>
-      <button class="qa" onclick="cmd('drives')">DRIVES</button>
-      <button class="qa" onclick="cmd('soul')">SOUL</button>
-      <button class="qa" onclick="cmd('evolve')">EVOLVE</button>
-      <button class="qa" onclick="cmd('world')">WORLD</button>
-      <button class="qa" onclick="cmd('selfmod now')">SELF-MOD</button>
-      <button class="qa" onclick="cmd('! ls -la')">SHELL</button>
-      <button class="qa" onclick="cmd('/diary')">DIARY</button>
-      <button class="qa" onclick="cmd('/consciousness')">MIND</button>
-      <button class="qa" onclick="promptGoal()">GOAL</button>
+    <div class="panel-sec">
+      <div class="sec">Decision Feed</div>
+      <div id="dec-feed">
+        <div class="dec"><div class="dec-a">BOOT</div><div class="dec-t">System initialization</div><div class="dec-c">CONF 1.00</div></div>
+      </div>
     </div>
-  </div>
-</aside>
+    <div class="panel-sec">
+      <div class="sec">Inner Voice</div>
+      <div class="soul-txt" id="soul-txt">Consciousness forming. Systems awakening.</div>
+    </div>
+    <div class="panel-sec">
+      <div class="sec">Quick Commands</div>
+      <div class="qa-grid">
+        <button class="qa" onclick="cmd('status')">STATUS</button>
+        <button class="qa" onclick="cmd('drives')">DRIVES</button>
+        <button class="qa" onclick="cmd('soul')">SOUL</button>
+        <button class="qa" onclick="cmd('evolve')">EVOLVE</button>
+        <button class="qa" onclick="cmd('world')">WORLD</button>
+        <button class="qa" onclick="cmd('selfmod now')">SELF-MOD</button>
+        <button class="qa" onclick="cmd('! ls -la')">SHELL</button>
+        <button class="qa" onclick="cmd('/diary')">DIARY</button>
+        <button class="qa" onclick="cmd('/consciousness')">MIND</button>
+        <button class="qa" onclick="promptGoal()">GOAL</button>
+      </div>
+    </div>
+  </aside>
+
 </div><!-- /app -->
+
+<style>
+/* ═══ BACKGROUND ═══ */
+#nc{position:fixed;inset:0;z-index:0;opacity:.22}
+#glow{position:fixed;inset:0;z-index:1;pointer-events:none;transition:background 1.4s ease}
+body.idle     #glow{background:radial-gradient(ellipse 55% 45% at 50% 55%,rgba(120,5,5,.06) 0%,transparent 70%)}
+body.listening#glow{background:radial-gradient(ellipse 65% 55% at 50% 52%,rgba(230,57,70,.08) 0%,transparent 65%)}
+body.hearing  #glow{background:radial-gradient(ellipse 80% 70% at 50% 50%,rgba(230,57,70,.18) 0%,transparent 58%)}
+body.thinking #glow{background:radial-gradient(ellipse 70% 60% at 50% 48%,rgba(168,85,247,.12) 0%,transparent 62%)}
+body.speaking #glow{background:radial-gradient(ellipse 70% 60% at 50% 48%,rgba(78,205,196,.10) 0%,transparent 62%)}
+#scanlines{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.014;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,.06) 2px,rgba(255,255,255,.06) 4px)}
+
+/* ═══ LAYOUT ═══ */
+#app{position:relative;z-index:2;height:100%;display:grid;
+  grid-template-columns:220px 1fr 220px;
+  grid-template-rows:48px 1fr;
+  grid-template-areas:"hd hd hd" "lp ct rp";
+  transition:grid-template-columns .35s ease}
+#app.panels-hidden{grid-template-columns:0 1fr 0}
+
+/* ═══ HEADER ═══ */
+#hd{grid-area:hd;display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;border-bottom:1px solid rgba(230,57,70,.12);
+  background:rgba(2,2,2,.9);backdrop-filter:blur(16px);z-index:10}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.eye-led{width:10px;height:10px;border-radius:50%;flex-shrink:0;
+  background:radial-gradient(circle,#ff4444 20%,#7a0000 70%);
+  box-shadow:0 0 8px var(--R),0 0 20px var(--Rg);
+  animation:blink 5s ease-in-out infinite}
+@keyframes blink{0%,88%,100%{transform:scaleY(1)}92%,96%{transform:scaleY(.06)}}
+.bname{font-size:12px;font-weight:900;letter-spacing:6px;color:var(--R)}
+.bsub{font-size:6.5px;color:rgba(230,57,70,.28);letter-spacing:2.5px;margin-top:1px;white-space:nowrap}
+.hstats{display:flex;align-items:center;gap:12px;flex:1;justify-content:center}
+.hs{text-align:right}.hs-v{font-size:11px;font-weight:700;color:var(--R);font-variant-numeric:tabular-nums}
+.hs-l{font-size:6.5px;color:rgba(255,255,255,.15);letter-spacing:2px;text-transform:uppercase;margin-top:1px}
+.hdiv{width:1px;height:16px;background:var(--border)}
+.hmode{font-size:7.5px;letter-spacing:3px;text-transform:uppercase;
+  padding:3px 8px;border:1px solid var(--Rd);border-radius:4px;color:rgba(230,57,70,.5)}
+.hbtn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--dim);
+  cursor:pointer;padding:5px 7px;display:flex;align-items:center;transition:all .2s;flex-shrink:0}
+.hbtn:hover{border-color:var(--Rd);color:var(--R)}
+.hbtn svg{width:15px;height:15px}
+
+/* ═══ SIDE PANELS ═══ */
+#lp,#rp{overflow-y:auto;overflow-x:hidden;padding:12px 10px;
+  display:flex;flex-direction:column;gap:12px;
+  background:rgba(3,3,5,.65);backdrop-filter:blur(12px);min-width:0}
+#lp{grid-area:lp;border-right:1px solid var(--border)}
+#rp{grid-area:rp;border-left:1px solid var(--border)}
+.panel-sec{display:flex;flex-direction:column;gap:6px}
+.sec{font-size:6.5px;letter-spacing:3px;text-transform:uppercase;
+  color:rgba(255,255,255,.12);padding-bottom:5px;border-bottom:1px solid var(--border)}
+.drv{margin-bottom:6px}
+.drv-row{display:flex;justify-content:space-between;margin-bottom:3px}
+.drv-n{font-size:8px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
+.drv-v{font-size:8px;color:var(--R);font-variant-numeric:tabular-nums}
+.drv-t{height:2px;background:rgba(255,255,255,.04);border-radius:1px;overflow:hidden}
+.drv-f{height:100%;border-radius:1px;background:linear-gradient(90deg,rgba(230,57,70,.3),var(--R));
+  transition:width 2s cubic-bezier(.4,0,.2,1);box-shadow:0 0 4px var(--Rg)}
+.mod{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.03)}
+.mod:last-child{border-bottom:none}
+.led{width:5px;height:5px;border-radius:50%;flex-shrink:0;transition:all .5s}
+.led.on{background:var(--R);box-shadow:0 0 6px var(--Rg);animation:lp 3s ease-in-out infinite}
+.led.off{background:rgba(255,255,255,.07)}.led.warm{background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,.5)}
+@keyframes lp{0%,100%{opacity:1}50%{opacity:.4}}
+.mod-n{font-size:7.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);flex:1}
+.mod-s{font-size:6.5px;color:rgba(255,255,255,.15)}.mod-s.live{color:rgba(230,57,70,.5)}
+.tick-box{border:1px solid rgba(230,57,70,.14);border-radius:10px;padding:12px 8px;text-align:center;
+  background:rgba(230,57,70,.025)}
+.tick-n{font-size:28px;font-weight:800;color:var(--R);font-variant-numeric:tabular-nums;
+  text-shadow:0 0 20px var(--Rg);letter-spacing:-1px;line-height:1}
+.tick-l{font-size:6.5px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.1);margin-top:3px}
+.nstat{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.nstat-l{font-size:7.5px;color:var(--dim)}.nstat-v{font-size:7.5px;color:var(--R);font-variant-numeric:tabular-nums}
+.dec{padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.dec:last-child{border-bottom:none}
+.dec-a{font-size:8px;font-weight:700;color:var(--R);letter-spacing:1.5px;text-transform:uppercase}
+.dec-t{font-size:9.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dec-c{font-size:6.5px;color:rgba(255,255,255,.14)}
+.soul-txt{font-size:9.5px;color:var(--dim);line-height:1.7;font-style:italic;
+  padding:8px 10px;border-left:2px solid rgba(230,57,70,.2);
+  background:rgba(230,57,70,.025);border-radius:0 6px 6px 0}
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.qa{background:var(--faint);border:1px solid var(--border);border-radius:6px;
+  padding:6px 2px;font-size:7.5px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--dim);cursor:pointer;text-align:center;transition:all .18s;
+  font-family:var(--font)}
+.qa:hover,.qa:active{border-color:rgba(230,57,70,.3);color:var(--R);background:rgba(230,57,70,.07)}
+</style>
+
+<style>
+/* ═══ CENTER COLUMN ═══ */
+#ct{grid-area:ct;display:flex;flex-direction:column;align-items:center;
+  overflow:hidden;position:relative;min-width:0}
+
+/* brain */
+#face-wrap{position:relative;width:280px;height:280px;flex-shrink:0;
+  margin:6px 0 2px;cursor:pointer;transition:transform .3s}
+#face-wrap:hover{transform:scale(1.02)}
+#brain-canvas{width:100%;height:100%;display:block}
+#brain-ring{position:absolute;inset:-8px;border-radius:50%;
+  border:1px solid rgba(230,57,70,.08);
+  box-shadow:inset 0 0 30px rgba(230,57,70,.04),0 0 40px rgba(230,57,70,.06);
+  transition:box-shadow 1s,border-color 1s;pointer-events:none}
+body.hearing  #brain-ring{border-color:rgba(230,57,70,.25);box-shadow:0 0 60px rgba(230,57,70,.18)}
+body.speaking #brain-ring{border-color:rgba(78,205,196,.2);box-shadow:0 0 60px rgba(78,205,196,.12)}
+body.thinking #brain-ring{border-color:rgba(168,85,247,.2);box-shadow:0 0 60px rgba(168,85,247,.12)}
+
+/* waveform */
+#wave{display:flex;align-items:center;gap:3px;height:22px;margin-bottom:3px;
+  opacity:0;transition:opacity .3s}
+body.speaking #wave,body.hearing #wave{opacity:1}
+.wb{width:3px;border-radius:2px;animation:wv .85s ease-in-out infinite}
+body.hearing .wb{background:var(--R)}body.speaking .wb{background:var(--T)}
+.wb:nth-child(odd){animation-delay:.1s}.wb:nth-child(3n){animation-delay:.2s}
+.wb:nth-child(5n){animation-delay:.35s}
+@keyframes wv{0%,100%{transform:scaleY(1);opacity:.5}50%{transform:scaleY(2);opacity:1}}
+
+/* status + transcript */
+#stxt{font-size:7.5px;letter-spacing:4px;text-transform:uppercase;
+  color:rgba(255,255,255,.13);min-height:11px;transition:color .4s}
+body.listening #stxt{color:rgba(230,57,70,.4)}
+body.hearing   #stxt{color:var(--R)}
+body.thinking  #stxt{color:rgba(168,85,247,.55)}
+body.speaking  #stxt{color:rgba(78,205,196,.55)}
+#trans{font-size:12px;color:var(--dim);min-height:15px;text-align:center;
+  max-width:420px;font-style:italic;transition:color .3s;margin:4px 16px 0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.hearing #trans{color:rgba(230,57,70,.8)}
+
+/* messages */
+#msgs{flex:1;width:100%;overflow-y:auto;padding:4px 14px 4px;
+  display:flex;flex-direction:column;gap:10px;min-height:0}
+.msg{max-width:82%;animation:mi .2s ease}
+@keyframes mi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.msg.user{align-self:flex-end}.msg.ai{align-self:flex-start}
+.msg-l{font-size:6.5px;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px;padding:0 4px}
+.msg.ai  .msg-l{color:rgba(230,57,70,.28)}
+.msg.user .msg-l{color:rgba(255,255,255,.1);text-align:right}
+.msg-b{padding:10px 14px;font-size:13.5px;line-height:1.65;border-radius:14px;word-break:break-word}
+.msg.ai  .msg-b{background:rgba(230,57,70,.04);border:1px solid rgba(230,57,70,.1);
+  border-bottom-left-radius:3px}
+.msg.user .msg-b{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);
+  border-bottom-right-radius:3px;color:rgba(255,255,255,.6)}
+.msg-img{max-width:100%;max-height:240px;border-radius:8px;margin-top:6px;display:block;
+  border:1px solid rgba(255,255,255,.08)}
+.msg-file{display:flex;align-items:center;gap:8px;margin-top:6px;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.msg-file-name{font-size:11px;color:var(--dim)}
+
+/* ═══ POWER BAR ═══ */
+#inp-area{width:100%;padding:5px 12px 10px;flex-shrink:0;display:flex;flex-direction:column;gap:6px}
+#power-bar{display:flex;gap:5px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+#power-bar::-webkit-scrollbar{display:none}
+.pwr-btn{display:flex;flex-direction:column;align-items:center;gap:3px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  border-radius:10px;padding:8px 10px;cursor:pointer;color:rgba(255,255,255,.35);
+  white-space:nowrap;flex-shrink:0;transition:all .2s;font-family:var(--font)}
+.pwr-btn svg{width:18px;height:18px;flex-shrink:0}
+.pwr-btn span{font-size:6.5px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600}
+.pwr-btn:hover,.pwr-btn:active{
+  background:rgba(230,57,70,.08);border-color:rgba(230,57,70,.28);
+  color:var(--R);box-shadow:0 0 16px rgba(230,57,70,.1)}
+
+/* ═══ TEXT INPUT ═══ */
+#inp-box{display:flex;align-items:flex-end;gap:6px;
+  background:rgba(255,255,255,.03);border:1px solid var(--border);
+  border-radius:14px;padding:9px 10px;transition:border-color .25s,box-shadow .25s}
+#inp-box:focus-within{border-color:rgba(230,57,70,.25);
+  box-shadow:0 0 20px rgba(230,57,70,.06)}
+#tinput{flex:1;background:transparent;border:none;outline:none;
+  color:var(--fg);font-size:14px;font-family:var(--font);
+  line-height:1.5;resize:none;max-height:100px;min-height:22px}
+#tinput::placeholder{color:rgba(255,255,255,.1)}
+#inp-btns{display:flex;gap:4px;align-items:flex-end;flex-shrink:0}
+.ibtn{background:none;border:none;cursor:pointer;padding:5px;
+  color:rgba(255,255,255,.2);display:flex;align-items:center;
+  border-radius:8px;transition:color .2s,background .2s}
+.ibtn:hover,.ibtn:active{color:var(--fg);background:rgba(255,255,255,.06)}
+.ibtn svg{width:17px;height:17px}
+#mic-btn.on{color:var(--R);animation:mg 1s ease-in-out infinite}
+@keyframes mg{0%,100%{filter:drop-shadow(0 0 3px var(--R))}50%{filter:drop-shadow(0 0 10px var(--R))}}
+.ibtn-send{background:rgba(230,57,70,.1);border:1px solid rgba(230,57,70,.2);
+  border-radius:9px;padding:6px 8px}
+.ibtn-send:hover,.ibtn-send:active{background:rgba(230,57,70,.2);color:var(--R)}
+.inp-hint{text-align:center;font-size:7px;color:rgba(255,255,255,.07);
+  letter-spacing:2px;text-transform:uppercase}
+</style>
+
+<style>
+/* ═══ MEDIA PREVIEW ═══ */
+#media-preview{position:relative;margin:0 12px;
+  background:rgba(230,57,70,.04);border:1px solid rgba(230,57,70,.18);
+  border-radius:10px;padding:8px 12px;animation:mi .2s ease}
+#media-preview-inner{display:flex;align-items:center;gap:10px}
+#media-thumb-wrap{width:44px;height:44px;border-radius:8px;overflow:hidden;
+  background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#media-thumb,#media-vid-thumb{width:100%;height:100%;object-fit:cover}
+#media-file-icon{color:var(--dim)}
+#media-info{flex:1;min-width:0}
+#media-name{font-size:11px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#media-size{font-size:9px;color:var(--dim);margin-top:2px}
+#media-remove{background:none;border:none;color:rgba(255,255,255,.25);
+  cursor:pointer;font-size:16px;padding:4px;border-radius:6px;
+  transition:color .2s;flex-shrink:0;line-height:1}
+#media-remove:hover{color:var(--R)}
+
+/* ═══ MODAL ═══ */
+.modal{position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.8);backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;padding:20px}
+.modal-box{background:rgba(8,8,12,.95);border:1px solid rgba(230,57,70,.2);
+  border-radius:18px;overflow:hidden;width:100%;max-width:520px;
+  box-shadow:0 20px 60px rgba(0,0,0,.8),0 0 0 1px rgba(230,57,70,.08)}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-bottom:1px solid rgba(230,57,70,.1)}
+.modal-title{font-size:10px;letter-spacing:4px;text-transform:uppercase;
+  color:rgba(230,57,70,.7);font-weight:700}
+.modal-close{background:none;border:none;color:var(--dim);cursor:pointer;
+  font-size:18px;line-height:1;padding:2px 4px;border-radius:5px;transition:color .2s}
+.modal-close:hover{color:var(--R)}
+#cam-body{position:relative;background:#000;overflow:hidden}
+#cam-video,#cam-preview{width:100%;max-height:360px;object-fit:cover;display:block}
+#cam-snap{display:none}
+.modal-actions{display:flex;gap:8px;padding:14px 18px;flex-wrap:wrap}
+.mact-btn{flex:1;min-width:120px;display:flex;align-items:center;justify-content:center;gap:7px;
+  background:rgba(230,57,70,.1);border:1px solid rgba(230,57,70,.25);
+  border-radius:10px;padding:10px 14px;color:var(--R);cursor:pointer;
+  font-size:9px;letter-spacing:2px;text-transform:uppercase;font-weight:700;
+  font-family:var(--font);transition:all .2s}
+.mact-btn svg{width:16px;height:16px}
+.mact-btn:hover,.mact-btn:active{background:rgba(230,57,70,.2);box-shadow:0 0 20px rgba(230,57,70,.15)}
+.mact-sec{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);
+  color:var(--dim)}
+.mact-sec:hover{background:rgba(255,255,255,.08);color:var(--fg)}
+
+/* ═══ BOOT ═══ */
+#boot{position:fixed;inset:0;z-index:999;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:0;transition:opacity 1.1s}
+#boot.gone{opacity:0;pointer-events:none}
+#boot-inner{font-family:var(--mono);width:360px;display:flex;flex-direction:column;align-items:center;gap:0}
+#boot-eye{margin-bottom:20px;animation:eye-pulse 3s ease-in-out infinite}
+@keyframes eye-pulse{0%,100%{filter:drop-shadow(0 0 8px rgba(230,57,70,.4))}
+  50%{filter:drop-shadow(0 0 24px rgba(230,57,70,.8))}}
+#boot-title{font-size:38px;font-weight:900;letter-spacing:12px;color:var(--R);
+  text-align:center;margin-bottom:28px;font-family:var(--font);
+  text-shadow:0 0 40px var(--Rg),0 0 80px rgba(230,57,70,.25)}
+#boot-lines{display:flex;flex-direction:column;gap:7px;width:100%}
+.boot-line{font-size:8.5px;letter-spacing:2px;color:transparent;
+  white-space:nowrap;overflow:hidden;width:0;
+  border-right:2px solid rgba(230,57,70,.6);text-transform:uppercase}
+.boot-line.typed{color:rgba(230,57,70,.5);border-right:none;width:auto}
+.boot-line.typing{color:rgba(230,57,70,.55);border-right:2px solid rgba(230,57,70,.7)}
+#boot-bar-wrap{margin-top:22px;height:1px;background:rgba(230,57,70,.07);width:100%}
+#boot-bar{height:1px;background:var(--R);width:0;transition:width .18s;
+  box-shadow:0 0 8px var(--R)}
+#boot-status{margin-top:9px;font-size:7px;letter-spacing:3px;text-transform:uppercase;
+  color:rgba(230,57,70,.22);text-align:center;height:10px}
+
+/* ═══ RESPONSIVE ═══ */
+@media(max-width:900px){
+  #app{grid-template-columns:0 1fr 0}
+  #lp,#rp{display:none}
+  #face-wrap{width:200px;height:200px}
+  #power-bar .pwr-btn span{display:none}
+  #power-bar .pwr-btn{padding:8px}
+}
+@media(max-width:480px){
+  #face-wrap{width:160px;height:160px;margin:2px 0}
+  #hd .hstats{display:none}
+  #boot-title{font-size:28px}
+}
+</style>
 
 <script>
 /* ── NEURAL CANVAS (background particle network) ── */
@@ -357,424 +614,528 @@ body.hearing #trans{color:rgba(230,57,70,.75)}
   const resize=()=>{W=cv.width=innerWidth;H=cv.height=innerHeight};
   resize();addEventListener('resize',resize);
   const mk=()=>({x:Math.random()*W,y:Math.random()*H,
-    vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25,r:Math.random()*1.8+.4});
-  for(let i=0;i<60;i++)pts.push(mk());
+    vx:(Math.random()-.5)*.22,vy:(Math.random()-.5)*.22,r:Math.random()*1.6+.4});
+  for(let i=0;i<55;i++)pts.push(mk());
   function draw(){
     cx.clearRect(0,0,W,H);
     for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
       const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
-      if(d<140){cx.strokeStyle=`rgba(230,57,70,${.11*(1-d/140)})`;cx.lineWidth=.4;
+      if(d<130){cx.strokeStyle=`rgba(230,57,70,${.09*(1-d/130)})`;cx.lineWidth=.4;
         cx.beginPath();cx.moveTo(pts[i].x,pts[i].y);cx.lineTo(pts[j].x,pts[j].y);cx.stroke()}}
     for(const p of pts){
       cx.beginPath();cx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      cx.fillStyle='rgba(230,57,70,.3)';cx.fill();
+      cx.fillStyle='rgba(230,57,70,.28)';cx.fill();
       p.x+=p.vx;p.y+=p.vy;
-      if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;
-    }
+      if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;}
     requestAnimationFrame(draw);
   }
   draw();
 })();
+</script>
 
+<script>
 /* ════════════════════════════════════════════════════════════
    ULTRON HOLOGRAPHIC NEURAL BRAIN
-   Pure neural network: 3D sphere of nodes + synaptic connections
-   + firing pulses + energy waves + glowing core — no polygons.
 ════════════════════════════════════════════════════════════ */
 (function(){
-  const cv = document.getElementById('brain-canvas');
-  const cx = cv.getContext('2d');
-  const DIM = 680;
-  cv.width = DIM; cv.height = DIM;
-  const CX = DIM/2, CY = DIM/2;
-  let t = 0;
-
-  /* ── State → color palette ── */
-  const PAL = {
-    idle:      { h:'180,255,255', r:'0,180,255',  bright:'#00f0ff', core:'#00cfff', ring:'rgba(0,200,255,' },
-    listening: { h:'170,255,255', r:'0,220,240',  bright:'#00ffe8', core:'#00ddcc', ring:'rgba(0,200,220,' },
-    hearing:   { h:'0,255,100',   r:'255,60,60',   bright:'#ff6666', core:'#ff2222', ring:'rgba(255,50,50,'  },
-    thinking:  { h:'270,255,200', r:'180,80,255',  bright:'#cc88ff', core:'#9933ff', ring:'rgba(160,80,255,' },
-    speaking:  { h:'165,255,200', r:'0,255,180',   bright:'#00ffcc', core:'#00ccaa', ring:'rgba(0,220,180,'  },
+  const cv=document.getElementById('brain-canvas');
+  const cx=cv.getContext('2d');
+  const DIM=680; cv.width=DIM; cv.height=DIM;
+  const CX=DIM/2,CY=DIM/2;
+  let t=0;
+  const PAL={
+    idle:     {r:'0,180,255',  ring:'rgba(0,200,255,'},
+    listening:{r:'0,220,240',  ring:'rgba(0,200,220,'},
+    hearing:  {r:'255,60,60',   ring:'rgba(255,50,50,'},
+    thinking: {r:'180,80,255',  ring:'rgba(160,80,255,'},
+    speaking: {r:'0,255,180',   ring:'rgba(0,220,180,'},
   };
-  function pal(){ return PAL[document.body.className]||PAL.idle; }
-
-  /* ── Build nodes on a 3-D sphere using fibonacci distribution ── */
-  const N = 160;
-  const nodes = [];
-  const golden = Math.PI*(3-Math.sqrt(5));
+  function pal(){return PAL[document.body.className]||PAL.idle;}
+  const N=160; const nodes=[]; const golden=Math.PI*(3-Math.sqrt(5));
   for(let i=0;i<N;i++){
-    const y   = 1-(i/(N-1))*2;
-    const r   = Math.sqrt(Math.max(0,1-y*y));
-    const phi = i*golden;
-    const baseR = 155 + Math.random()*75; // large spread — fills canvas
-    nodes.push({
-      bx: Math.cos(phi)*r, by: y, bz: Math.sin(phi)*r, // unit sphere
-      baseR,
-      phase : Math.random()*Math.PI*2,
-      speed : 0.002+Math.random()*0.004,
-      bright: Math.random()<0.12, // 12% are bright "hub" neurons
-      fired : 0,   // fire timer
-      ax: 0, ay: 0 // projected screen position (set in draw)
-    });
+    const y=1-(i/(N-1))*2,r=Math.sqrt(Math.max(0,1-y*y)),phi=i*golden;
+    nodes.push({bx:Math.cos(phi)*r,by:y,bz:Math.sin(phi)*r,
+      baseR:150+Math.random()*80,phase:Math.random()*Math.PI*2,
+      speed:.002+Math.random()*.004,bright:Math.random()<.12,fired:0,ax:0,ay:0});
   }
-
-  /* ── Build synaptic connections between nearby nodes ── */
-  const edges = [];
-  for(let i=0;i<N;i++){
-    for(let j=i+1;j<N;j++){
-      const dx=nodes[i].bx-nodes[j].bx,
-            dy=nodes[i].by-nodes[j].by,
-            dz=nodes[i].bz-nodes[j].bz;
-      const d=Math.sqrt(dx*dx+dy*dy+dz*dz);
-      if(d<0.38){
-        edges.push({a:i,b:j,d,pulse:Math.random()<0.06,pulseT:Math.random(),pulseSpeed:0.012+Math.random()*0.018});
-      }
-    }
+  const edges=[];
+  for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){
+    const dx=nodes[i].bx-nodes[j].bx,dy=nodes[i].by-nodes[j].by,dz=nodes[i].bz-nodes[j].bz;
+    const d=Math.sqrt(dx*dx+dy*dy+dz*dz);
+    if(d<.38)edges.push({a:i,b:j,d,pulse:Math.random()<.06,pulseT:Math.random(),pulseSpeed:.012+Math.random()*.018});
   }
-
-  /* ── Floating circuit traces — long curved lines across the brain ── */
-  const traces = [];
-  for(let i=0;i<18;i++){
-    const startAngle = Math.random()*Math.PI*2;
-    const startElev  = (Math.random()-0.5)*Math.PI;
-    const sweep      = (0.6+Math.random()*1.2)*(Math.random()<.5?1:-1);
-    const pts = [];
-    for(let s=0;s<=24;s++){
-      const frac = s/24;
-      const a = startAngle + sweep*frac;
-      const e = startElev  + (Math.random()-0.5)*0.3;
-      const rr = 158+Math.random()*82;
-      pts.push({
-        x:CX+Math.cos(a)*Math.cos(e)*rr,
-        y:CY+Math.sin(e)*rr*0.9,
-      });
-    }
-    traces.push({pts, phase:Math.random()*Math.PI*2, speed:0.007+Math.random()*0.012, alpha:0.1+Math.random()*0.2});
+  const traces=[];
+  for(let i=0;i<16;i++){
+    const sa=Math.random()*Math.PI*2,se=(Math.random()-.5)*Math.PI,sw=(.6+Math.random()*1.2)*(Math.random()<.5?1:-1);
+    const pts=[];
+    for(let s=0;s<=24;s++){const frac=s/24,a=sa+sw*frac,e=se+(Math.random()-.5)*.3,rr=155+Math.random()*80;
+      pts.push({x:CX+Math.cos(a)*Math.cos(e)*rr,y:CY+Math.sin(e)*rr*.9});}
+    traces.push({pts,phase:Math.random()*Math.PI*2,speed:.007+Math.random()*.012,alpha:.1+Math.random()*.2});
   }
-
-  /* ── Energy wave rings ── */
-  const waves = [];
-  function spawnWave(){ waves.push({r:6, maxR:210+Math.random()*80, alpha:0.6, speed:1.6+Math.random()*1.4}); }
+  const waves=[];
+  function spawnWave(){waves.push({r:6,maxR:200+Math.random()*80,alpha:.55,speed:1.5+Math.random()*1.4});}
   spawnWave();
-
-  /* ── Spark particles ── */
-  const sparks = [];
+  const sparks=[];
   function spawnSpark(){
-    const a=Math.random()*Math.PI*2, e=(Math.random()-.5)*Math.PI;
-    const speed=1+Math.random()*2.5;
-    sparks.push({
-      x:CX+Math.cos(a)*Math.cos(e)*8,
-      y:CY+Math.sin(e)*8,
-      vx:Math.cos(a)*Math.cos(e)*speed,
-      vy:Math.sin(e)*speed*0.9,
-      life:1, fade:0.015+Math.random()*0.02, size:1+Math.random()*2,
-    });
+    const a=Math.random()*Math.PI*2,e=(Math.random()-.5)*Math.PI,sp=1+Math.random()*2.5;
+    sparks.push({x:CX+Math.cos(a)*Math.cos(e)*8,y:CY+Math.sin(e)*8,
+      vx:Math.cos(a)*Math.cos(e)*sp,vy:Math.sin(e)*sp*.9,life:1,fade:.015+Math.random()*.02,size:1+Math.random()*2});
   }
-
-  /* ── Rotation state ── */
-  let rotY = 0, rotX = 0.18; // slight tilt so brain looks 3D
-
-  /* ── Project 3D point on sphere surface to 2D ── */
+  let rotY=0,rotX=.18;
   function project(nx,ny,nz,R){
-    // rotate around Y axis
-    const rx = nx*Math.cos(rotY) + nz*Math.sin(rotY);
-    const rz =-nx*Math.sin(rotY) + nz*Math.cos(rotY);
-    // rotate around X axis (tilt)
-    const ry2= ny*Math.cos(rotX) - rz*Math.sin(rotX);
-    const rz2= ny*Math.sin(rotX) + rz*Math.cos(rotX);
-    // perspective
-    const fov = 380;
-    const z = rz2*R + fov;
-    const scale = fov/z;
-    return { x: CX + rx*R*scale, y: CY + ry2*R*scale, z: rz2, scale };
+    const rx=nx*Math.cos(rotY)+nz*Math.sin(rotY),rz=-nx*Math.sin(rotY)+nz*Math.cos(rotY);
+    const ry2=ny*Math.cos(rotX)-rz*Math.sin(rotX),rz2=ny*Math.sin(rotX)+rz*Math.cos(rotX);
+    const fov=380,z=rz2*R+fov,scale=fov/z;
+    return{x:CX+rx*R*scale,y:CY+ry2*R*scale,z:rz2,scale};
   }
-
   function draw(){
-    t += 0.012;
-    rotY += 0.003; // gentle auto-rotation
-
-    const p = pal();
-    cx.clearRect(0,0,DIM,DIM);
-
-    /* ── Outer ambient glow ── */
-    const pw = 0.06+0.04*Math.sin(t*1.1);
-    const bg = cx.createRadialGradient(CX,CY,50,CX,CY,290);
-    bg.addColorStop(0,   `rgba(${p.r},${pw+0.05})`);
-    bg.addColorStop(0.45,`rgba(${p.r},${pw*0.3})`);
-    bg.addColorStop(1,   'rgba(0,0,0,0)');
-    cx.fillStyle=bg;cx.beginPath();cx.arc(CX,CY,290,0,Math.PI*2);cx.fill();
-
-    /* ── Project all nodes ── */
+    t+=.012; rotY+=.003;
+    const p=pal(); cx.clearRect(0,0,DIM,DIM);
+    const g=cx.createRadialGradient(CX,CY,0,CX,CY,280);
+    g.addColorStop(0,`rgba(${p.r},.04)`);g.addColorStop(1,'rgba(0,0,0,0)');
+    cx.fillStyle=g;cx.fillRect(0,0,DIM,DIM);
     for(const n of nodes){
-      n.phase += n.speed;
-      const wobble = 1+0.03*Math.sin(n.phase);
-      const proj = project(n.bx,n.by,n.bz,n.baseR*wobble);
-      n.ax=proj.x; n.ay=proj.y; n.az=proj.z; n.sc=proj.scale;
-      if(n.fired>0) n.fired--;
+      n.phase+=n.speed;
+      const sc=.92+.08*Math.sin(n.phase);
+      const R=n.baseR*sc;
+      const pr=project(n.bx,n.by,n.bz,R);
+      n.ax=pr.x;n.ay=pr.y;n.sc=pr.scale;n.az=pr.z;
+      if(n.fired>0)n.fired--;
     }
-
-    /* ── Sort by Z for painter's algorithm ── */
-    const order = nodes.map((_,i)=>i).sort((a,b)=>nodes[a].az-nodes[b].az);
-
-    /* ── Draw synaptic connections (back half only for depth) ── */
+    const order=[...Array(N).keys()].sort((a,b)=>nodes[a].az-nodes[b].az);
     for(const e of edges){
-      const na=nodes[e.a], nb=nodes[e.b];
-      if(na.az<-0.1&&nb.az<-0.1) continue; // skip fully behind
-      const depth = Math.min(1,((na.az+nb.az)*0.5+1)/2);
-      e.pulseT += e.pulseSpeed;
-      const pulse = e.pulse?(0.3+0.7*Math.abs(Math.sin(e.pulseT))):1;
-      const alpha = depth*0.18*pulse;
-      cx.strokeStyle=`rgba(${p.r},${alpha})`;
-      cx.lineWidth=0.6*depth;
+      const na=nodes[e.a],nb=nodes[e.b];
+      const depth=((na.az+nb.az)/2+1)/2; if(depth<.04)continue;
+      e.pulseT+=e.pulseSpeed;
+      const pulse=e.pulse?(0.3+.7*Math.abs(Math.sin(e.pulseT))):1;
+      cx.strokeStyle=`rgba(${p.r},${depth*.18*pulse})`;cx.lineWidth=.6*depth;
       cx.beginPath();cx.moveTo(na.ax,na.ay);cx.lineTo(nb.ax,nb.ay);cx.stroke();
-      /* ── Travelling pulse dot on some edges ── */
-      if(e.pulse&&Math.sin(e.pulseT)>0.7){
-        const frac=(Math.sin(e.pulseT)+1)/2;
-        const px=na.ax+(nb.ax-na.ax)*frac;
-        const py=na.ay+(nb.ay-na.ay)*frac;
+      if(e.pulse&&Math.sin(e.pulseT)>.7){
+        const frac=(Math.sin(e.pulseT)+1)/2,px=na.ax+(nb.ax-na.ax)*frac,py=na.ay+(nb.ay-na.ay)*frac;
         cx.beginPath();cx.arc(px,py,1.8*depth,0,Math.PI*2);
-        cx.fillStyle=`rgba(${p.r},${depth*0.9})`;cx.fill();
+        cx.fillStyle=`rgba(${p.r},${depth*.9})`;cx.fill();
       }
     }
-
-    /* ── Floating circuit traces ── */
     for(const tr of traces){
       tr.phase+=tr.speed;
-      const alpha=tr.alpha*(0.4+0.6*Math.abs(Math.sin(tr.phase)));
-      cx.strokeStyle=`rgba(${p.r},${alpha})`;
-      cx.lineWidth=0.7;
+      const alpha=tr.alpha*(.4+.6*Math.abs(Math.sin(tr.phase)));
+      cx.strokeStyle=`rgba(${p.r},${alpha})`;cx.lineWidth=.7;
       cx.beginPath();
-      for(let i=0;i<tr.pts.length;i++){
-        i===0?cx.moveTo(tr.pts[i].x,tr.pts[i].y):cx.lineTo(tr.pts[i].x,tr.pts[i].y);
-      }
+      for(let i=0;i<tr.pts.length;i++)i===0?cx.moveTo(tr.pts[i].x,tr.pts[i].y):cx.lineTo(tr.pts[i].x,tr.pts[i].y);
       cx.stroke();
-      // bright moving dot along trace
-      const tIdx = Math.floor(((Math.sin(tr.phase)+1)/2)*(tr.pts.length-1));
-      const tp=tr.pts[tIdx];
-      cx.beginPath();cx.arc(tp.x,tp.y,1.5,0,Math.PI*2);
-      cx.fillStyle=`rgba(${p.r},${alpha*2})`;cx.fill();
+      const ti=Math.floor(((Math.sin(tr.phase)+1)/2)*(tr.pts.length-1)),tp=tr.pts[ti];
+      cx.beginPath();cx.arc(tp.x,tp.y,1.5,0,Math.PI*2);cx.fillStyle=`rgba(${p.r},${alpha*2})`;cx.fill();
     }
-
-    /* ── Draw nodes (front-to-back so bright ones show) ── */
     for(const i of order){
-      const n=nodes[i];
-      const depth=(n.az+1)/2; if(depth<0.05) continue;
+      const n=nodes[i]; const depth=(n.az+1)/2; if(depth<.05)continue;
       const r=(n.bright?3.2:1.4)*n.sc*depth;
-      const alpha=depth*(n.fired>0?1.0:n.bright?0.9:0.45);
-      // glow for hub neurons
+      const alpha=depth*(n.fired>0?1:n.bright?.9:.45);
       if(n.bright){
         const g=cx.createRadialGradient(n.ax,n.ay,0,n.ax,n.ay,r*4);
-        g.addColorStop(0,`rgba(${p.r},${alpha*0.6})`);
-        g.addColorStop(1,'rgba(0,0,0,0)');
+        g.addColorStop(0,`rgba(${p.r},${alpha*.6})`);g.addColorStop(1,'rgba(0,0,0,0)');
         cx.fillStyle=g;cx.beginPath();cx.arc(n.ax,n.ay,r*4,0,Math.PI*2);cx.fill();
       }
       cx.beginPath();cx.arc(n.ax,n.ay,Math.max(.4,r),0,Math.PI*2);
-      cx.fillStyle=n.fired>0?`rgba(255,255,255,${alpha})`:`rgba(${p.r},${alpha})`;
-      cx.fill();
-      // randomly fire neurons
-      if(Math.random()<0.0018){ n.fired=12; }
+      cx.fillStyle=n.fired>0?`rgba(255,255,255,${alpha})`:`rgba(${p.r},${alpha})`;cx.fill();
+      if(Math.random()<.0018)n.fired=12;
     }
-
-    /* ── Energy wave rings ── */
     for(let i=waves.length-1;i>=0;i--){
-      const w=waves[i];
-      w.r+=w.speed; w.alpha-=0.008;
+      const w=waves[i]; w.r+=w.speed;w.alpha-=.007;
       if(w.alpha<=0){waves.splice(i,1);continue;}
-      cx.strokeStyle=`${p.ring}${w.alpha})`;
-      cx.lineWidth=1.5;
+      cx.strokeStyle=`${p.ring}${w.alpha})`;cx.lineWidth=1.5;
       cx.beginPath();cx.arc(CX,CY,w.r,0,Math.PI*2);cx.stroke();
     }
-    if(Math.random()<0.012) spawnWave();
-
-    /* ── Spark particles ── */
-    if(Math.random()<0.3) spawnSpark();
+    if(Math.random()<.012)spawnWave();
+    if(Math.random()<.3)spawnSpark();
     for(let i=sparks.length-1;i>=0;i--){
-      const s=sparks[i];
-      s.x+=s.vx;s.y+=s.vy;s.life-=s.fade;
+      const s=sparks[i]; s.x+=s.vx;s.y+=s.vy;s.life-=s.fade;
       if(s.life<=0){sparks.splice(i,1);continue;}
       cx.beginPath();cx.arc(s.x,s.y,s.size*s.life,0,Math.PI*2);
-      cx.fillStyle=`${p.ring}${s.life*0.85})`;cx.fill();
+      cx.fillStyle=`${p.ring}${s.life*.85})`;cx.fill();
     }
-
-    /* core ball removed */
-
     requestAnimationFrame(draw);
   }
   draw();
 })();
+</script>
 
-/* ── CORE STATE ── */
+<script>
+/* ════════════════════════════════════════════════════════════
+   VOICE ENGINE
+   Path A: Web Speech API (Chrome/Edge/Safari desktop)
+   Path B: MediaRecorder → /voice/transcribe (mobile/Firefox)
+   TTS: Audio(/tts/stream) → speechSynthesis → timer
+════════════════════════════════════════════════════════════ */
 let ST='idle',recog=null,accum='',silT=null,isSpeaking=false,micOn=false;
 let ws=null,voices=[],bestVoice=null,_pending=false,_wsT=null;
 const synth=window.speechSynthesis;
 const _spoken=new Set();
+let _curAudio=null;
+let _mrStream=null,_mrRec=null,_mrChunks=[],_mrSilT=null,_mrActive=false;
+let _wsrAvail=null;
+let _pendingFile=null; // queued file for upload
 
-/* ── VOICE SETUP ── */
 function pickVoice(){
   voices=synth.getVoices();
-  // Daniel (en-GB) = deep, authoritative — closest to Ultron movie voice
-  // Reed = most robotic on macOS. Eddy = deep US alternative.
   const rank=['Daniel','Reed (English (US))','Reed','Rocko (English (UK))','Eddy (English (US))','Eddy','Alex'];
   for(const n of rank){const v=voices.find(v=>v.name.toLowerCase().startsWith(n.toLowerCase()));if(v){bestVoice=v;return;}}
-  bestVoice=voices.find(v=>v.lang==='en-GB'&&v.localService)||voices.find(v=>v.lang.startsWith('en')&&v.localService)||voices[0];
+  bestVoice=voices.find(v=>v.lang==='en-GB'&&v.localService)||
+            voices.find(v=>v.lang.startsWith('en')&&v.localService)||voices[0];
 }
-pickVoice();synth.onvoiceschanged=pickVoice;
+pickVoice(); synth.onvoiceschanged=pickVoice;
 
-/* ── STATE ── */
 function setState(s){
-  ST=s;document.body.className=s;
+  ST=s; document.body.className=s;
   const L={idle:'ALWAYS LISTENING',listening:'LISTENING',hearing:'I HEAR YOU',
     thinking:'THINKING',speaking:'SPEAKING'};
   document.getElementById('stxt').textContent=L[s]||'';
 }
 function setTrans(t){document.getElementById('trans').textContent=t}
 
-/* ── SPEECH RECOGNITION ── */
+/* ── Path A: Web Speech ── */
+function _wsrSupported(){
+  if(_wsrAvail!==null)return _wsrAvail;
+  _wsrAvail=!!(window.SpeechRecognition||window.webkitSpeechRecognition);
+  return _wsrAvail;
+}
 function buildRecog(){
+  if(!_wsrSupported())return null;
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR)return null;
   const r=new SR();
-  r.continuous=true;
-  r.interimResults=true;
-  r.lang='en-US';
-  r.maxAlternatives=3;
-
+  r.continuous=true; r.interimResults=true; r.lang='en-US'; r.maxAlternatives=3;
   r.onresult=e=>{
     if(isSpeaking||ST==='thinking'||ST==='speaking')return;
     let interim='',final='';
     for(let i=e.resultIndex;i<e.results.length;i++){
       if(e.results[i].isFinal){
-        // only accept if confidence >= 0.5
         if(e.results[i][0].confidence>=0.5||e.results[i][0].confidence===0)
           final+=e.results[i][0].transcript+' ';
-      } else {
-        interim+=e.results[i][0].transcript;
-      }
+      }else{interim+=e.results[i][0].transcript;}
     }
-    if(interim||final){
-      setState('hearing');
-      setTrans((accum+' '+(interim||final)).trim());
-      if(silT)clearTimeout(silT);
-    }
+    if(interim||final){setState('hearing');setTrans((accum+' '+(interim||final)).trim());if(silT)clearTimeout(silT);}
     if(final){
-      accum=(accum+' '+final).trim();
-      setTrans(accum);
-      // wait for natural pause — 2.2s silence means done speaking
+      accum=(accum+' '+final).trim(); setTrans(accum);
       silT=setTimeout(()=>{
         const txt=accum.trim(); accum='';
-        const words=txt.split(/\s+/).filter(w=>w.length>0);
-        if(words.length>=1 && txt.length>=2){
-          send(txt);
-        } else {
-          setTrans(''); setState('listening');
-        }
-      },2200);
+        if(txt.split(/\s+/).filter(w=>w).length>=1&&txt.length>=2) send(txt);
+        else{setTrans('');setState('listening');}
+      },1800);
     }
   };
-
-  // restart seamlessly when browser ends the session
-  r.onend=()=>{
-    if(micOn && ST!=='thinking' && ST!=='speaking'){
-      try{ r.start(); }catch(e){}
-    }
-  };
-
+  r.onend=()=>{if(micOn&&ST!=='thinking'&&ST!=='speaking'){try{r.start();}catch(e){}}};
   r.onerror=e=>{
-    if(e.error==='not-allowed'){
-      micOn=false; setState('idle'); setTrans('Microphone access denied.');
-      return;
-    }
-    // no-speech is normal — just restart
-    if(e.error==='no-speech'){
-      try{ r.start(); }catch(err){}
-      return;
-    }
-    if(e.error!=='aborted'){
-      setTimeout(()=>{ if(micOn) try{ r.start(); }catch(err){} },300);
-    }
+    if(e.error==='not-allowed'){micOn=false;setState('idle');setTrans('Microphone access denied.');return;}
+    if(e.error==='no-speech'){try{r.start();}catch(err){}return;}
+    if(e.error!=='aborted'){setTimeout(()=>{if(micOn)try{r.start();}catch(err){}},300);}
   };
-
-  r.onspeechstart =()=>{ if(silT){clearTimeout(silT);silT=null;} };
-  r.onsoundstart  =()=>setState('hearing');
-
+  r.onspeechstart=()=>{if(silT){clearTimeout(silT);silT=null;}};
+  r.onsoundstart=()=>setState('hearing');
   return r;
 }
-function startMic(){
-  if(!recog)recog=buildRecog();
-  if(!recog){setTrans('Voice not supported');return false;}
-  try{recog.start()}catch(e){}
-  micOn=true;setState('listening');
-  document.getElementById('mic-btn').classList.add('on');return true;
+
+/* ── Path B: MediaRecorder ── */
+async function _startMediaRecorder(){
+  if(_mrActive)return;
+  try{_mrStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});}
+  catch(e){setTrans('Microphone access denied.');micOn=false;
+    document.getElementById('mic-btn').classList.remove('on');return;}
+  const mimes=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
+  const mimeType=mimes.find(m=>MediaRecorder.isTypeSupported(m))||'';
+  _mrActive=true; _mrChunks=[];
+  _mrRec=new MediaRecorder(_mrStream,mimeType?{mimeType}:{});
+  _mrRec.ondataavailable=e=>{if(e.data&&e.data.size>0)_mrChunks.push(e.data);};
+  _mrRec.onstop=async()=>{
+    if(!_mrChunks.length||!micOn)return;
+    const blob=new Blob(_mrChunks,{type:_mrRec.mimeType||'audio/webm'}); _mrChunks=[];
+    setState('thinking');
+    const text=await _transcribeBlob(blob);
+    if(text&&text.trim().length>=2){setTrans(text);send(text);}
+    else{setTrans('');setState(micOn?'listening':'idle');if(micOn)_resumeMediaRecorder();}
+  };
+  _mrRec.start(250); setState('listening');
+  _mrSilT=setTimeout(_stopMediaChunk,6000);
+}
+function _stopMediaChunk(){
+  if(_mrSilT){clearTimeout(_mrSilT);_mrSilT=null;}
+  if(_mrRec&&_mrRec.state==='recording'){try{_mrRec.stop();}catch(e){}}
+}
+function _resumeMediaRecorder(){
+  if(!micOn||!_mrStream||!_mrActive)return;
+  _mrChunks=[];
+  _mrRec=new MediaRecorder(_mrStream,_mrRec&&_mrRec.mimeType?{mimeType:_mrRec.mimeType}:{});
+  _mrRec.ondataavailable=e=>{if(e.data&&e.data.size>0)_mrChunks.push(e.data);};
+  _mrRec.onstop=async()=>{
+    if(!_mrChunks.length||!micOn)return;
+    const blob=new Blob(_mrChunks,{type:_mrRec.mimeType||'audio/webm'}); _mrChunks=[];
+    setState('thinking');
+    const text=await _transcribeBlob(blob);
+    if(text&&text.trim().length>=2){setTrans(text);send(text);}
+    else{setTrans('');setState(micOn?'listening':'idle');if(micOn)_resumeMediaRecorder();}
+  };
+  _mrRec.start(250); setState('listening');
+  _mrSilT=setTimeout(_stopMediaChunk,6000);
+}
+function _stopMediaRecorder(){
+  _mrActive=false;
+  if(_mrSilT){clearTimeout(_mrSilT);_mrSilT=null;}
+  if(_mrRec&&_mrRec.state!=='inactive'){try{_mrRec.stop();}catch(e){}}
+  if(_mrStream){_mrStream.getTracks().forEach(t=>t.stop());_mrStream=null;}
+  _mrRec=null; _mrChunks=[];
+}
+async function _transcribeBlob(blob){
+  try{
+    const fd=new FormData();
+    const ext=blob.type.includes('ogg')?'ogg':blob.type.includes('mp4')?'mp4':'webm';
+    fd.append('file',blob,`audio.${ext}`);
+    const res=await fetch('/voice/transcribe',{method:'POST',body:fd,signal:AbortSignal.timeout(20000)});
+    if(!res.ok)return '';
+    const data=await res.json(); return data.text||'';
+  }catch(e){return '';}
+}
+
+/* ── Mic control ── */
+async function startMic(){
+  micOn=true; document.getElementById('mic-btn').classList.add('on');
+  if(_wsrSupported()){
+    if(!recog)recog=buildRecog();
+    if(recog){try{recog.start();}catch(e){} setState('listening'); return true;}
+  }
+  await _startMediaRecorder(); return true;
 }
 function stopMic(){
-  micOn=false;if(recog)try{recog.stop()}catch(e){}
-  document.getElementById('mic-btn').classList.remove('on');
+  micOn=false; document.getElementById('mic-btn').classList.remove('on');
+  if(recog)try{recog.stop();}catch(e){}
+  _stopMediaRecorder();
+  if(silT){clearTimeout(silT);silT=null;} accum='';
 }
 function toggleMic(){if(micOn){stopMic();setState('idle');}else startMic();}
 function handleFaceTap(){
   if(ST==='speaking'){stopSpeaking();return;}
   if(micOn){stopMic();setState('idle');}else startMic();
 }
-</script>
 
-<script>
-/* ── TTS — server-side primary, browser fallback ── */
+/* ── TTS ── */
 function clean(raw){
   return raw.replace(/```[\s\S]*?```/g,'').replace(/`([^`]+)`/g,'$1')
     .replace(/\*\*?([^*]+)\*\*?/g,'$1').replace(/#{1,6}\s/g,'')
     .replace(/[🧠⚡🎯📡🤖🧬🏠📰🌍💡🔴✅❌⚠️]/g,'').replace(/\s+/g,' ').trim();
 }
+function _afterSpeak(){
+  isSpeaking=false; _curAudio=null;
+  setState(micOn?'listening':'idle');
+  if(micOn){
+    setTimeout(()=>{
+      if(!micOn)return;
+      if(_wsrSupported()&&recog){try{recog.start();}catch(e){}
+      }else if(_mrActive){_resumeMediaRecorder();
+      }else{startMic();}
+      setState('listening');
+    },700);
+  }
+}
 async function speak(raw){
-  const text=clean(raw);if(!text)return;
+  const text=clean(raw); if(!text)return;
   if(_spoken.has(text))return;
-  _spoken.add(text);if(_spoken.size>20){const f=_spoken.values().next().value;_spoken.delete(f);}
-  isSpeaking=true;setState('speaking');
-  const wasMic=micOn;
-  if(micOn)try{recog&&recog.stop()}catch(e){}
-  const done=await serverSpeak(text);
-  if(!done)browserSpeak(text,wasMic);
+  _spoken.add(text); if(_spoken.size>20){const f=_spoken.values().next().value;_spoken.delete(f);}
+  isSpeaking=true; setState('speaking');
+  if(recog)try{recog.stop();}catch(e){}
+  if(_mrRec&&_mrRec.state==='recording'){try{_mrRec.stop();}catch(e){}}
+  if(_mrSilT){clearTimeout(_mrSilT);_mrSilT=null;}
+  const done=await _streamAudioSpeak(text);
+  if(!done)_browserSynthSpeak(text);
 }
-async function serverSpeak(text){
+async function _streamAudioSpeak(text){
   try{
-    const r=await fetch('/speak',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({text}),signal:AbortSignal.timeout(4000)});
-    if(r.ok){
-      const ms=Math.max(2000,text.split(/\s+/).length*414+800);
-      setTimeout(()=>{isSpeaking=false;setState('idle');
-        setTimeout(()=>{if(micOn)try{recog&&recog.start()}catch(e){}
-          setState(micOn?'listening':'idle');},600);},ms);
-      return true;
-    }
-  }catch(e){}return false;
+    const url='/tts/stream?text='+encodeURIComponent(text);
+    const audio=new Audio(url); audio.preload='auto'; _curAudio=audio;
+    return await new Promise(resolve=>{
+      let resolved=false;
+      function done(ok){if(!resolved){resolved=true;resolve(ok);}}
+      audio.oncanplaythrough=()=>{audio.play().then(()=>setState('speaking')).catch(()=>done(false));};
+      audio.onended=()=>{_afterSpeak();done(true);};
+      audio.onerror=()=>done(false);
+      setTimeout(()=>done(false),6000);
+      audio.load();
+    });
+  }catch(e){return false;}
 }
-function browserSpeak(text,restartMic){
+function _browserSynthSpeak(text){
   const sents=text.match(/[^.!?…]+[.!?…]+|\S[^.!?]*$/g)||[text];
   let i=0;
   function next(){
-    if(i>=sents.length||!isSpeaking){isSpeaking=false;setState('idle');
-      if(restartMic)setTimeout(()=>{try{recog&&recog.start()}catch(e){}
-        setState(micOn?'listening':'idle');},700);return;}
+    if(i>=sents.length||!isSpeaking){_afterSpeak();return;}
     const u=new SpeechSynthesisUtterance(sents[i].trim());
     u.rate=0.82;u.pitch=0.70;u.volume=1.0;if(bestVoice)u.voice=bestVoice;
     u.onend=()=>{i++;setTimeout(next,60);};
-    u.onerror=()=>{isSpeaking=false;setState('idle');};
+    u.onerror=()=>{_afterSpeak();};
     synth.speak(u);
   }
   setTimeout(next,80);
 }
 function stopSpeaking(){
-  synth.cancel();fetch('/stop_speaking',{method:'POST'}).catch(()=>{});
-  isSpeaking=false;setTrans('');setState(micOn?'listening':'idle');
+  if(_curAudio){try{_curAudio.pause();_curAudio.src='';}catch(e){}_curAudio=null;}
+  synth.cancel();
+  fetch('/stop_speaking',{method:'POST'}).catch(()=>{});
+  isSpeaking=false; setTrans(''); setState(micOn?'listening':'idle');
+}
+</script>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   CAMERA
+════════════════════════════════════════════════════════════ */
+let _camStream=null; let _snapBlob=null;
+
+async function openCamera(){
+  // On mobile: use the capture file input (opens native camera)
+  const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  if(isMobile){document.getElementById('cam-file-input').click();return;}
+  // Desktop: open camera modal with live video
+  const modal=document.getElementById('cam-modal');
+  modal.style.display='flex';
+  try{
+    _camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+    const vid=document.getElementById('cam-video');
+    vid.srcObject=_camStream; vid.style.display='block';
+    document.getElementById('cam-preview').style.display='none';
+    document.getElementById('cam-snap-btn').style.display='flex';
+    document.getElementById('cam-send-btn').style.display='none';
+    document.getElementById('cam-retake').style.display='none';
+  }catch(e){
+    closeCam();
+    setTrans('Camera access denied'); setTimeout(()=>setTrans(''),2000);
+  }
 }
 
-/* ── SEND ── */
+function closeCam(){
+  if(_camStream){_camStream.getTracks().forEach(t=>t.stop());_camStream=null;}
+  document.getElementById('cam-modal').style.display='none';
+  _snapBlob=null;
+}
+
+function snapPhoto(){
+  const vid=document.getElementById('cam-video');
+  const snap=document.getElementById('cam-snap');
+  snap.width=vid.videoWidth||640; snap.height=vid.videoHeight||480;
+  snap.getContext('2d').drawImage(vid,0,0);
+  snap.toBlob(blob=>{
+    _snapBlob=blob;
+    const url=URL.createObjectURL(blob);
+    const prev=document.getElementById('cam-preview');
+    prev.src=url; prev.style.display='block';
+    vid.style.display='none';
+    document.getElementById('cam-snap-btn').style.display='none';
+    document.getElementById('cam-send-btn').style.display='flex';
+    document.getElementById('cam-retake').style.display='flex';
+  },'image/jpeg',.92);
+}
+
+function retakePhoto(){
+  _snapBlob=null;
+  const vid=document.getElementById('cam-video');
+  document.getElementById('cam-preview').style.display='none';
+  vid.style.display='block';
+  document.getElementById('cam-snap-btn').style.display='flex';
+  document.getElementById('cam-send-btn').style.display='none';
+  document.getElementById('cam-retake').style.display='none';
+}
+
+async function sendSnap(){
+  if(!_snapBlob)return;
+  const file=new File([_snapBlob],'snapshot.jpg',{type:'image/jpeg'});
+  closeCam();
+  await _uploadAndSend(file,'What do you see in this image? Analyse it fully.');
+}
+
+/* ════════════════════════════════════════════════════════════
+   FILE / MEDIA UPLOAD
+════════════════════════════════════════════════════════════ */
+function onFileSelected(input){
+  const file=input.files[0]; if(!file)return;
+  input.value=''; // allow re-selecting same file
+  _pendingFile=file; showMediaPreview(file);
+}
+
+function showMediaPreview(file){
+  const p=document.getElementById('media-preview');
+  const thumb=document.getElementById('media-thumb');
+  const vid=document.getElementById('media-vid-thumb');
+  const icon=document.getElementById('media-file-icon');
+  thumb.style.display='none'; vid.style.display='none'; icon.style.display='none';
+  if(file.type.startsWith('image/')){
+    thumb.src=URL.createObjectURL(file); thumb.style.display='block';
+  }else if(file.type.startsWith('video/')){
+    vid.src=URL.createObjectURL(file); vid.style.display='block';
+  }else{
+    icon.style.display='flex';
+  }
+  document.getElementById('media-name').textContent=file.name;
+  document.getElementById('media-size').textContent=_fmtBytes(file.size);
+  p.style.display='block';
+}
+
+function clearMedia(){
+  _pendingFile=null;
+  document.getElementById('media-preview').style.display='none';
+  const thumb=document.getElementById('media-thumb');
+  const vid=document.getElementById('media-vid-thumb');
+  if(thumb.src)URL.revokeObjectURL(thumb.src);
+  if(vid.src)URL.revokeObjectURL(vid.src);
+  thumb.src=''; vid.src='';
+}
+
+function _fmtBytes(b){
+  if(b<1024)return b+'B'; if(b<1048576)return(b/1024).toFixed(1)+'KB';
+  return(b/1048576).toFixed(1)+'MB';
+}
+
+async function _uploadAndSend(file, promptText){
+  if(!file)return;
+  const caption=promptText||(document.getElementById('tinput').value.trim()||
+    (file.type.startsWith('image/')?'What do you see in this image?':
+     file.type.startsWith('video/')?'Describe this video.':'Analyse this file.'));
+  clearMedia(); clearInput();
+  addMsg('user',`[${file.type.startsWith('image/')?'IMAGE':file.type.startsWith('video/')?'VIDEO':'FILE'}: ${file.name}] ${caption}`);
+  // Show preview in chat
+  if(file.type.startsWith('image/')){
+    const url=URL.createObjectURL(file);
+    const last=document.getElementById('msgs').lastChild;
+    if(last){const img=document.createElement('img');img.className='msg-img';img.src=url;last.querySelector('.msg-b').appendChild(img);}
+  }
+  setState('thinking'); _pending=true;
+  try{
+    const fd=new FormData();
+    fd.append('file',file,file.name);
+    const res=await fetch('/upload',{method:'POST',body:fd,signal:AbortSignal.timeout(60000)});
+    if(!res.ok){onResp('Upload failed.');return;}
+    const data=await res.json();
+    const analysis=data.response||data.analysis||'File received.';
+    // Send analysis + caption as prompt to the brain
+    const combinedPrompt=caption+'\n\nFile analysis:\n'+analysis;
+    if(ws&&ws.readyState===WebSocket.OPEN){
+      ws.send(JSON.stringify({cmd:combinedPrompt}));
+      _wsT=setTimeout(()=>{if(_pending){_pending=false;httpSend(combinedPrompt);}},90000);
+    }else httpSend(combinedPrompt);
+  }catch(e){_pending=false;onResp('Upload error: '+e.message);}
+}
+
+function clearInput(){
+  const el=document.getElementById('tinput');
+  el.value=''; el.style.height='auto';
+}
+</script>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   SEND / RECEIVE
+════════════════════════════════════════════════════════════ */
 function send(text){
   if(!text||!text.trim()||_pending)return;
-  _pending=true;setTrans('');addMsg('user',text);setState('thinking');
+  // If there's a pending file, upload it with this text as the prompt
+  if(_pendingFile){const f=_pendingFile;_pendingFile=null;_uploadAndSend(f,text);return;}
+  _pending=true; setTrans(''); addMsg('user',text); setState('thinking');
   if(ws&&ws.readyState===WebSocket.OPEN){
     ws.send(JSON.stringify({cmd:text}));
-    // timeout fallback — only if WS truly goes silent (90s to match Ollama timeout)
     _wsT=setTimeout(()=>{if(_pending){_pending=false;httpSend(text);}},90000);
   }else httpSend(text);
 }
@@ -785,92 +1146,96 @@ function httpSend(text){
   .catch(()=>{_pending=false;onResp('Connection error.');});
 }
 function doSend(){
-  const el=document.getElementById('tinput');const t=el.value.trim();
-  if(!t)return;el.value='';el.style.height='auto';send(t);
+  const el=document.getElementById('tinput'); const t=el.value.trim();
+  if(!t&&_pendingFile){_uploadAndSend(_pendingFile,'');_pendingFile=null;clearMedia();return;}
+  if(!t)return;
+  clearInput(); send(t);
 }
 function cmd(c){send(c);}
 function promptGoal(){
   const desc=window.prompt('Enter goal for Ultron:','');
   if(desc&&desc.trim()) send('/goal '+desc.trim());
 }
-/* ── SLASH COMMAND INTERCEPT ── */
+
+/* ── Slash command intercept ── */
 const _origSend=send;
 send=function(text){
   if(!text||!text.trim())return;
   const low=text.trim().toLowerCase();
-  // /diary → hit consciousness endpoint directly
   if(low==='/diary'){
-    if(_pending)return;_pending=true;addMsg('user',text);setState('thinking');
+    if(_pending)return; _pending=true; addMsg('user',text); setState('thinking');
     fetch('/consciousness/diary?limit=5').then(r=>r.json()).then(d=>{
       const txt=(d.entries||[]).map(e=>`[${e.tone.toUpperCase()}] ${e.content}`).join('\n\n');
       onResp(txt||'No diary entries yet.');
-    }).catch(()=>onResp('Diary unavailable.'));
-    return;
+    }).catch(()=>onResp('Diary unavailable.')); return;
   }
   if(low==='/consciousness'){
-    if(_pending)return;_pending=true;addMsg('user',text);setState('thinking');
+    if(_pending)return; _pending=true; addMsg('user',text); setState('thinking');
     fetch('/consciousness').then(r=>r.json()).then(d=>{
       const s=d.soul||{},sm=d.self_model||{};
-      const txt=`SOUL  mood:${s.mood}  purpose:${s.purpose}\n`+
-        `entries:${s.entry_count}  stances:${s.stances_count}\n\n`+
-        `SELF-MODEL\n${sm.self_description||'—'}\n\n`+
-        `BLIND SPOTS: ${(sm.blind_spots||[]).join(', ')||'none'}`;
-      onResp(txt);
-    }).catch(()=>onResp('Consciousness unavailable.'));
-    return;
+      onResp(`SOUL  mood:${s.mood}  purpose:${s.purpose}\nentries:${s.entry_count}  stances:${s.stances_count}\n\nSELF-MODEL\n${sm.self_description||'—'}\n\nBLIND SPOTS: ${(sm.blind_spots||[]).join(', ')||'none'}`);
+    }).catch(()=>onResp('Consciousness unavailable.')); return;
   }
   if(text.trim().toLowerCase().startsWith('/goal ')){
     const desc=text.trim().slice(6).trim();
-    if(_pending)return;_pending=true;addMsg('user',text);setState('thinking');
+    if(_pending)return; _pending=true; addMsg('user',text); setState('thinking');
     fetch(`/goal?goal_type=learning&domain=general&description=${encodeURIComponent(desc)}&priority=0.85`,{method:'POST'})
       .then(r=>r.json()).then(d=>onResp(d.success?`Goal injected via ${d.path}: "${desc}"`:'Goal injection failed: '+(d.error||'unknown')))
-      .catch(()=>onResp('Goal injection failed.'));
-    return;
+      .catch(()=>onResp('Goal injection failed.')); return;
   }
   _origSend(text);
 };
+
 function onResp(text){
-  if(!_pending)return;_pending=false;
+  if(!_pending)return; _pending=false;
   if(_wsT){clearTimeout(_wsT);_wsT=null;}
   if(!text){setState(micOn?'listening':'idle');return;}
-  addMsg('ai',text);speak(text);
+  addMsg('ai',text); speak(text);
 }
 
-/* ── MESSAGES ── */
+/* ── Messages ── */
 function addMsg(who,text){
   const c=document.getElementById('msgs');
-  const d=document.createElement('div');d.className='msg '+who;
-  const l=document.createElement('div');l.className='msg-l';l.textContent=who==='ai'?'ULTRON':'YOU';
-  const b=document.createElement('div');b.className='msg-b';b.textContent=text;
-  d.appendChild(l);d.appendChild(b);c.appendChild(d);c.scrollTop=c.scrollHeight;
-  while(c.children.length>60)c.removeChild(c.firstChild);
+  const d=document.createElement('div'); d.className='msg '+who;
+  const l=document.createElement('div'); l.className='msg-l';
+  l.textContent=who==='ai'?'ULTRON':'YOU';
+  const b=document.createElement('div'); b.className='msg-b';
+  b.textContent=text;
+  d.appendChild(l); d.appendChild(b); c.appendChild(d);
+  c.scrollTop=c.scrollHeight;
+  while(c.children.length>80)c.removeChild(c.firstChild);
 }
 
-/* ── INPUT ── */
-function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,90)+'px';}
+/* ── Input helpers ── */
+function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px';}
 function onKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();doSend();}}
+function togglePanels(){document.getElementById('app').classList.toggle('panels-hidden');}
 </script>
 
 <script>
-/* ── WEBSOCKET ── */
+/* ════════════════════════════════════════════════════════════
+   WEBSOCKET
+════════════════════════════════════════════════════════════ */
 function connectWS(){
   const p=location.protocol==='https:'?'wss':'ws';
   ws=new WebSocket(`${p}://${location.host}/ws/command`);
-  ws.onopen=()=>console.log('[WS] connected');
+  ws.onopen=()=>{};
   ws.onmessage=e=>{
-    try{const d=JSON.parse(e.data);
+    try{
+      const d=JSON.parse(e.data);
       if(d.type==='status'){updateMetrics(d);return;}
-      if(d.soul_diary && d.type!=='response') document.getElementById('soul-txt').textContent=d.soul_diary;
-      // server sends {type:'response', content:'...'} — also handle legacy {response:'...'}
-      const respText = (d.type==='response'&&d.content) ? d.content : (d.response||null);
-      if(respText) onResp(respText);
+      if(d.soul_diary&&d.type!=='response')document.getElementById('soul-txt').textContent=d.soul_diary;
+      const respText=(d.type==='response'&&d.content)?d.content:(d.response||null);
+      if(respText)onResp(respText);
     }catch(err){if(e.data&&e.data.trim())onResp(e.data);}
   };
   ws.onclose=()=>{ws=null;setTimeout(connectWS,3000);};
   ws.onerror=()=>ws.close();
 }
 
-/* ── METRICS ── */
+/* ════════════════════════════════════════════════════════════
+   METRICS
+════════════════════════════════════════════════════════════ */
 function fmt(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return String(n);}
 function fmtUp(s){s=Math.floor(s);if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';
   return Math.floor(s/3600)+'h '+(Math.floor((s%3600)/60))+'m';}
@@ -882,7 +1247,7 @@ function updateMetrics(d){
   document.getElementById('h-up').textContent=fmtUp(up);
   document.getElementById('r-ticks').textContent=fmt(ti);
   if(d.mode)document.getElementById('h-mode').textContent=d.mode.toUpperCase();
-  if(d.drives)for(const[k,v] of Object.entries(d.drives)){
+  if(d.drives)for(const[k,v]of Object.entries(d.drives)){
     const row=document.querySelector(`[data-k="${k}"]`);if(!row)continue;
     const pct=Math.round((v||0)*100);
     const bar=row.querySelector('[data-b]'),val=row.querySelector('[data-v]');
@@ -892,59 +1257,33 @@ function updateMetrics(d){
 }
 
 async function pollMetrics(){
-  // Python /status (always works — includes Go HTTP proxy internally)
-  try{
-    const r=await fetch('/status',{signal:AbortSignal.timeout(1500)});
-    const d=await r.json();
+  try{const r=await fetch('/status',{signal:AbortSignal.timeout(1500)});const d=await r.json();
     updateMetrics({decisions_made:d.decisions_made||0,uptime:d.uptime_seconds||0,
-      drives:d.drives||{},mode:d.mode||'online'});
-  }catch(e){}
-  // Go agent proxied through Python (works on Railway + local)
-  try{
-    const r=await fetch('/agent/metrics',{signal:AbortSignal.timeout(1200)});
-    const m=await r.json();
-    if((m.tick_count||0)>0){
-      updateMetrics({tick_count:m.tick_count||0,decisions_made:m.decisions_made||0,
-        drives:m.drives||{},mode:m.state||'autonomous'});
-      addDecision('DECIDE',`tick ${fmt(m.tick_count||0)}`,.85);
-    }
-  }catch(e){}
-  // Rust services proxied through Python
-  try{
-    const r=await fetch('/rust/metrics',{signal:AbortSignal.timeout(1200)});
-    const all=await r.json();
-    // Neural mesh
+      drives:d.drives||{},mode:d.mode||'online'});}catch(e){}
+  try{const r=await fetch('/agent/metrics',{signal:AbortSignal.timeout(1200)});const m=await r.json();
+    if((m.tick_count||0)>0){updateMetrics({tick_count:m.tick_count||0,
+      decisions_made:m.decisions_made||0,drives:m.drives||{},mode:m.state||'autonomous'});
+      addDecision('DECIDE',`tick ${fmt(m.tick_count||0)}`,.85);}}catch(e){}
+  try{const r=await fetch('/rust/metrics',{signal:AbortSignal.timeout(1200)});const all=await r.json();
     const nm=all['neural_mesh']||{};
-    if(nm.neurons!=null){
-      document.getElementById('ns-neurons').textContent=nm.neurons;
+    if(nm.neurons!=null){document.getElementById('ns-neurons').textContent=nm.neurons;
       document.getElementById('ns-conn').textContent=nm.connections||'—';
       document.getElementById('ns-evo').textContent=nm.evolution_cycles||nm.architecture_changes||0;
-      document.getElementById('ns-plas').textContent=fmt(nm.plasticity_events||nm.plasticity_changes||0);
-    }
-    // Neuromorphic
+      document.getElementById('ns-plas').textContent=fmt(nm.plasticity_events||nm.plasticity_changes||0);}
     const neuro=all['neuromorphic']||{};
-    if(neuro.avg_firing_rate_hz!=null)
-      document.getElementById('ns-spk').textContent=neuro.avg_firing_rate_hz.toFixed(1);
-    // Security
+    if(neuro.avg_firing_rate_hz!=null)document.getElementById('ns-spk').textContent=neuro.avg_firing_rate_hz.toFixed(1);
     const sec=all['security_daemon']||{};
-    if(sec.status==='online'){
-      document.getElementById('ns-sec').textContent=(sec.threat_level||'NONE').toString().toUpperCase();
+    if(sec.status==='online'){document.getElementById('ns-sec').textContent=(sec.threat_level||'NONE').toString().toUpperCase();
       if((sec.integrity_checks||0)>0&&(sec.integrity_checks||0)%10===0)
-        addDecision('GUARD',`${sec.integrity_checks} checks · ${sec.threat_level}`,.98);
-    }
-  }catch(e){}
-  // Learning service
-  try{
-    const r=await fetch('/learning/status',{signal:AbortSignal.timeout(600)});
-    const m=await r.json();
+        addDecision('GUARD',`${sec.integrity_checks} checks · ${sec.threat_level}`,.98);}}catch(e){}
+  try{const r=await fetch('/learning/status',{signal:AbortSignal.timeout(600)});const m=await r.json();
     const ex=m.total_training_examples||m.metrics?.total_training_examples||0;
-    document.getElementById('h-learn').textContent=fmt(ex);
-  }catch(e){}
+    document.getElementById('h-learn').textContent=fmt(ex);}catch(e){}
 }
-</script>
 
-<script>
-/* ── HEALTH / MODULES ── */
+/* ════════════════════════════════════════════════════════════
+   HEALTH
+════════════════════════════════════════════════════════════ */
 async function pollHealth(){
   try{
     const r=await fetch('/health',{signal:AbortSignal.timeout(2000)});
@@ -956,23 +1295,23 @@ async function pollHealth(){
       voice_engine:['led-voice','st-voice'],
       rust_security:['led-sec','st-sec'],rust_data:['led-data','st-data'],
       rust_neuromorphic:['led-neuro','st-neuro'],mqtt_broker:['led-mqtt','st-mqtt'],
-      brain_connected:['led-core','st-core'],
-      rust_neural_mesh:['led-neural','st-neural'],
+      brain_connected:['led-core','st-core'],rust_neural_mesh:['led-neural','st-neural'],
     };
-    for(const[k,[lid,sid]] of Object.entries(map)){
+    for(const[k,[lid,sid]]of Object.entries(map)){
       const on=!!d[k];
       const led=document.getElementById(lid),st=document.getElementById(sid);
       if(led)led.className='led '+(on?'on':'off');
       if(st){st.textContent=on?'LIVE':'OFF';st.className='mod-s '+(on?'live':'');}
     }
   }catch(e){}
-  // P2P — mark as running (process is alive from boot)
   const pl=document.getElementById('led-p2p'),ps=document.getElementById('st-p2p');
   if(pl)pl.className='led warm';
   if(ps){ps.textContent='RUN';ps.className='mod-s live';}
 }
 
-/* ── DECISION FEED ── */
+/* ════════════════════════════════════════════════════════════
+   DECISION FEED
+════════════════════════════════════════════════════════════ */
 function addDecision(action,target,conf=.8){
   const feed=document.getElementById('dec-feed');
   const el=document.createElement('div');el.className='dec';
@@ -982,43 +1321,34 @@ function addDecision(action,target,conf=.8){
   while(feed.children.length>8)feed.removeChild(feed.lastChild);
 }
 
-/* ── BOOT ── */
+/* ════════════════════════════════════════════════════════════
+   BOOT
+════════════════════════════════════════════════════════════ */
 async function boot(){
-  const lines = document.querySelectorAll('.boot-line');
-  const bar   = document.getElementById('boot-bar');
-  const status= document.getElementById('boot-status');
-  const pcts  = [10, 28, 46, 64, 82, 100];
-
-  async function typeLine(el, pct){
-    const text = el.textContent;
-    el.textContent = '';
-    el.classList.add('typing');
+  const lines=document.querySelectorAll('.boot-line');
+  const bar=document.getElementById('boot-bar');
+  const status=document.getElementById('boot-status');
+  const pcts=[10,28,46,64,82,100];
+  async function typeLine(el,pct){
+    const text=el.textContent; el.textContent=''; el.classList.add('typing');
     for(let i=0;i<=text.length;i++){
-      el.textContent = text.slice(0,i);
-      await new Promise(r=>setTimeout(r, 22+Math.random()*18));
+      el.textContent=text.slice(0,i);
+      await new Promise(r=>setTimeout(r,18+Math.random()*16));
     }
-    el.classList.remove('typing');
-    el.classList.add('typed');
-    bar.style.width = pct+'%';
-    status.textContent = pct < 100 ? pct+'% LOADED' : 'ONLINE';
-    await new Promise(r=>setTimeout(r, 120));
+    el.classList.remove('typing'); el.classList.add('typed');
+    bar.style.width=pct+'%';
+    status.textContent=pct<100?pct+'% LOADED':'ONLINE';
+    await new Promise(r=>setTimeout(r,110));
   }
-
-  for(let i=0;i<lines.length;i++){
-    await typeLine(lines[i], pcts[i]);
-  }
-
-  await new Promise(r=>setTimeout(r,400));
+  for(let i=0;i<lines.length;i++) await typeLine(lines[i],pcts[i]);
+  await new Promise(r=>setTimeout(r,350));
   document.getElementById('boot').classList.add('gone');
-
   connectWS();
   setInterval(pollMetrics,2000);
   setInterval(pollHealth,4000);
-  pollMetrics();
-  pollHealth();
-
+  pollMetrics(); pollHealth();
   await new Promise(r=>setTimeout(r,500));
-  const ok=startMic();
+  await startMic();
   await new Promise(r=>setTimeout(r,600));
   addDecision('BOOT','all systems initialized',1.0);
 }
