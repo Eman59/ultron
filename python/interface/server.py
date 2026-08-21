@@ -26,7 +26,31 @@ from fastapi import UploadFile, File
 from pydantic import BaseModel, Field
 from enum import Enum
 
-from .grpc_bridge import GRPCBridge, GRPCConfig, ConnectionState
+# gRPC bridge — graceful fallback if grpcio not compiled on this platform
+try:
+    from .grpc_bridge import GRPCBridge, GRPCConfig, ConnectionState
+    _GRPC_AVAILABLE = True
+except Exception as _grpc_err:
+    print(f"[gRPC] Not available: {_grpc_err} — running without Go agent bridge")
+    _GRPC_AVAILABLE = False
+    # Stub so the rest of the file doesn't need guarding
+    class ConnectionState:
+        DISCONNECTED = "disconnected"
+    class GRPCConfig:
+        def __init__(self, **kw): pass
+    class GRPCBridge:
+        def __init__(self, cfg): self.is_connected = False; self.state = ConnectionState
+        async def connect(self): return False
+        async def disconnect(self): pass
+        async def execute_action(self, **kw): return {}
+        async def get_system_status(self): return {}
+        async def get_threat_level(self): return {"level": 0}
+        async def inject_goal(self, *a, **kw): return False
+        async def run_improvement_cycle(self): return {}
+        async def submit_observation(self, **kw): pass
+        async def get_next_insight(self, timeout=1.0): return None
+        def get_connection_status(self): return {"state": "grpc_unavailable", "is_connected": False}
+
 from .real_brain import generate_response, is_cloudflare_available
 
 # ═══════════════════════════════════════════════════════════════
@@ -1650,9 +1674,30 @@ async def execute_command(body: dict):
         return {"response": response}
 
 
+@app.get("/ws/status")
+async def ws_status():
+    """HTTP endpoint: tells the UI whether WebSockets are supported on this host.
+    Vercel serverless → ws_supported: false → UI switches to HTTP polling only.
+    Railway/local    → ws_supported: true  → UI uses WebSocket normally.
+    """
+    # Vercel sets VERCEL=1 in the environment
+    on_vercel = bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("NOW_REGION"))
+    return {
+        "ws_supported": not on_vercel,
+        "platform": "vercel" if on_vercel else "self-hosted",
+        "polling_endpoint": "/api/command",
+        "polling_interval_ms": 2000,
+    }
+
+
 @app.websocket("/ws/command")
 async def websocket_command(websocket: WebSocket):
-    """WebSocket endpoint — registered for real-time metric push + command handling."""
+    """WebSocket endpoint — real-time metric push + command handling.
+    Note: Vercel serverless does not support WebSockets — the UI falls back
+    to HTTP polling (/api/command) automatically when this fails.
+    """
+    # On Vercel, WS upgrade is rejected before reaching here.
+    # On Railway/local, this runs normally.
     await websocket.accept()
     _ws_clients.append(websocket)
 

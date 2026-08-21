@@ -1,0 +1,13 @@
+# api/requirements.txt — Vercel also reads this for the /api function
+# Keep identical to root requirements.txt so both paths work
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+python-multipart==0.0.20
+grpcio==1.71.0
+grpcio-tools==1.71.0
+protobuf==5.29.4
+numpy==1.26.4
+scikit-learn==1.4.2
+PyPDF2==3.0.1
+requests==2.32.3
+paho-mqtt==2.1.0

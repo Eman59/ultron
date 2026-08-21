@@ -1,0 +1,31 @@
+# Python cache — never needed in image
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# Ultron internal cache/chunk files
+.ultron/chunks/
+.ultron_sandbox/
+.DS_Store
+
+# Mac-compiled binaries — Docker builds its own Linux binaries
+# (the multi-stage build compiles fresh from source)
+go/core_agent/ultron_agent
+go/core_agent/ultron-watchdog
+go/p2p_network/ultron-p2p
+rust/target/
+
+# Git history (not needed inside container)
+.git/
+.kiro/
+.vscode/
+
+# Dev-only configs
+railway.toml
+
+# Large local backup files
+.ultron_backups/
+**/*.bak
+
+# CI/CD test files
+tests/
