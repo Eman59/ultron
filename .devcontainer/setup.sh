@@ -7,6 +7,23 @@ echo "════════════════════════�
 echo "  ULTRON CODESPACE SETUP"
 echo "══════════════════════════════════════════════"
 
+# ── Write env vars to ~/.bashrc so they survive every terminal session ─────
+# These are read from the Codespace secrets OR from the values below.
+# Best practice: set CF_ACCOUNT_ID and CF_API_TOKEN as Codespace Secrets at
+# https://github.com/settings/codespaces so they aren't in the file.
+cat >> ~/.bashrc << 'ENVEOF'
+
+# ── Ultron environment ─────────────────────────────────────────
+export PYTHONPATH="/workspaces/ultron"
+export ULTRON_PROJECT_ROOT="/workspaces/ultron"
+export PORT="9000"
+ENVEOF
+
+# Also export for this session
+export PYTHONPATH="/workspaces/ultron"
+export ULTRON_PROJECT_ROOT="/workspaces/ultron"
+export PORT="9000"
+
 # ── Python deps ────────────────────────────────────────────────
 echo "[1/5] Installing Python dependencies..."
 pip install --quiet fastapi uvicorn python-multipart requests \
@@ -35,8 +52,27 @@ echo "[5/5] Creating data directories..."
 mkdir -p data/consciousness data/knowledge data/memory data/interaction \
          data/ui data/voice data/logs data/simulations data/uploads data/snapshots
 
+# ── Write a quick launch script ───────────────────────────────
+cat > ~/launch_ultron.sh << 'LAUNCHEOF'
+#!/bin/bash
+# Quick launch — just run: bash ~/launch_ultron.sh
+source ~/.bashrc
+cd /workspaces/ultron
+exec bash start.sh
+LAUNCHEOF
+chmod +x ~/launch_ultron.sh
+
 echo ""
 echo "══════════════════════════════════════════════"
-echo "  SETUP COMPLETE — run: bash start.sh"
-echo "  or: python3 -m uvicorn python.interface.server:app --host 0.0.0.0 --port 9000"
+echo "  SETUP COMPLETE"
+echo ""
+echo "  To start Ultron, run ONE of these:"
+echo ""
+echo "  Option A (with your CF keys):"
+echo "  CF_ACCOUNT_ID=your_id CF_API_TOKEN=your_token bash start.sh"
+echo ""
+echo "  Option B (if secrets are set in GitHub Codespace Settings):"
+echo "  bash start.sh"
+echo ""
+echo "  The UI will open automatically at port 9000."
 echo "══════════════════════════════════════════════"
