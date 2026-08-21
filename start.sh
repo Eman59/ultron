@@ -7,7 +7,7 @@ set -e
 
 export PYTHONPATH="${PYTHONPATH:-/app}"
 export ULTRON_PROJECT_ROOT="${ULTRON_PROJECT_ROOT:-/app}"
-PORT="${PORT:-8000}"
+PORT="${PORT:-9000}"
 
 mkdir -p data/logs data/snapshots data/consciousness data/knowledge \
          data/memory data/voice data/uploads data/simulations

@@ -1,0 +1,32 @@
+{
+  "name": "Ultron Full Stack",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.11" },
+    "ghcr.io/devcontainers/features/go:1":     { "version": "1.22" },
+    "ghcr.io/devcontainers/features/rust:1":   { "version": "latest" }
+  },
+
+  "forwardPorts": [9000],
+  "portsAttributes": {
+    "9000": {
+      "label": "Ultron UI",
+      "onAutoForward": "openBrowser",
+      "visibility": "public"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "golang.go", "rust-lang.rust-analyzer"]
+    }
+  },
+
+  "remoteEnv": {
+    "PYTHONPATH": "/workspaces/ultron",
+    "ULTRON_PROJECT_ROOT": "/workspaces/ultron"
+  }
+}
