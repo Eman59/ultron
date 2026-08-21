@@ -5,8 +5,19 @@
 # ╚══════════════════════════════════════════════════════════════╝
 set -e
 
-export PYTHONPATH="${PYTHONPATH:-/app}"
-export ULTRON_PROJECT_ROOT="${ULTRON_PROJECT_ROOT:-/app}"
+# ── Load .env if CF keys not already in environment ────────────
+if [ -z "$CF_ACCOUNT_ID" ] && [ -f ".env" ]; then
+    echo "  [ENV] Loading .env..."
+    set -a
+    source .env
+    set +a
+fi
+
+# ── Ensure WebSocket support for uvicorn ───────────────────────
+pip install --quiet "uvicorn[standard]" websockets 2>/dev/null || true
+
+export PYTHONPATH="${PYTHONPATH:-/workspaces/ultron}"
+export ULTRON_PROJECT_ROOT="${ULTRON_PROJECT_ROOT:-/workspaces/ultron}"
 PORT="${PORT:-9000}"
 
 mkdir -p data/logs data/snapshots data/consciousness data/knowledge \
@@ -26,6 +37,8 @@ start() {
         log "SKIP $name — binary not found: $1"
     fi
 }
+
+ROOT="$(pwd)"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -60,8 +73,8 @@ fi
 # ── 6. Go Watchdog (keeps agent alive) ────────────────────────
 if [ -x "go/core_agent/ultron-watchdog" ] && \
    [ -x "go/core_agent/ultron_agent" ]; then
-    export ULTRON_BINARY="/app/go/core_agent/ultron_agent"
-    export ULTRON_SNAPSHOT_DIR="/app/data/snapshots"
+    export ULTRON_BINARY="$ROOT/go/core_agent/ultron_agent"
+    export ULTRON_SNAPSHOT_DIR="$ROOT/data/snapshots"
     start "watchdog" go/core_agent/ultron-watchdog
 fi
 
