@@ -146,3 +146,80 @@ def save_campaign_to_json(campaign: Campaign) -> str:
     except Exception as e:
         print(f"Error saving campaign to JSON: {str(e)}")
         return ""
+
+
+# ═══════════════════════════════════════════════════════════════
+# CYBER-PHYSICAL ENGINE — Multi-domain campaign orchestrator
+# ═══════════════════════════════════════════════════════════════
+
+class CyberPhysicalEngine:
+    """
+    Orchestrates simultaneous operations across cyber, physical,
+    social, electronic, and logistics domains.
+    """
+
+    def __init__(self, data_dir: str = "data/simulations"):
+        self.data_dir = data_dir
+        import pathlib
+        pathlib.Path(data_dir).mkdir(parents=True, exist_ok=True)
+        self._campaigns: list = []
+        self._lock = threading.Lock()
+        self._running = False
+
+    def start(self):
+        self._running = True
+
+    def stop(self):
+        self._running = False
+
+    def plan_campaign(self, goal: str, domains: list = None) -> dict:
+        """Plan a multi-domain campaign for a given goal."""
+        domains = domains or [Domain.CYBER, Domain.SOCIAL]
+        campaign_id = f"camp_{int(time.time()) % 100000}"
+        vectors = []
+        for i, domain in enumerate(domains):
+            vectors.append({
+                "id": f"vec_{campaign_id}_{i}",
+                "domain": domain.value,
+                "name": f"{domain.value.title()} Operation",
+                "target": goal[:40],
+                "method": "coordinated",
+                "timing_offset_sec": i * 5.0,
+                "status": VectorStatus.PENDING.value,
+            })
+        campaign = {
+            "id": campaign_id,
+            "goal": goal,
+            "status": CampaignStatus.PLANNING.value,
+            "vectors": vectors,
+            "created_at": time.time(),
+        }
+        with self._lock:
+            self._campaigns.append(campaign)
+        return campaign
+
+    def execute_campaign(self, campaign_id: str) -> dict:
+        """Mark a planned campaign as executing."""
+        with self._lock:
+            for c in self._campaigns:
+                if c["id"] == campaign_id:
+                    c["status"] = CampaignStatus.EXECUTING.value
+                    for v in c.get("vectors", []):
+                        v["status"] = VectorStatus.EXECUTING.value
+                    return {"success": True, "campaign": c}
+        return {"success": False, "error": f"Campaign {campaign_id} not found"}
+
+    def get_status(self) -> dict:
+        with self._lock:
+            return {
+                "running": self._running,
+                "total_campaigns": len(self._campaigns),
+                "active": sum(1 for c in self._campaigns
+                              if c["status"] == CampaignStatus.EXECUTING.value),
+                "completed": sum(1 for c in self._campaigns
+                                 if c["status"] == CampaignStatus.SUCCEEDED.value),
+            }
+
+    def get_campaigns(self, limit: int = 10) -> list:
+        with self._lock:
+            return self._campaigns[-limit:]

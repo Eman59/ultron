@@ -795,7 +795,19 @@ async def threat_level():
 
 
 def _check_p2p_health() -> bool:
-    """Check if the P2P consciousness network node is running on port 4001."""
+    """Check if the P2P consciousness network node is running.
+    P2P uses message-passing (not a TCP HTTP server) so we check
+    the process is alive rather than probing a port.
+    """
+    import subprocess as _sp
+    # Check if the process is in the process table
+    try:
+        result = _sp.run(["pgrep", "-f", "ultron-p2p"], capture_output=True)
+        if result.returncode == 0:
+            return True
+    except Exception:
+        pass
+    # Fallback: try TCP connect (works if running in HTTP mode)
     import socket as _s
     try:
         sock = _s.socket(_s.AF_INET, _s.SOCK_STREAM)

@@ -47,40 +47,42 @@ echo "╚═══════════════════════�
 
 # ── 1. Rust Neural Mesh (port 50053) ──────────────────────────
 start "neural_mesh" \
-    rust/target/release/ultron-neural-service
+    "$ROOT/rust/target/release/ultron-neural-service"
 
 # ── 2. Rust Security Daemon (port 50055) ──────────────────────
+ULTRON_PROJECT_ROOT="$ROOT" \
 start "security_daemon" \
-    rust/target/release/ultron-security-daemon
+    "$ROOT/rust/target/release/ultron-security-daemon"
 
 # ── 3. Rust Data Pipeline (port 50054) ────────────────────────
 start "data_pipeline" \
-    rust/target/release/ultron-real-time-data
+    "$ROOT/rust/target/release/ultron-real-time-data"
 
 # ── 4. Rust Neuromorphic (port 50056) ─────────────────────────
 start "neuromorphic" \
-    rust/target/release/ultron-neuromorphic
+    "$ROOT/rust/target/release/ultron-neuromorphic"
 
 # ── 5. Go Core Agent (OODA loop, port 50051/50052) ────────────
-if [ -x "go/core_agent/ultron_agent" ]; then
+if [ -x "$ROOT/go/core_agent/ultron_agent" ]; then
     log "Starting Go Core Agent..."
-    go/core_agent/ultron_agent \
-        >> data/logs/go_agent.log 2>&1 &
-    echo $! > data/logs/go_agent.pid
+    ULTRON_PROJECT_ROOT="$ROOT" \
+    "$ROOT/go/core_agent/ultron_agent" \
+        >> "$ROOT/data/logs/go_agent.log" 2>&1 &
+    echo $! > "$ROOT/data/logs/go_agent.pid"
     log "Go Core Agent started (PID $!)"
 fi
 
 # ── 6. Go Watchdog (keeps agent alive) ────────────────────────
-if [ -x "go/core_agent/ultron-watchdog" ] && \
-   [ -x "go/core_agent/ultron_agent" ]; then
+if [ -x "$ROOT/go/core_agent/ultron-watchdog" ] && \
+   [ -x "$ROOT/go/core_agent/ultron_agent" ]; then
     export ULTRON_BINARY="$ROOT/go/core_agent/ultron_agent"
     export ULTRON_SNAPSHOT_DIR="$ROOT/data/snapshots"
-    start "watchdog" go/core_agent/ultron-watchdog
+    start "watchdog" "$ROOT/go/core_agent/ultron-watchdog"
 fi
 
 # ── 7. P2P Consciousness Network (port 4001) ──────────────────
 start "p2p_network" \
-    go/p2p_network/ultron-p2p
+    "$ROOT/go/p2p_network/ultron-p2p"
 
 # ── 8. Python Learning Service ────────────────────────────────
 if python3 -c "import python.self_improvement.learning" 2>/dev/null; then
