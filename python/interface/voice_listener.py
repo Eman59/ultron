@@ -1,4 +1,5 @@
 """
+# ultron-self-healed: voice whisper ffmpeg fix active
 Voice Listener — Always-On Speech-to-Text for Ultron.
 
 Uses multiple STT backends (whichever is available):
