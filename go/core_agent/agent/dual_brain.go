@@ -102,6 +102,9 @@ type BrainA struct {
 	recentDecisions map[string]time.Time
 	decisionTTL     time.Duration
 
+	// Tool dispatcher (for executing Brain B's tool calls)
+	toolDispatcher *ToolDispatcher
+
 	// Statistics
 	decisionsFromRules   atomic.Int64
 	decisionsFromInsight atomic.Int64
@@ -252,6 +255,35 @@ func (a *BrainA) checkInsights(ws *WorldState, drives *DriveSystem) *Decision {
 	insight := a.pendingInsights[bestIdx]
 	// Remove used insight
 	a.pendingInsights = append(a.pendingInsights[:bestIdx], a.pendingInsights[bestIdx+1:]...)
+
+	// ━━━━ TOOL CALL HANDLING: Check if Brain B wants to call a tool ━━━━
+	if a.toolDispatcher != nil && strings.Contains(insight.Answer, "TOOL_CALL:") {
+		toolCall := a.toolDispatcher.ParseToolCall(insight.Answer)
+		if toolCall != nil {
+			result := a.toolDispatcher.ExecuteToolCall(context.Background(), toolCall)
+			// Feed tool result back as a high-confidence insight
+			if result.Success {
+				return &Decision{
+					ID:            insight.RequestID + "_tool_result",
+					Timestamp:     time.Now(),
+					Confidence:    0.9,
+					ExpectedValue: 0.8,
+					Reasoning: []string{
+						"Brain B tool call: " + toolCall.ToolName,
+						"Result: success",
+						toolCall.Reasoning,
+					},
+					Action: Action{
+						Type:       parseActionTypeFromString(insight.ActionSuggestion),
+						Target:     toolCall.Arguments["target"],
+						Parameters: toolCall.Arguments,
+						Priority:   8,
+						Reversible: true,
+					},
+				}
+			}
+		}
+	}
 
 	// Convert insight to decision
 	actionType := parseActionTypeFromString(insight.ActionSuggestion)
@@ -585,8 +617,10 @@ func (b *BrainB) Stats() map[string]interface{} {
 
 // DualBrain coordinates Brain A (fast) and Brain B (deep).
 type DualBrain struct {
-	A *BrainA
-	B *BrainB
+	A     *BrainA
+	B     *BrainB
+	RAG   *RAGPipeline    // Knowledge retrieval for Brain B context
+	Tools *ToolDispatcher // Tool calling for Brain B
 }
 
 // NewDualBrain creates the complete dual-brain system.
@@ -624,6 +658,20 @@ func (db *DualBrain) Think(ws *WorldState, drives *DriveSystem, assessment *Asse
 	// If Brain A is uncertain AND not urgent, delegate deep thinking
 	if db.A.ShouldDelegate(ws, assessment) {
 		req := db.A.CreateThoughtRequest(ws, assessment)
+
+		// ━━━━ RAG AUGMENTATION: Inject relevant knowledge into Brain B context ━━━━
+		if db.RAG != nil && db.RAG.IsIndexed() {
+			knowledge := db.RAG.QueryForBrainB(req.Question)
+			if knowledge != "" {
+				req.Context["retrieved_knowledge"] = knowledge
+			}
+		}
+
+		// ━━━━ TOOL AWARENESS: Let Brain B know it can call tools ━━━━
+		if db.Tools != nil {
+			req.Context["tool_prompt"] = db.Tools.GetToolSystemPrompt()
+		}
+
 		db.B.Think(*req)
 	}
 

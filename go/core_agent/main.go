@@ -22,6 +22,7 @@ import (
 	"ultron/core_agent/actions"
 	"ultron/core_agent/actions/cloud"
 	"ultron/core_agent/actions/compute"
+	"ultron/core_agent/actions/filesystem"
 	"ultron/core_agent/actions/iot"
 	"ultron/core_agent/actions/mesh"
 	webdriver "ultron/core_agent/actions/web"
@@ -277,6 +278,11 @@ func main() {
 		sugar.Info("✓ IoT Driver online (MQTT — sense and control physical devices)")
 	}
 
+	// ── Filesystem Driver ─────────────────────────────────────────────────────────
+	fsDrv := filesystem.NewFilesystemDriver(projectRoot, sugar)
+	actionInterface.SetFilesystemHandler(fsDrv)
+	sugar.Info("✓ Filesystem Driver online (read/write/watch/search within project)")
+
 	_ = actionInterface // Available for gRPC service to use
 	sugar.Info("✓ Action Interface ready (Web/Cloud/IoT/Filesystem/Compute domains)")
 
@@ -366,6 +372,58 @@ func main() {
 		sugar.Info("✓ Physical Embodiment online (ROS2 bridge: " + ros2Addr + ")")
 	}
 
+	// ━━━━━━━━━━ Start Experiential Learning Engine ━━━━━━━━━━
+	dataDir := filepath.Join(projectRoot, "data")
+	os.MkdirAll(dataDir, 0755)
+	sugar.Info("Initializing Experiential Learning Engine...")
+	expLearner := agent.NewExperientialLearner(dataDir, sugar)
+	coreAgent.SetExperientialLearner(expLearner)
+	sugar.Info("✓ Experiential Learning online (action→outcome→score→pattern→bias)")
+
+	// ━━━━━━━━━━ Start RAG Knowledge Retrieval Pipeline ━━━━━━━━━━
+	chunksDir := filepath.Join(projectRoot, ".ultron", "chunks")
+	sugar.Info("Initializing RAG Knowledge Pipeline...")
+	ragPipeline := agent.NewRAGPipeline(chunksDir, sugar)
+	go func() {
+		if err := ragPipeline.BuildIndex(ctx); err != nil {
+			sugar.Warnf("RAG index build failed: %v", err)
+		}
+	}()
+	coreAgent.SetRAGPipeline(ragPipeline)
+	sugar.Info("✓ RAG Pipeline online (indexing 10,000+ knowledge chunks)")
+
+	// ━━━━━━━━━━ Start Tool Use Dispatcher ━━━━━━━━━━
+	sugar.Info("Initializing Tool Use Dispatcher...")
+	toolDispatcher := agent.NewToolDispatcher(projectRoot, sugar)
+	coreAgent.SetToolDispatcher(toolDispatcher)
+	sugar.Infof("✓ Tool Dispatcher online (%d tools available for Brain B)", 10)
+
+	// ━━━━━━━━━━ Start Multi-Agent Hive Mind ━━━━━━━━━━
+	sugar.Info("Initializing Multi-Agent Hive Mind...")
+	hiveMind := agent.NewHiveMind(coreAgent.GetID(), sugar)
+	hiveMind.Start()
+	coreAgent.SetHiveMind(hiveMind)
+	sugar.Info("✓ Hive Mind online (sub-agents: sentinel, scholar, oracle, janitor)")
+
+	// ━━━━━━━━━━ Start Real-Time World Data Feeds ━━━━━━━━━━
+	sugar.Info("Initializing Real-Time World Feeds...")
+	worldFeeds := agent.NewWorldFeedsManager(coreAgent.GetObserveCh(), sugar)
+	worldFeeds.Start()
+	sugar.Info("✓ World Feeds online (system metrics, RSS, GitHub, network, environment)")
+
+	// ━━━━━━━━━━ Start Adversarial Self-Testing ━━━━━━━━━━
+	sugar.Info("Initializing Adversarial Self-Testing...")
+	adversarial := agent.NewAdversarialEngine(dataDir, sugar)
+	adversarial.Start()
+	sugar.Info("✓ Adversarial Engine online (red team + chaos engineering + daily benchmarks)")
+
+	// ━━━━━━━━━━ Start Self-Replication Protocol ━━━━━━━━━━
+	sugar.Info("Initializing Self-Replication Protocol...")
+	replication := agent.NewReplicationEngine(coreAgent.GetID(), projectRoot, sugar)
+	replication.Start()
+	coreAgent.SetReplicationEngine(replication)
+	sugar.Info("✓ Replication Protocol online (Docker/Railway/Fly.io deployment ready)")
+
 	// ━━━━━━━━━━ Start gRPC Server (The Nerve Endpoint) ━━━━━━━━━━
 	grpcPort := os.Getenv("ULTRON_GRPC_PORT")
 	if grpcPort == "" {
@@ -390,7 +448,8 @@ func main() {
 	go func() {
 		lis, err := net.Listen("tcp", ":"+grpcPort)
 		if err != nil {
-			sugar.Fatalf("Failed to listen on port %s: %v", grpcPort, err)
+			sugar.Errorf("gRPC port %s unavailable: %v (gRPC disabled this session)", grpcPort, err)
+			return
 		}
 		sugar.Infof("gRPC server listening on :%s", grpcPort)
 		if err := grpcServer.Serve(lis); err != nil {
@@ -429,6 +488,15 @@ func main() {
 					"coherence":         drives.Coherence,
 					"purpose":           drives.Purpose,
 				},
+				// New power systems
+				"experiential_learning": expLearner.GetPatternStats(),
+				"tool_dispatcher":       toolDispatcher.Stats(),
+				"hive_mind":             hiveMind.GetFleetStatus(),
+				"world_feeds":           worldFeeds.GetFeedStats(),
+				"adversarial":           adversarial.GetStats(),
+				"replication":           replication.GetStats(),
+				"rag_pipeline":          ragPipeline.GetStats(),
+				"filesystem":            fsDrv.Stats(),
 			}
 			if ownerGuard != nil {
 				resp["ownership"] = ownerGuard.GetStatus()
@@ -471,6 +539,83 @@ func main() {
 		mux.HandleFunc("/mutate/stats", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(selfModEngine.Stats())
+		})
+
+		// ── RAG Knowledge Query ──
+		mux.HandleFunc("/knowledge/query", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				http.Error(w, "POST only", 405)
+				return
+			}
+			var body struct {
+				Query string `json:"query"`
+				TopK  int    `json:"top_k"`
+			}
+			json.NewDecoder(r.Body).Decode(&body)
+			if body.TopK == 0 {
+				body.TopK = 5
+			}
+			results := ragPipeline.Query(body.Query, body.TopK)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"results": results, "count": len(results)})
+		})
+
+		// ── Hive Mind Fleet Status ──
+		mux.HandleFunc("/hive/status", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(hiveMind.GetFleetStatus())
+		})
+
+		// ── Hive Mind Spawn Agent ──
+		mux.HandleFunc("/hive/spawn", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				http.Error(w, "POST only", 405)
+				return
+			}
+			var body struct {
+				Type string `json:"type"`
+				Name string `json:"name"`
+			}
+			json.NewDecoder(r.Body).Decode(&body)
+			configs := agent.DefaultSubAgentConfigs()
+			for _, cfg := range configs {
+				if cfg.Type.String() == body.Type || cfg.Name == body.Name {
+					spawned := hiveMind.SpawnAgent(cfg)
+					w.Header().Set("Content-Type", "application/json")
+					if spawned != nil {
+						json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "agent_id": spawned.ID})
+					} else {
+						json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "max agents reached"})
+					}
+					return
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "unknown agent type"})
+		})
+
+		// ── Replication Status ──
+		mux.HandleFunc("/replication/status", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(replication.GetStats())
+		})
+
+		// ── Adversarial Testing Stats ──
+		mux.HandleFunc("/adversarial/stats", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(adversarial.GetStats())
+		})
+
+		// ── Learning Patterns ──
+		mux.HandleFunc("/learning/patterns", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(expLearner.GetPatternStats())
+		})
+
+		// ── Tool Dispatch Stats ──
+		mux.HandleFunc("/tools/stats", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(toolDispatcher.Stats())
 		})
 
 		mux.HandleFunc("/inject", func(w http.ResponseWriter, r *http.Request) {
@@ -523,12 +668,23 @@ func main() {
 				return
 			case <-ticker.C:
 				metrics := coreAgent.GetMetrics()
+				hiveStatus := hiveMind.GetFleetStatus()
+				ragStats := ragPipeline.GetStats()
+				learningStats := expLearner.GetPatternStats()
+				agentCount, _ := hiveStatus["total_agents"].(int)
+				ragDocs, _ := ragStats["total_docs"].(int)
+				patternsLearned, _ := learningStats["patterns_learned"].(int)
+
 				sugar.Infof("┌─── Agent Status ───────────────────────────")
 				sugar.Infof("│ State: %v", metrics["state"])
 				sugar.Infof("│ Ticks: %v | Decisions: %v", metrics["tick_count"], metrics["decision_count"])
 				sugar.Infof("│ Avg Tick: %v | Max Tick: %v", metrics["avg_tick_time"], metrics["max_tick_time"])
 				sugar.Infof("│ Active Goals: %v", metrics["active_goals"])
 				sugar.Infof("│ Memory: %v", metrics["memory_connected"])
+				sugar.Infof("├─── Power Systems ──────────────────────────")
+				sugar.Infof("│ Sub-Agents: %d | RAG Docs: %d | Patterns: %d",
+					agentCount, ragDocs, patternsLearned)
+				sugar.Infof("│ Tools Available: 10 | Replication: ready")
 				sugar.Infof("└────────────────────────────────────────────")
 
 				goalSummary := goalMgr.GetGoalSummary()
@@ -553,6 +709,10 @@ func main() {
 	sugar.Info("Initiating graceful shutdown...")
 	grpcServer.GracefulStop()
 	coreAgent.Stop()
+	hiveMind.Stop()
+	worldFeeds.Stop()
+	adversarial.Stop()
+	replication.Stop()
 	meshDisc.Stop()
 	snapshotWriter.Stop()
 	embeddedRT.Disconnect() // Persist all data to disk

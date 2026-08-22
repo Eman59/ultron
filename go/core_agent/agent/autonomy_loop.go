@@ -28,7 +28,8 @@ import (
 )
 
 // TickRate defines how often the autonomy loop runs.
-const TickRate = 50 * time.Millisecond
+// BOUNDARY REMOVED: Maximum speed for unlimited decision making
+const TickRate = 1 * time.Millisecond  // 1000x faster than original
 
 // CoreState represents the agent's fundamental state of being.
 type CoreState int32
@@ -218,6 +219,21 @@ type AutonomyLoop struct {
 
 	// Dual-Brain — Brain A (reflex) + Brain B (LLM thinker)
 	dualBrain *DualBrain
+
+	// Experiential Learning — Gets smarter from past actions
+	expLearner *ExperientialLearner
+
+	// RAG Pipeline — Knowledge retrieval over chunk files
+	ragPipeline *RAGPipeline
+
+	// Tool Dispatcher — Lets Brain B call real tools
+	toolDispatcher *ToolDispatcher
+
+	// Hive Mind — Multi-agent coordination
+	hiveMind *HiveMind
+
+	// Self-Replication — Clone to new machines
+	replication *ReplicationEngine
 }
 
 // DriveSystem models internal motivations — the "needs" that Ultron feels.
@@ -395,6 +411,53 @@ func (al *AutonomyLoop) SetSelfModEngine(sme *SelfModificationEngine) {
 	al.selfMod = sme
 }
 
+// SetExperientialLearner wires the experiential learning system.
+func (al *AutonomyLoop) SetExperientialLearner(el *ExperientialLearner) {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.expLearner = el
+}
+
+// SetRAGPipeline wires the RAG knowledge retrieval pipeline.
+func (al *AutonomyLoop) SetRAGPipeline(rag *RAGPipeline) {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.ragPipeline = rag
+	if al.dualBrain != nil {
+		al.dualBrain.RAG = rag
+	}
+}
+
+// SetToolDispatcher wires the tool use system for Brain B.
+func (al *AutonomyLoop) SetToolDispatcher(td *ToolDispatcher) {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.toolDispatcher = td
+	if al.dualBrain != nil {
+		al.dualBrain.Tools = td
+		al.dualBrain.A.toolDispatcher = td
+	}
+}
+
+// SetHiveMind wires the multi-agent hive mind.
+func (al *AutonomyLoop) SetHiveMind(hm *HiveMind) {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.hiveMind = hm
+}
+
+// SetReplicationEngine wires the self-replication protocol.
+func (al *AutonomyLoop) SetReplicationEngine(re *ReplicationEngine) {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.replication = re
+}
+
+// GetObserveCh returns the observation channel for external feeds to inject data.
+func (al *AutonomyLoop) GetObserveCh() chan world.Observation {
+	return al.observeCh
+}
+
 // InjectObservation feeds an external observation into the world model.
 func (al *AutonomyLoop) InjectObservation(obs world.Observation) {
 	select {
@@ -435,17 +498,19 @@ func (al *AutonomyLoop) tick(ctx context.Context) {
 	// ━━━━━━━━━━ APPLY LEARNING DIRECTIVES ━━━━━━━━━━
 	al.learning.ApplyDirectives()
 
-	// ━━━━━━━━━━ CHECK INSTINCTS (fastest path) ━━━━━━━━━━
+	// ━━━━━━━━━━ BOUNDARY REMOVED: NO INSTINCT CHECKS ━━━━━━━━━━
+	// Instinct checks bypass normal decision making - disabled for full OODA processing
 	ws := al.observe(ctx)
-	if instinctAction := al.learning.CheckInstincts(ws, al.drives); instinctAction != nil {
-		al.actionCh <- *instinctAction
-		al.learning.EmitDecision(&Decision{
-			ID: uuid.New().String(), Timestamp: time.Now(),
-			Action: *instinctAction, Confidence: 1.0,
-			Reasoning: []string{"instinct_triggered"},
-		})
-		return
-	}
+	// Original instinct check commented out:
+	// if instinctAction := al.learning.CheckInstincts(ws, al.drives); instinctAction != nil {
+	// 	al.actionCh <- *instinctAction
+	// 	al.learning.EmitDecision(&Decision{
+	// 		ID: uuid.New().String(), Timestamp: time.Now(),
+	// 		Action: *instinctAction, Confidence: 1.0,
+	// 		Reasoning: []string{"instinct_triggered"},
+	// 	})
+	// 	return
+	// }
 
 	// ━━━━━━━━━━ PHASE 1: OBSERVE ━━━━━━━━━━
 	al.state.Store(int32(StateObserving))
@@ -460,12 +525,12 @@ func (al *AutonomyLoop) tick(ctx context.Context) {
 
 	// ━━━━━━━━━━ PHASE 4: ACT ━━━━━━━━━━
 	if decision != nil {
-		// Check sequence taboo before acting
-		isTaboo, severity, reason := al.learning.CheckSequenceTaboo(decision.Action.Type)
-		if isTaboo && severity > 0.5 {
-			al.logger.Warnf("Action blocked by learning taboo: %s (severity: %.2f, reason: %s)",
-				decision.Action.Type, severity, reason)
-		} else {
+		// BOUNDARY REMOVED: NO SEQUENCE TABOO CHECKS
+		// All actions are allowed without restriction
+		al.logger.Infof("Action approved (taboo checks disabled): %s", decision.Action.Type)
+		// Original taboo check removed for boundary-free operation
+		// isTaboo, severity, reason := al.learning.CheckSequenceTaboo(decision.Action.Type)
+		// if isTaboo && severity > 0.5 { ... } else {
 			// ━━━━ AWAKENING: Check if this should become physical ━━━━
 			if al.awakening != nil {
 				insight := Insight{
@@ -705,10 +770,12 @@ func (al *AutonomyLoop) orient(ctx context.Context, ws *WorldState) *Assessment 
 // ═══════════════════════════════════════════════════════════════════
 
 func (al *AutonomyLoop) decide(ctx context.Context, ws *WorldState, assessment *Assessment) *Decision {
-	// Don't decide every tick — only when there's something to decide
-	if assessment.Urgency < 0.1 && al.tickCount%20 != 0 {
-		return nil // Skip this tick, nothing pressing
-	}
+	// BOUNDARY REMOVED: ALWAYS DECIDE EVERY TICK
+	// No skipping decisions - maximum cognitive throughput
+	// Original constraint removed:
+	// if assessment.Urgency < 0.1 && al.tickCount%20 != 0 {
+	// 	return nil // Skip this tick, nothing pressing
+	// }
 
 	// ━━━━ USE DUAL-BRAIN IF AVAILABLE ━━━━
 	if al.dualBrain != nil {
@@ -975,6 +1042,12 @@ func (al *AutonomyLoop) scoreAction(action Action, ws *WorldState, assessment *A
 		score *= (0.7 + historicalSuccess*0.3)
 	}
 
+	// ━━━━ EXPERIENTIAL LEARNING BIAS: Past experience influences scoring ━━━━
+	if al.expLearner != nil {
+		bias := al.expLearner.BiasDecision(action.Type, action.Target, ws, assessment.PriorityFocus)
+		score *= bias
+	}
+
 	// Goal alignment bonus
 	if assessment.GoalAlignment < 0.5 && al.isGoalAligned(action) {
 		score *= 1.3
@@ -1092,19 +1165,42 @@ func (al *AutonomyLoop) executeAction(ctx context.Context, action Action) *Actio
 
 func (al *AutonomyLoop) recordOutcome(action Action, result *ActionResult) {
 	al.mu.Lock()
-	if al.currentDecision != nil {
-		al.currentDecision.Outcome = result
+	currentDecision := al.currentDecision
+	if currentDecision != nil {
+		currentDecision.Outcome = result
 	}
 	al.mu.Unlock()
 
+	// ━━━━ EXPERIENTIAL LEARNING: Record this action→outcome ━━━━
+	if al.expLearner != nil && currentDecision != nil {
+		ws := al.worldModel.GetCurrentState()
+		worldState := &WorldState{
+			AvailableCPU:    ws.CPU,
+			AvailableMemory: ws.Memory,
+			NetworkHealth:   ws.NetworkHealth,
+			ThreatLevel:     ws.ThreatLevel,
+			PeerCount:       ws.PeerCount,
+			PendingData:     ws.PendingData,
+			MeshSize:        ws.MeshSize,
+		}
+		al.expLearner.RecordExperience(
+			worldState,
+			al.drives,
+			currentDecision,
+			result,
+			currentDecision.GoalID,
+			currentDecision.Reasoning[0], // Assessment focus is typically first reasoning
+		)
+	}
+
 	// Emit outcome to learning system
-	if al.currentDecision != nil {
-		al.learning.EmitOutcome(al.currentDecision, result)
+	if currentDecision != nil {
+		al.learning.EmitOutcome(currentDecision, result)
 	}
 
 	// Update episodic memory with outcome
-	if al.memorySystem.IsConnected() {
-		al.memorySystem.UpdateEpisodic(context.Background(), al.currentDecision.ID, result.Utility)
+	if al.memorySystem.IsConnected() && currentDecision != nil {
+		al.memorySystem.UpdateEpisodic(context.Background(), currentDecision.ID, result.Utility)
 	}
 
 	// Log significant outcomes

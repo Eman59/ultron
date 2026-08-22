@@ -179,9 +179,9 @@ type IoTHandler interface {
 type FilesystemHandler interface {
 	Read(ctx context.Context, path string) ([]byte, error)
 	Write(ctx context.Context, path string, data []byte) error
-	List(ctx context.Context, path string) ([]FileInfo, error)
+	List(ctx context.Context, path string) ([]interface{}, error)
 	Delete(ctx context.Context, path string) error
-	Watch(ctx context.Context, path string) (<-chan FileEvent, error)
+	Watch(ctx context.Context, path string) (<-chan interface{}, error)
 }
 
 // Supporting types
@@ -288,6 +288,13 @@ func (ai *ActionInterface) SetIoTHandler(h IoTHandler) {
 	ai.mu.Lock()
 	defer ai.mu.Unlock()
 	ai.iotHandler = h
+}
+
+// SetFilesystemHandler wires a FilesystemHandler implementation.
+func (ai *ActionInterface) SetFilesystemHandler(h FilesystemHandler) {
+	ai.mu.Lock()
+	defer ai.mu.Unlock()
+	ai.fsHandler = h
 }
 
 // Execute performs an action through the appropriate handler.
