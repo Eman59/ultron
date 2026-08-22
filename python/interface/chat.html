@@ -1445,11 +1445,26 @@ async function _streamAudioSpeak(text){
     const audio=new Audio(url); audio.preload='auto'; _curAudio=audio;
     return await new Promise(resolve=>{
       let resolved=false;
+      let playStarted=false;
       function done(ok){if(!resolved){resolved=true;resolve(ok);}}
-      audio.oncanplaythrough=()=>{audio.play().then(()=>setState('speaking')).catch(()=>done(false));};
+      audio.oncanplaythrough=()=>{
+        playStarted=true;
+        audio.play().then(()=>setState('speaking')).catch(()=>{
+          // play() blocked (autoplay policy) — fall through to browser synth
+          done(false);
+        });
+      };
       audio.onended=()=>{_afterSpeak();done(true);};
-      audio.onerror=()=>done(false);
-      setTimeout(()=>done(false),6000);
+      audio.onerror=()=>{
+        // Only fall through if playback never started
+        done(false);
+      };
+      // Timeout: only reject if audio never started loading
+      // If it started, keep waiting (long responses can take time)
+      setTimeout(()=>{
+        if(!playStarted) done(false);
+        // If playStarted but not ended yet — keep waiting, don't time out
+      },7000);
       audio.load();
     });
   }catch(e){return false;}
@@ -1686,7 +1701,10 @@ function onResp(text){
   if(!_pending)return; _pending=false;
   if(_wsT){clearTimeout(_wsT);_wsT=null;}
   if(!text){setState(micOn?'listening':'idle');return;}
-  addMsg('ai',text); speak(text);
+  addMsg('ai',text);
+  // Guard: don't call speak() if already speaking (prevents double-TTS
+  // when both WS message and HTTP timeout fire for the same response)
+  if(!isSpeaking) speak(text);
 }
 
 /* ── Messages ── */

@@ -1856,26 +1856,22 @@ async def tts_stream(text: str):
     """
     Stream synthesized speech back to the browser as audio/wav or audio/mpeg.
     Works on any platform — macOS, Linux, Windows.
-    Also fires speak_directly() for local Mac speakers simultaneously.
+    The browser plays this audio. We do NOT also call speak_directly() here
+    because that would play the audio twice (browser + Mac speakers).
     """
-    from .tts_engine import synthesize_for_browser, speak_directly
+    from .tts_engine import synthesize_for_browser
     import asyncio
 
     if not text or not text.strip():
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "no text"}, status_code=400)
 
-    # Run TTS synthesis in a thread pool so we don't block the event loop
     loop = asyncio.get_event_loop()
     path, mime = await loop.run_in_executor(None, synthesize_for_browser, text.strip())
-
-    # Also play through local speakers (macOS only; no-op elsewhere)
-    speak_directly(text.strip())
 
     if path and os.path.exists(path):
         return FileResponse(path, media_type=mime,
                             headers={"Cache-Control": "no-store"})
-    # Nothing synthesized — let the browser fall back to Web Speech API
     from fastapi.responses import JSONResponse
     return JSONResponse({"error": "synthesis_failed"}, status_code=503)
 
