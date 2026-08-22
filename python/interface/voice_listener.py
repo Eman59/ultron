@@ -97,14 +97,25 @@ def transcribe_audio(audio_path: str, backend: str = None) -> str:
 
 
 def _transcribe_whisper_cli(audio_path: str) -> str:
-    """Use whisper CLI (from whisper.cpp or OpenAI whisper)."""
+    """Use whisper CLI. Pre-converts audio to 16kHz/16-bit WAV first,
+    which fixes ffmpeg 9.x incompatibility with sox-recorded files."""
+    import tempfile
+    converted_path = audio_path.replace(".wav", "_16k.wav")
     try:
+        # Normalise to 16 kHz mono s16 PCM — whisper's required format
+        conv = subprocess.run(
+            ["ffmpeg", "-y", "-i", audio_path,
+             "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", converted_path],
+            capture_output=True, timeout=10
+        )
+        target = converted_path if (conv.returncode == 0 and
+                                     os.path.exists(converted_path)) else audio_path
         result = subprocess.run(
-            ["whisper", audio_path, "--model", "base", "--output_format", "txt", "--language", "en"],
+            ["whisper", target, "--model", "base",
+             "--output_format", "txt", "--language", "en"],
             capture_output=True, text=True, timeout=30
         )
-        # Read the output txt file
-        txt_path = audio_path.rsplit(".", 1)[0] + ".txt"
+        txt_path = target.rsplit(".", 1)[0] + ".txt"
         if os.path.exists(txt_path):
             text = open(txt_path).read().strip()
             os.unlink(txt_path)
@@ -112,6 +123,13 @@ def _transcribe_whisper_cli(audio_path: str) -> str:
         return result.stdout.strip()
     except Exception:
         return ""
+    finally:
+        # Clean up converted file
+        if os.path.exists(converted_path) and converted_path != audio_path:
+            try:
+                os.unlink(converted_path)
+            except Exception:
+                pass
 
 
 def _transcribe_whisper_cpp(audio_path: str) -> str:

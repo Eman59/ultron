@@ -786,21 +786,65 @@ def notify(title: str, message: str, sound: bool = True) -> Dict:
 
 def edit_own_code(file_relative: str, old_text: str, new_text: str) -> Dict:
     """
-    Edit Ultron's own source code. file_relative is relative to project root.
-    Creates a .bak backup before applying the change.
+    Edit Ultron's own source code.
+    1. Backs up locally
+    2. Applies the change to the local file
+    3. If GITHUB_TOKEN is set, also commits via GitHub API (works on cloud)
+    4. Runs git commit locally if git is available
     """
     target = PROJECT_ROOT / file_relative
     if not target.exists():
-        return _err(f"Source file not found: {file_relative}")
+        # Check if user gave a wrong filename — suggest the real one
+        suggestions = []
+        for root, dirs, files in os.walk(PROJECT_ROOT):
+            dirs[:] = [d for d in dirs if d not in ['__pycache__','target','.git']]
+            for f in files:
+                if file_relative.lower() in f.lower() or f.lower() in file_relative.lower():
+                    rel = os.path.relpath(os.path.join(root,f), PROJECT_ROOT)
+                    suggestions.append(rel)
+        msg = f"Source file not found: {file_relative}."
+        if suggestions:
+            msg += f" Did you mean: {', '.join(suggestions[:3])}?"
+        return _err(msg)
+
     # Backup
     bak_dir = PROJECT_ROOT / ".ultron_backups"
     bak_dir.mkdir(exist_ok=True)
     bak_name = file_relative.replace("/", "_") + f"_{int(time.time())}.bak"
     shutil.copy2(str(target), str(bak_dir / bak_name))
-    # Apply
+
+    # Apply locally
     result = file_edit(str(target), old_text, new_text)
-    if result["success"]:
-        result["result"] = f"[SELF-MOD EXECUTED]\n  File: {file_relative}\n  Backup: {bak_name}\n  Old ({len(old_text)} chars) → New ({len(new_text)} chars)"
+    if not result["success"]:
+        return result
+
+    # Commit locally via git
+    git_result = shell(f'cd "{PROJECT_ROOT}" && git add "{file_relative}" && git commit -m "self-mod: {file_relative[:50]}"')
+
+    # Push via GitHub API if token available (works on cloud deployments)
+    github_result = ""
+    try:
+        token = os.getenv("GITHUB_TOKEN", "")
+        if token:
+            from .github_writer import write_file
+            new_content = target.read_text(encoding="utf-8")
+            gh = write_file(
+                file_relative,
+                new_content,
+                f"self-mod: {file_relative}"
+            )
+            github_result = f"\n  GitHub API: {'pushed ✓' if gh.get('success') else 'push failed: '+str(gh.get('error',''))}"
+    except Exception as e:
+        github_result = f"\n  GitHub API: {e}"
+
+    result["result"] = (
+        f"[SELF-MOD EXECUTED]\n"
+        f"  File:   {file_relative}\n"
+        f"  Backup: {bak_name}\n"
+        f"  Change: {len(old_text)} chars → {len(new_text)} chars\n"
+        f"  Git:    {git_result.get('result','')[:80]}"
+        f"{github_result}"
+    )
     return result
 
 
