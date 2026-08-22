@@ -1274,14 +1274,17 @@ function buildRecog(){
       silT=setTimeout(()=>{
         const txt=accum.trim(); accum='';
         silT=null;
-        // Guard: don't send if already processing
-        if(txt.split(/\s+/).filter(w=>w).length>=1&&txt.length>=2&&!_pending) send(txt);
+        if(txt.split(/\s+/).filter(w=>w).length>=1&&txt.length>=2&&!_pending&&!isSpeaking) send(txt);
         else{setTrans('');setState('listening');}
       },1800);
     }
   };
-  r.onend=()=>{if(micOn&&ST!=='thinking'&&ST!=='speaking'){try{r.start();}catch(e){}}};
-  r.onerror=e=>{
+  r.onend=()=>{
+    // Only restart if mic is on AND we're not in the middle of speaking or processing
+    if(micOn && ST!=='thinking' && ST!=='speaking' && !isSpeaking && !_pending){
+      try{r.start();}catch(e){}
+    }
+  };  r.onerror=e=>{
     if(e.error==='not-allowed'){micOn=false;setState('idle');setTrans('Microphone access denied.');return;}
     if(e.error==='no-speech'){try{r.start();}catch(err){}return;}
     if(e.error!=='aborted'){setTimeout(()=>{if(micOn)try{r.start();}catch(err){}},300);}
@@ -1317,21 +1320,20 @@ function _buildMediaRecorder(mimeType){
 
 /* Shared stop handler — only fires once per recording cycle */
 async function _onMediaRecorderStop(){
-  // Guard: if we already processed this cycle or mic was turned off, skip
   const chunks=[..._mrChunks];
-  _mrChunks=[];                // clear immediately so a restart doesn't double-send
-  if(!chunks.length||!micOn||_pending)return;
+  _mrChunks=[];
+  // Discard if: no audio, mic off, already processing, OR Ultron is still speaking
+  if(!chunks.length||!micOn||_pending||isSpeaking)return;
   const blob=new Blob(chunks,{type:(_mrRec&&_mrRec.mimeType)||'audio/webm'});
   const text=await _transcribeBlob(blob);
-  if(text&&text.trim().length>=2&&!_pending){
+  // Re-check guards after the async transcription (things may have changed)
+  if(text&&text.trim().length>=2&&!_pending&&!isSpeaking){
     setTrans(text);
     send(text);
-    // Do NOT restart here — send() → onResp() → _afterSpeak() restarts the mic
   } else {
     setTrans('');
     setState(micOn?'listening':'idle');
-    // Only resume if we're not already processing something
-    if(micOn&&!_pending) _resumeMediaRecorder();
+    if(micOn&&!_pending&&!isSpeaking) _resumeMediaRecorder();
   }
 }
 
@@ -1396,17 +1398,24 @@ function clean(raw){
 function _afterSpeak(){
   isSpeaking=false; _curAudio=null;
   setState(micOn?'listening':'idle');
-  // Clear any accumulated transcript so old words can't fire again
+  // Clear accumulated transcript so nothing re-fires
   accum='';
   if(silT){clearTimeout(silT);silT=null;}
   if(micOn){
+    // Wait longer before re-arming — gives time for echo/reverb to fade
+    // and prevents the response audio tail from being picked up
     setTimeout(()=>{
-      if(!micOn)return;
-      if(_wsrSupported()&&recog){try{recog.start();}catch(e){}
-      }else if(_mrActive){_resumeMediaRecorder();
-      }else{startMic();}
+      if(!micOn||_pending)return; // abort if another request snuck in
+      if(_wsrSupported()&&recog){
+        try{recog.start();}catch(e){}
+      }else if(_mrStream&&_mrActive){
+        _mrChunks=[];  // discard anything buffered during speaking
+        _resumeMediaRecorder();
+      }else{
+        startMic();
+      }
       setState('listening');
-    },700);
+    },900); // 900ms — up from 700ms to let echo fully clear
   }
 }
 async function speak(raw){
@@ -1414,9 +1423,19 @@ async function speak(raw){
   if(_spoken.has(text))return;
   _spoken.add(text); if(_spoken.size>20){const f=_spoken.values().next().value;_spoken.delete(f);}
   isSpeaking=true; setState('speaking');
+  // Stop recognition BEFORE stopping the recorder
+  // so the recorder's onstop doesn't fire with stale audio
   if(recog)try{recog.stop();}catch(e){}
-  if(_mrRec&&_mrRec.state==='recording'){try{_mrRec.stop();}catch(e){}}
+  // Discard recorder chunks WITHOUT triggering onstop processing
+  // We do this by clearing chunks first, then stopping
+  _mrChunks=[];
   if(_mrSilT){clearTimeout(_mrSilT);_mrSilT=null;}
+  if(_mrRec&&_mrRec.state==='recording'){
+    // Detach the stop handler temporarily so it doesn't fire send()
+    _mrRec.onstop=null;
+    try{_mrRec.stop();}catch(e){}
+    _mrRec.onstop=_onMediaRecorderStop; // re-attach after stop
+  }
   const done=await _streamAudioSpeak(text);
   if(!done)_browserSynthSpeak(text);
 }
