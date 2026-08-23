@@ -87,22 +87,77 @@ logger.info(f"RSS feeds: {len(RSS_FEEDS)}")
 
 # Subreddits to monitor (via RSS - no auth needed)
 REDDIT_FEEDS = [
-    "technology", "artificial", "machinelearning",
-    "cybersecurity", "programming", "worldnews",
+    "technology", "artificial", "machinelearning", "datascience", "cybersecurity"
 ]
 
-logger.info(f"Reddit feeds: {len(REDDIT_FEEDS)}")
+# Create a cache for RSS feeds
+rss_cache = {}
 
-# ═══════════════════════════════════════════════════════════════
-# DATA STRUCTURES
-# ═══════════════════════════════════════════════════════════════
+def fetch_rss_feed(url):
+    """Fetch an RSS feed and cache the result."""
+    if url in rss_cache:
+        return rss_cache[url]
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+        response = urllib.request.urlopen(req)
+        feed = response.read()
+        rss_cache[url] = feed
+        return feed
+    except urllib.error.URLError as e:
+        logger.error(f"Error fetching RSS feed: {e}")
+        return None
 
-@dataclass
-class NewsItem:
-    title: str
-    source: str
-    link: str = ""
-    summary: Any = field(default=None)
+def parse_rss_feed(feed):
+    """Parse an RSS feed and extract the items."""
+    try:
+        root = ET.fromstring(feed)
+        items = []
+        for item in root.findall('.//item'):
+            title = item.find('title').text
+            link = item.find('link').text
+            items.append((title, link))
+        return items
+    except ET.ParseError as e:
+        logger.error(f"Error parsing RSS feed: {e}")
+        return []
 
-    def __post_init__(self):
-        logger.debug(f"News item created: {self.title} - {self.source}")
+def get_rss_feeds():
+    """Get the RSS feeds and cache the results."""
+    feeds = {}
+    for name, url in RSS_FEEDS.items():
+        feed = fetch_rss_feed(url)
+        if feed:
+            items = parse_rss_feed(feed)
+            feeds[name] = items[:MAX_ITEMS_PER_FEED]
+    return feeds
+
+def get_reddit_feeds():
+    """Get the Reddit feeds and cache the results."""
+    feeds = {}
+    for subreddit in REDDIT_FEEDS:
+        url = f"https://www.reddit.com/r/{subreddit}/.rss"
+        feed = fetch_rss_feed(url)
+        if feed:
+            items = parse_rss_feed(feed)
+            feeds[subreddit] = items[:MAX_ITEMS_PER_FEED]
+    return feeds
+
+async def update_world_state():
+    """Update the world state with the latest feeds."""
+    rss_feeds = get_rss_feeds()
+    reddit_feeds = get_reddit_feeds()
+    world_state = {
+        'rss': rss_feeds,
+        'reddit': reddit_feeds
+    }
+    with open(WORLD_STATE_FILE, 'w') as f:
+        json.dump(world_state, f)
+
+async def main():
+    """Main loop."""
+    while True:
+        await update_world_state()
+        await asyncio.sleep(REFRESH_INTERVAL)
+
+if __name__ == '__main__':
+    asyncio.run(main())
