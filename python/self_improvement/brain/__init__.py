@@ -9,6 +9,15 @@ This package builds Ultron's native intelligence by:
 
 The brain gets smarter about ITSELF with every generation.
 """
+import logging
+
+# Set up logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 from typing import Final
 
 SOFTWARE_VERSION: Final[str] = "1.0.0"
+
+# Log software version at initialization
+logger.info(f"Initializing Ultron's Brain with software version {SOFTWARE_VERSION}")
