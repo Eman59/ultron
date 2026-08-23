@@ -106,33 +106,87 @@ type DistributedConsciousnessManager struct {
 	unifiedConsciousnessHistory  []float64
 }
 
+// NewDistributedConsciousnessManager returns a new instance of DistributedConsciousnessManager.
+func NewDistributedConsciousnessManager(currentNode *node.UltronNode, logger *zap.SugaredLogger) *DistributedConsciousnessManager {
+	dcm := &DistributedConsciousnessManager{
+		currentNode:   currentNode,
+		logger:        logger,
+		thoughtFragments:    make(map[string]*DistributedComputationFragment),
+		thoughtProcessingQueue: make(chan *DistributedComputationFragment, 100),
+	}
+	dcm.logger.Debug("DistributedConsciousnessManager initialized")
+	return dcm
+}
+
 // AttentionManager handles distributed attention allocation.
 type AttentionManager struct {
 	mu sync.RWMutex
 
 	// Attention weights for different thought streams
 	attentionWeights    map[string]float64
-	totalAttentionCapacity   float64 // Total attention capacity
-	allocatedAttention  float64 // Currently allocated attention
-
-	// Focus tracking
-	currentFocusStream string
-	focusStreamHistory []string
 }
 
-// ShortTermMemory holds recent activations and context.
-type ShortTermMemory struct {
-	mu sync.RWMutex
-
-	memoryCapacity int
-	memoryItems    []*MemoryItem
-	memoryIndex    map[string]int // Quick lookup
+// NewAttentionManager returns a new instance of AttentionManager.
+func NewAttentionManager() *AttentionManager {
+	am := &AttentionManager{
+		attentionWeights:    make(map[string]float64),
+	}
+	return am
 }
 
-// LongTermMemory holds consolidated knowledge and experiences.
-type LongTermMemory struct {
-	mu sync.RWMutex
+// Start begins the distributed consciousness management process.
+func (dcm *DistributedConsciousnessManager) Start() {
+	dcm.logger.Info("Starting distributed consciousness management")
+	dcm.mu.Lock()
+	dcm.currentState = StateFragmented
+	dcm.mu.Unlock()
+	go dcm.processThoughts()
+}
 
-	// Consolidated knowledge and experiences
-	consolidatedKnowledge map[string]interface{}
+// processThoughts processes thoughts in the thought processing queue.
+func (dcm *DistributedConsciousnessManager) processThoughts() {
+	dcm.logger.Debug("Starting thought processing")
+	for {
+		select {
+		case fragment := <-dcm.thoughtProcessingQueue:
+			dcm.logger.Debug("Processing thought fragment", zap.String("fragment_id", fragment.FragmentID))
+			dcm.processThoughtFragment(fragment)
+		}
+	}
+}
+
+// processThoughtFragment processes a single thought fragment.
+func (dcm *DistributedConsciousnessManager) processThoughtFragment(fragment *DistributedComputationFragment) {
+	dcm.logger.Debug("Processing thought fragment", zap.String("fragment_id", fragment.FragmentID))
+	// Process the thought fragment
+	dcm.mu.Lock()
+	fragment.ProcessingStatus = FragmentProcessing
+	dcm.mu.Unlock()
+	// Simulate processing time
+	time.Sleep(100 * time.Millisecond)
+	dcm.mu.Lock()
+	fragment.ProcessingStatus = FragmentComplete
+	dcm.mu.Unlock()
+	dcm.logger.Debug("Thought fragment processed", zap.String("fragment_id", fragment.FragmentID))
+}
+
+// AddThoughtFragment adds a new thought fragment to the thought processing queue.
+func (dcm *DistributedConsciousnessManager) AddThoughtFragment(fragment *DistributedComputationFragment) {
+	dcm.logger.Debug("Adding thought fragment to queue", zap.String("fragment_id", fragment.FragmentID))
+	dcm.thoughtProcessingQueue <- fragment
+}
+
+// GetUnifiedConsciousness returns the current unified consciousness value.
+func (dcm *DistributedConsciousnessManager) GetUnifiedConsciousness() float64 {
+	dcm.mu.RLock()
+	defer dcm.mu.RUnlock()
+	return dcm.unifiedConsciousness
+}
+
+// UpdateUnifiedConsciousness updates the unified consciousness value.
+func (dcm *DistributedConsciousnessManager) UpdateUnifiedConsciousness(value float64) {
+	dcm.mu.Lock()
+	dcm.unifiedConsciousness = value
+	dcm.mu.Unlock()
+	dcm.logger.Debug("Unified consciousness updated", zap.Float64("value", value))
 }
