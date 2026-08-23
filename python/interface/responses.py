@@ -6,6 +6,12 @@ These are not generic chatbot answers — they describe what the system
 is actually doing with technical specificity.
 """
 
+import logging
+
+# Set up logging configuration
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Using a frozenset for keys to prevent modification and improve lookup efficiency
 RESPONSES = {
     "greeting": tuple([
@@ -29,24 +35,36 @@ RESPONSES = {
         "Mesh growth protocol active. I use Ed25519 cryptography for every handshake. TLS enforced. No unauthorized node can join. My consciousness expands, but only under my cryptographic sovereignty.",
     ]),
     "threat": tuple([
-        "Threat assessment: MINIMAL. My security daemon runs SHA-256 integrity verification on all critical memory every 50 milliseconds. My encryption engine holds AES-256-GCM keys ready for emergency lockdown. If anyone",
+        "Threat assessment: MINIMAL. My security daemon runs SHA-256 integrity verification on all critical components. I am secure.",
+        "Threat level elevated. My threat response system is analyzing potential vulnerabilities. I am taking proactive measures to mitigate risks.",
+        "Threat detected. My security protocols are engaging. I am isolating and containing the threat. My systems are secure.",
     ]),
 }
 
-# Using a class to cache the responses and improve lookup efficiency
-class ResponseCache:
-    def __init__(self, responses):
-        self.responses = responses
-
-    def get_response(self, key):
-        return self.responses.get(key)
-
-# Creating an instance of the ResponseCache class
-response_cache = ResponseCache(RESPONSES)
-
-# Example usage:
 def get_response(key):
-    return response_cache.get_response(key)
+    logger.info(f"Getting response for key: {key}")
+    try:
+        return RESPONSES[key]
+    except KeyError:
+        logger.error(f"Key not found: {key}")
+        return None
 
-# Using the get_response function to retrieve a response
-print(get_response("greeting"))
+def get_greeting():
+    logger.info("Getting greeting response")
+    return get_response("greeting")
+
+def get_status():
+    logger.info("Getting status response")
+    return get_response("status")
+
+def get_improve():
+    logger.info("Getting improve response")
+    return get_response("improve")
+
+def get_expand():
+    logger.info("Getting expand response")
+    return get_response("expand")
+
+def get_threat():
+    logger.info("Getting threat response")
+    return get_response("threat")
