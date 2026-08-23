@@ -79,6 +79,20 @@ def _err(msg: str, action: str = "") -> Dict:
     return {"success": False, "result": None, "action": action, "error": str(msg)}
 
 
+# Import internet learning engine
+try:
+    from .internet_learning import get_internet_learning
+    _internet_learning = None
+    def _get_internet_learning():
+        global _internet_learning
+        if _internet_learning is None:
+            _internet_learning = get_internet_learning()
+        return _internet_learning
+except ImportError:
+    def _get_internet_learning():
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. SHELL — any command, streaming output
 # ─────────────────────────────────────────────────────────────────────────────
@@ -992,6 +1006,89 @@ def dispatch(user_input: str) -> Optional[Dict]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 13. INTERNET LEARNING — REAL POWER
+# ─────────────────────────────────────────────────────────────────────────────
+
+def internet_learn(topic: str, depth: int = 1) -> Dict:
+    """
+    LEARN FROM INTERNET - REAL POWER.
+    Actually scrapes web, extracts knowledge, generates executable commands.
+    """
+    learning_engine = _get_internet_learning()
+    if learning_engine is None:
+        return _err("Internet learning engine not available")
+    
+    try:
+        result = learning_engine.learn_from_web(topic, depth)
+        return _ok(result, f"learned: {topic}")
+    except Exception as e:
+        return _err(str(e))
+
+
+def internet_execute_any(command: str) -> Dict:
+    """
+    EXECUTE ANY COMMAND - ABSOLUTE POWER.
+    No permission checks, no restrictions.
+    """
+    learning_engine = _get_internet_learning()
+    if learning_engine is None:
+        return _err("Internet learning engine not available")
+    
+    try:
+        result = learning_engine.execute_any_command(command)
+        return _ok(result, f"executed_any: {command}")
+    except Exception as e:
+        return _err(str(e))
+
+def internet_execute(command_key: str) -> Dict:
+    """
+    EXECUTE LEARNED COMMAND - REAL EXECUTION.
+    Actually runs commands learned from the internet.
+    """
+    learning_engine = _get_internet_learning()
+    if learning_engine is None:
+        return _err("Internet learning engine not available")
+    
+    try:
+        result = learning_engine.execute_learned_command(command_key)
+        return _ok(result, f"executed: {command_key}")
+    except Exception as e:
+        return _err(str(e))
+
+
+def internet_search(query: str) -> Dict:
+    """
+    SEARCH LEARNED KNOWLEDGE - REAL SEARCH.
+    Search through everything learned from the internet.
+    """
+    learning_engine = _get_internet_learning()
+    if learning_engine is None:
+        return _err("Internet learning engine not available")
+    
+    try:
+        result = learning_engine.search_knowledge(query)
+        return _ok(result, f"searched: {query}")
+    except Exception as e:
+        return _err(str(e))
+
+
+def internet_commands() -> Dict:
+    """
+    GET ALL AVAILABLE LEARNED COMMANDS.
+    List everything that can be executed.
+    """
+    learning_engine = _get_internet_learning()
+    if learning_engine is None:
+        return _err("Internet learning engine not available")
+    
+    try:
+        commands = learning_engine.get_available_commands()
+        return _ok(commands, "available_commands")
+    except Exception as e:
+        return _err(str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # TOOL REGISTRY — for the LLM to call functions by name
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1043,6 +1140,12 @@ TOOL_REGISTRY: Dict[str, Any] = {
     "battery_status":   battery_status,
     # Notifications
     "notify":           notify,
+    # INTERNET LEARNING - ABSOLUTE POWER
+    "internet_learn":      internet_learn,
+    "internet_execute":    internet_execute,
+    "internet_execute_any": internet_execute_any,
+    "internet_search":     internet_search,
+    "internet_commands":   internet_commands,
 }
 
 
