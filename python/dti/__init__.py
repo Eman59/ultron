@@ -20,3 +20,11 @@ Usage:
   python -m dti soul               # Read the latest diary entry
   python -m dti status             # System vitals
 """
+
+import logging
+
+# Set up logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Log the initialization of the DTI module
+logging.info('Initializing Direct Thought Interface (DTI) module')
