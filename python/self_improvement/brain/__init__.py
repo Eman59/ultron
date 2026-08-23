@@ -11,4 +11,4 @@ The brain gets smarter about ITSELF with every generation.
 """
 from typing import Final
 
-FILE_VERSION: Final[str] = "1.0.0"
+SOFTWARE_VERSION: Final[str] = "1.0.0"
