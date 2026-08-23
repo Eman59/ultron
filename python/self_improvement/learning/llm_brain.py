@@ -40,12 +40,15 @@ from enum import Enum
 from collections import deque, OrderedDict
 from pathlib import Path
 import traceback
+import functools
 
 # HTTP client for API calls
 import urllib.request
 import urllib.error
 import ssl
 
+# Cache for responses
+_response_cache = OrderedDict()
 
 class LLMProvider(Enum):
     """Supported LLM providers."""
@@ -89,87 +92,37 @@ class LLMRequest:
     stop_sequences: List[str] = field(default_factory=list)
     
     # For code generation
-    target_lan: str  # Added type hint
+    target_lan: str
 
-    def __post_init__(self):
-        try:
-            if not isinstance(self.id, str):
-                raise TypeError("id must be a string")
-            if not isinstance(self.mode, ThinkingMode):
-                raise TypeError("mode must be a ThinkingMode enum")
-            if not isinstance(self.priority, Priority):
-                raise TypeError("priority must be a Priority enum")
-            if not isinstance(self.prompt, str):
-                raise TypeError("prompt must be a string")
-            if not isinstance(self.system_prompt, str):
-                raise TypeError("system_prompt must be a string")
-            if not isinstance(self.context_files, list):
-                raise TypeError("context_files must be a list")
-            if not isinstance(self.max_tokens, int):
-                raise TypeError("max_tokens must be an integer")
-            if not isinstance(self.temperature, (int, float)):
-                raise TypeError("temperature must be a number")
-            if not isinstance(self.stop_sequences, list):
-                raise TypeError("stop_sequences must be a list")
-            if not isinstance(self.target_lan, str):
-                raise TypeError("target_lan must be a string")
-        except TypeError as e:
-            print(f"Error initializing LLMRequest: {e}")
-            raise
+    def __hash__(self):
+        return hash((self.id, self.mode, self.priority, self.prompt, self.system_prompt, tuple(self.context_files), self.max_tokens, self.temperature, tuple(self.stop_sequences), self.target_lan))
+
+    def __eq__(self, other):
+        return (self.id, self.mode, self.priority, self.prompt, self.system_prompt, tuple(self.context_files), self.max_tokens, self.temperature, tuple(self.stop_sequences), self.target_lan) == (other.id, other.mode, other.priority, other.prompt, other.system_prompt, tuple(other.context_files), other.max_tokens, other.temperature, tuple(other.stop_sequences), other.target_lan)
 
 
-def load_json_file(file_path: str) -> Dict:
-    try:
-        with open(file_path, 'r') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        print(f"File not found: {file_path}")
-        return {}
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON: {e}")
-        return {}
+def cache_response(ttl=60):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = hashlib.sha256(str(args).encode()).hexdigest()
+            if key in _response_cache:
+                response, timestamp = _response_cache[key]
+                if time.time() - timestamp < ttl:
+                    return response
+            response = func(*args, **kwargs)
+            _response_cache[key] = (response, time.time())
+            _response_cache.move_to_end(key)
+            if len(_response_cache) > 1000:
+                _response_cache.popitem(last=False)
+            return response
+        return wrapper
+    return decorator
 
 
-def save_json_file(file_path: str, data: Dict) -> None:
-    try:
-        with open(file_path, 'w') as file:
-            json.dump(data, file)
-    except Exception as e:
-        print(f"Error saving JSON: {e}")
-
-
-def make_api_call(url: str, data: Dict) -> Any:
-    try:
-        request = urllib.request.Request(url, json.dumps(data).encode())
-        response = urllib.request.urlopen(request)
-        return json.loads(response.read())
-    except urllib.error.HTTPError as e:
-        print(f"HTTP error: {e}")
-        return None
-    except Exception as e:
-        print(f"Error making API call: {e}")
-        return None
-
-
-def main() -> None:
-    try:
-        # Example usage
-        request = LLMRequest(
-            id="example",
-            mode=ThinkingMode.ANALYST,
-            priority=Priority.NORMAL,
-            prompt="Example prompt",
-            system_prompt="Example system prompt",
-            context_files=["example_file.txt"],
-            max_tokens=4096,
-            temperature=0.3,
-            stop_sequences=["example_stop_sequence"],
-            target_lan="python"
-        )
-        print(request)
-    except Exception as e:
-        print(f"Error: {e}")
-
-
-if __name__ == "__main__":
-    main()
+# Example usage:
+@cache_response(ttl=300)
+def make_request(request: LLMRequest):
+    # Make the actual request to the LLM provider
+    # ...
+    pass
