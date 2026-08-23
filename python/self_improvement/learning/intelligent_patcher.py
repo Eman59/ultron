@@ -66,93 +66,30 @@ class PatchOutcome(Enum):
 @dataclass
 class IntelligentPatch:
     """A complete intelligent patch with full context."""
-    id: str
-    intent: PatchIntent
-    target_file: str
-    target_function: Optional[str] = None
+    patch_id: str
+    patch_intent: PatchIntent
+    target_file_path: str
+    target_function_name: Optional[str] = None
 
     # The problem being solved
-    diagnosis: str = ""
-    severity: float = 0.0
+    problem_diagnosis: str = ""
+    problem_severity: float = 0.0
 
     # LLM reasoning
-    analysis: str = ""           # LLM's understanding of the problem
-    reasoning: str = ""          # Why this solution was chosen
+    problem_analysis: str = ""           # LLM's understanding of the problem
+    solution_reasoning: str = ""          # Why this solution was chosen
     generated_code: str = ""     # The new code
     review_result: str = ""      # Self-review outcome
 
     # Change details
-    old_code: str = ""
-    new_code: str = ""
-    diff_summary: str = ""
+    original_code: str = ""
+    updated_code: str = ""
+    code_diff_summary: str = ""
 
     # Outcome
-    outcome: PatchOutcome = PatchOutcome.SKIPPED
+    patch_outcome: PatchOutcome = PatchOutcome.SKIPPED
     change_record: Optional[ChangeRecord] = None
     verification_passed: bool = False
 
     # Metrics
-    llm_tokens_used: int = 0
-
-    def __post_init__(self):
-        try:
-            if not isinstance(self.id, str):
-                raise TypeError("ID must be a string")
-            if not isinstance(self.intent, PatchIntent):
-                raise TypeError("Intent must be a PatchIntent enum")
-            if not isinstance(self.target_file, str):
-                raise TypeError("Target file must be a string")
-            if self.target_function is not None and not isinstance(self.target_function, str):
-                raise TypeError("Target function must be a string or None")
-            if not isinstance(self.diagnosis, str):
-                raise TypeError("Diagnosis must be a string")
-            if not isinstance(self.severity, (int, float)):
-                raise TypeError("Severity must be a number")
-            if not isinstance(self.analysis, str):
-                raise TypeError("Analysis must be a string")
-            if not isinstance(self.reasoning, str):
-                raise TypeError("Reasoning must be a string")
-            if not isinstance(self.generated_code, str):
-                raise TypeError("Generated code must be a string")
-            if not isinstance(self.review_result, str):
-                raise TypeError("Review result must be a string")
-            if not isinstance(self.old_code, str):
-                raise TypeError("Old code must be a string")
-            if not isinstance(self.new_code, str):
-                raise TypeError("New code must be a string")
-            if not isinstance(self.diff_summary, str):
-                raise TypeError("Diff summary must be a string")
-            if not isinstance(self.outcome, PatchOutcome):
-                raise TypeError("Outcome must be a PatchOutcome enum")
-            if self.change_record is not None and not isinstance(self.change_record, ChangeRecord):
-                raise TypeError("Change record must be a ChangeRecord or None")
-            if not isinstance(self.verification_passed, bool):
-                raise TypeError("Verification passed must be a boolean")
-            if not isinstance(self.llm_tokens_used, int):
-                raise TypeError("LLM tokens used must be an integer")
-        except TypeError as e:
-            print(f"Error initializing IntelligentPatch: {e}")
-
-    def apply_patch(self, codebase_agent: CodebaseAgent) -> None:
-        try:
-            change_record = codebase_agent.apply_change(self.old_code, self.new_code)
-            self.change_record = change_record
-        except Exception as e:
-            print(f"Error applying patch: {e}")
-            self.outcome = PatchOutcome.APPLY_FAILED
-
-    def verify_patch(self, codebase_agent: CodebaseAgent) -> None:
-        try:
-            verification_result = codebase_agent.verify_change(self.change_record)
-            self.verification_passed = verification_result
-        except Exception as e:
-            print(f"Error verifying patch: {e}")
-            self.outcome = PatchOutcome.VERIFY_FAILED
-
-    def review_patch(self, llm_brain: LLMBrain) -> None:
-        try:
-            review_result = llm_brain.review_code(self.generated_code)
-            self.review_result = review_result
-        except Exception as e:
-            print(f"Error reviewing patch: {e}")
-            self.outcome = PatchOutcome.REVIEW_REJECTED
+    llm_tokens_used: int = field(default=0)
