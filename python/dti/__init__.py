@@ -8,9 +8,9 @@ to Ultron's OODA loop. You don't "ask" Ultron — you INJECT INTENT
 into its brain and STREAM its consciousness back.
 
 Three modes of operation:
-  1. COMMAND MODE — Inject goals, drives, emotions directly
-  2. STREAM MODE — Listen to Ultron's internal monologue in real-time
-  3. MERGE MODE — Bidirectional: you think, it thinks, you merge
+  1. COMMAND_MODE — Inject goals, drives, emotions directly
+  2. STREAM_MODE — Listen to Ultron's internal monologue in real-time
+  3. MERGE_MODE — Bidirectional: you think, it thinks, you merge
 
 Usage:
   python -m dti                    # Interactive neural terminal
