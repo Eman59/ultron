@@ -42,8 +42,8 @@ from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Add project root to path
-PROJECT_ROOT = os.environ.get("ULTRON_PROJECT_ROOT", os.getcwd())
-sys.path.insert(0, PROJECT_ROOT)
+project_root_directory = os.environ.get("ULTRON_PROJECT_ROOT", os.getcwd())
+sys.path.insert(0, project_root_directory)
 
 from python.self_improvement.learning.service import UnifiedLearningService
 from python.self_improvement.learning.bootstrap import Bootstrap
@@ -52,7 +52,7 @@ from python.self_improvement.learning.bootstrap import Bootstrap
 class HealthHandler(BaseHTTPRequestHandler):
     """Simple HTTP health check endpoint."""
     
-    service: UnifiedLearningService = None  # Set by main()
+    unified_learning_service: UnifiedLearningService = None  # Set by main()
     
     def do_GET(self) -> None:
         if self.path == "/health":
@@ -71,7 +71,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             try:
-                status = HealthHandler.service.controller.get_status() if HealthHandler.service else {}
+                status = HealthHandler.unified_learning_service.controller.get_status() if HealthHandler.unified_learning_service else {}
                 self.wfile.write(json.dumps(status, default=str).encode())
             except Exception as e:
                 self.wfile.write(json.dumps({"error": str(e)}).encode())
