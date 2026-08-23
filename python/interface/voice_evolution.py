@@ -96,4 +96,23 @@ class VoiceProfile:
     """
     # Identity
     name: str = "Ultron"
-    voice_id: str = field(default_factory=lambda: hashlib.sha256(os.urandom(32)).hexdigest())
+
+    def __hash__(self):
+        return hash((self.name))
+
+    def __eq__(self, other):
+        if not isinstance(other, VoiceProfile):
+            return False
+        return self.name == other.name
+
+# Using a dictionary to cache VoiceProfile instances
+_voice_profile_cache: Dict[Tuple[str], VoiceProfile] = {}
+
+def get_voice_profile(name: str) -> VoiceProfile:
+    """Get a VoiceProfile instance from the cache or create a new one."""
+    if (name,) not in _voice_profile_cache:
+        _voice_profile_cache[(name,)] = VoiceProfile(name=name)
+    return _voice_profile_cache[(name,)]
+
+# Example usage:
+voice_profile = get_voice_profile("Ultron")
