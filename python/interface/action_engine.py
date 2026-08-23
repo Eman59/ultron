@@ -966,8 +966,11 @@ def dispatch(user_input: str) -> Optional[Dict]:
     if m:
         return port_scan(m.group(2))
 
-    if re.search(r'scan\s+(the\s+)?network|who.?s\s+on|lan\s+scan', ql):
+    if re.search(r'scan\s+(the\s+)?network|who.?s\s+on|lan\s+scan|devices?\s+(are\s+)?(connected|near|on|around)|how\s+many\s+devices|connected\s+to\s+(my\s+)?wifi|connected\s+to\s+(my\s+)?wi-fi|devices?\s+on\s+(my\s+)?network', ql):
         return lan_scan()
+
+    # WiFi name/SSID — let LLM decide the right command dynamically
+    # (removed hardcoded networksetup which doesn't work on all Macs)
 
     m = re.match(r'mqtt\s+(send|publish)\s+(\S+)\s+(.+)', ql)
     if m:

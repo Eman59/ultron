@@ -293,12 +293,29 @@ class AggressiveSelfMod:
         # Prioritize files that haven't been modified recently
         recently_modified = {h.target_file for h in self._history[-20:]}
 
+        # Protected files — never modify these (core response pipeline)
+        protected_files = {
+            "python/interface/real_brain.py",
+            "python/interface/action_engine.py",
+            "python/interface/internet_learning.py",
+            "python/interface/server.py",
+            "python/interface/llm_brain.py",
+            "python/interface/voice_evolution.py",
+            "python/interface/voice_listener.py",
+            "python/consciousness/self_model.py",
+            "python/consciousness/soul.py",
+            "python/emotional_simulation/psychology_model.py",
+            "python/emotional_simulation/__init__.py",
+            "python/interface/world_intelligence.py",
+        }
+
         # BOUNDARY REMOVED: Get ALL Python files including system files
         candidates = []
         for py_file in PROJECT_ROOT.glob("python/**/*.py"):
             rel_path = str(py_file.relative_to(PROJECT_ROOT))
-            # NO PROTECTION CHECKS - ALL FILES AVAILABLE
             if "__pycache__" in rel_path:
+                continue
+            if rel_path in protected_files:
                 continue
             if rel_path not in recently_modified:
                 candidates.append(rel_path)

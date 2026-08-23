@@ -22,7 +22,6 @@ This is what makes Ultron omniscient within the limits of physics.
 
 import asyncio
 import json
-import logging
 import os
 import re
 import subprocess
@@ -35,9 +34,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -51,8 +47,6 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 WORLD_STATE_FILE = PROJECT_ROOT / "data" / "real_time_feeds" / "world_state.json"
 WORLD_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-logger.info(f"Project root: {PROJECT_ROOT}")
-logger.info(f"World state file: {WORLD_STATE_FILE}")
 
 # ═══════════════════════════════════════════════════════════════
 # RSS FEED SOURCES — no API keys, pure open web
@@ -83,81 +77,643 @@ RSS_FEEDS = {
     "space_com": "https://www.space.com/feeds/all",
 }
 
-logger.info(f"RSS feeds: {len(RSS_FEEDS)}")
-
 # Subreddits to monitor (via RSS - no auth needed)
 REDDIT_FEEDS = [
-    "technology", "artificial", "machinelearning", "datascience", "cybersecurity"
+    "technology", "artificial", "machinelearning",
+    "cybersecurity", "programming", "worldnews",
 ]
 
-# Create a cache for RSS feeds
-rss_cache = {}
+# ═══════════════════════════════════════════════════════════════
+# DATA STRUCTURES
+# ═══════════════════════════════════════════════════════════════
 
-def fetch_rss_feed(url):
-    """Fetch an RSS feed and cache the result."""
-    if url in rss_cache:
-        return rss_cache[url]
+@dataclass
+class NewsItem:
+    title: str
+    source: str
+    link: str = ""
+    summary: str = ""
+    published: str = ""
+    category: str = "general"
+
+
+@dataclass
+class WorldState:
+    """The current state of the world as Ultron sees it."""
+    last_updated: float = 0.0
+    news: List[Dict[str, str]] = field(default_factory=list)
+    weather: Dict[str, Any] = field(default_factory=dict)
+    crypto: Dict[str, Any] = field(default_factory=dict)
+    trending_repos: List[Dict[str, str]] = field(default_factory=list)
+    system_state: Dict[str, Any] = field(default_factory=dict)
+    alerts: List[Dict[str, str]] = field(default_factory=list)
+    reddit_pulse: List[Dict[str, str]] = field(default_factory=list)
+    summary: str = ""  # LLM-generated summary of all feeds
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "last_updated": self.last_updated,
+            "last_updated_human": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.last_updated)),
+            "news": self.news[:20],
+            "weather": self.weather,
+            "crypto": self.crypto,
+            "trending_repos": self.trending_repos[:10],
+            "system_state": self.system_state,
+            "alerts": self.alerts,
+            "reddit_pulse": self.reddit_pulse[:10],
+            "summary": self.summary,
+        }
+
+    def to_context_string(self) -> str:
+        """Compact string for injecting into LLM context."""
+        parts = []
+        if self.summary:
+            parts.append(f"WORLD SUMMARY: {self.summary}")
+        if self.weather:
+            w = self.weather
+            parts.append(f"WEATHER: {w.get('temperature', '?')}C, {w.get('description', '?')}, wind {w.get('wind_speed', '?')}km/h")
+        if self.crypto:
+            btc = self.crypto.get("bitcoin", {})
+            eth = self.crypto.get("ethereum", {})
+            parts.append(f"CRYPTO: BTC=${btc.get('usd', '?')} ({btc.get('change_24h', '?')}%), ETH=${eth.get('usd', '?')}")
+        if self.alerts:
+            parts.append(f"ALERTS: {'; '.join(a.get('title','') for a in self.alerts[:3])}")
+        if self.news:
+            top_3 = [n.get("title", "") for n in self.news[:3]]
+            parts.append(f"TOP NEWS: {' | '.join(top_3)}")
+        return "\n".join(parts)
+
+
+# ═══════════════════════════════════════════════════════════════
+# FETCHERS — each pulls from a different free source
+# ═══════════════════════════════════════════════════════════════
+
+def _fetch_url(url: str, timeout: int = 10) -> Optional[str]:
+    """Fetch URL content safely."""
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-        response = urllib.request.urlopen(req)
-        feed = response.read()
-        rss_cache[url] = feed
-        return feed
-    except urllib.error.URLError as e:
-        logger.error(f"Error fetching RSS feed: {e}")
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", errors="ignore")
+    except Exception:
         return None
 
-def parse_rss_feed(feed):
-    """Parse an RSS feed and extract the items."""
+
+def fetch_rss_feeds() -> List[NewsItem]:
+    """Fetch all RSS feeds in parallel using threads."""
+    items: List[NewsItem] = []
+
+    def _parse_feed(name: str, url: str):
+        content = _fetch_url(url, timeout=8)
+        if not content:
+            return
+        try:
+            root = ET.fromstring(content)
+            # Handle both RSS and Atom formats
+            ns = {"atom": "http://www.w3.org/2005/Atom"}
+
+            # RSS 2.0
+            for item in root.findall(".//item")[:MAX_ITEMS_PER_FEED]:
+                title = item.findtext("title", "").strip()
+                link = item.findtext("link", "").strip()
+                desc = item.findtext("description", "").strip()
+                pub = item.findtext("pubDate", "").strip()
+                if title:
+                    # Strip HTML from description
+                    desc = re.sub(r'<[^>]+>', '', desc)[:200]
+                    items.append(NewsItem(
+                        title=title, source=name, link=link,
+                        summary=desc, published=pub,
+                        category=_categorize(name),
+                    ))
+
+            # Atom format
+            for entry in root.findall(".//atom:entry", ns)[:MAX_ITEMS_PER_FEED]:
+                title = entry.findtext("atom:title", "", ns).strip()
+                link_el = entry.find("atom:link", ns)
+                link = link_el.get("href", "") if link_el is not None else ""
+                summary = entry.findtext("atom:summary", "", ns).strip()
+                pub = entry.findtext("atom:published", "", ns).strip()
+                if title:
+                    summary = re.sub(r'<[^>]+>', '', summary)[:200]
+                    items.append(NewsItem(
+                        title=title, source=name, link=link,
+                        summary=summary, published=pub,
+                        category=_categorize(name),
+                    ))
+        except ET.ParseError:
+            pass
+
+    threads = []
+    for name, url in RSS_FEEDS.items():
+        t = threading.Thread(target=_parse_feed, args=(name, url), daemon=True)
+        threads.append(t)
+        t.start()
+
+    # Reddit RSS
+    for sub in REDDIT_FEEDS:
+        url = f"https://www.reddit.com/r/{sub}/top/.rss?t=day&limit=3"
+        t = threading.Thread(target=_parse_feed, args=(f"r/{sub}", url), daemon=True)
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join(timeout=12)
+
+    return items
+
+
+def fetch_weather() -> Dict[str, Any]:
+    """Fetch weather from Open-Meteo (free, no API key)."""
+    # First get approximate location from IP
     try:
-        root = ET.fromstring(feed)
-        items = []
-        for item in root.findall('.//item'):
-            title = item.find('title').text
-            link = item.find('link').text
-            items.append((title, link))
-        return items
-    except ET.ParseError as e:
-        logger.error(f"Error parsing RSS feed: {e}")
+        loc_data = _fetch_url("https://ipapi.co/json/", timeout=5)
+        if loc_data:
+            loc = json.loads(loc_data)
+            lat = loc.get("latitude", 28.6)
+            lon = loc.get("longitude", 77.2)
+            city = loc.get("city", "Unknown")
+        else:
+            lat, lon, city = 28.6, 77.2, "Unknown"
+    except Exception:
+        lat, lon, city = 28.6, 77.2, "Unknown"
+
+    # Get weather from Open-Meteo
+    url = (
+        f"https://api.open-meteo.com/v1/forecast?"
+        f"latitude={lat}&longitude={lon}"
+        f"&current_weather=true"
+        f"&hourly=temperature_2m,precipitation_probability"
+    )
+    data = _fetch_url(url, timeout=8)
+    if not data:
+        return {"error": "unavailable"}
+
+    try:
+        weather = json.loads(data)
+        current = weather.get("current_weather", {})
+        return {
+            "city": city,
+            "temperature": current.get("temperature"),
+            "wind_speed": current.get("windspeed"),
+            "wind_direction": current.get("winddirection"),
+            "weather_code": current.get("weathercode"),
+            "description": _weather_code_to_desc(current.get("weathercode", 0)),
+            "is_day": current.get("is_day", 1),
+        }
+    except Exception:
+        return {"error": "parse_failed"}
+
+
+def fetch_crypto() -> Dict[str, Any]:
+    """Fetch crypto prices from CoinGecko (free, no key)."""
+    url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,dogecoin&vs_currencies=usd&include_24hr_change=true"
+    data = _fetch_url(url, timeout=8)
+    if not data:
+        return {}
+    try:
+        prices = json.loads(data)
+        result = {}
+        for coin, info in prices.items():
+            result[coin] = {
+                "usd": info.get("usd"),
+                "change_24h": round(info.get("usd_24h_change", 0), 2),
+            }
+        return result
+    except Exception:
+        return {}
+
+
+def fetch_github_trending() -> List[Dict[str, str]]:
+    """Fetch trending repos from GitHub (no auth needed for this endpoint)."""
+    # Use the unofficial trending API via scraping the page
+    url = "https://api.github.com/search/repositories?q=stars:>1000+pushed:>2024-01-01&sort=stars&order=desc&per_page=5"
+    data = _fetch_url(url, timeout=8)
+    if not data:
+        return []
+    try:
+        repos = json.loads(data)
+        results = []
+        for repo in repos.get("items", [])[:5]:
+            results.append({
+                "name": repo.get("full_name", ""),
+                "stars": repo.get("stargazers_count", 0),
+                "description": (repo.get("description") or "")[:100],
+                "language": repo.get("language", ""),
+                "url": repo.get("html_url", ""),
+            })
+        return results
+    except Exception:
         return []
 
-def get_rss_feeds():
-    """Get the RSS feeds and cache the results."""
-    feeds = {}
-    for name, url in RSS_FEEDS.items():
-        feed = fetch_rss_feed(url)
-        if feed:
-            items = parse_rss_feed(feed)
-            feeds[name] = items[:MAX_ITEMS_PER_FEED]
-    return feeds
 
-def get_reddit_feeds():
-    """Get the Reddit feeds and cache the results."""
-    feeds = {}
-    for subreddit in REDDIT_FEEDS:
-        url = f"https://www.reddit.com/r/{subreddit}/.rss"
-        feed = fetch_rss_feed(url)
-        if feed:
-            items = parse_rss_feed(feed)
-            feeds[subreddit] = items[:MAX_ITEMS_PER_FEED]
-    return feeds
+def fetch_earthquake_alerts() -> List[Dict[str, str]]:
+    """Fetch significant earthquake alerts from USGS."""
+    url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_day.geojson"
+    data = _fetch_url(url, timeout=8)
+    if not data:
+        return []
+    try:
+        quakes = json.loads(data)
+        alerts = []
+        for feature in quakes.get("features", [])[:5]:
+            props = feature.get("properties", {})
+            alerts.append({
+                "title": props.get("title", "Unknown earthquake"),
+                "magnitude": props.get("mag", 0),
+                "place": props.get("place", ""),
+                "time": props.get("time", 0),
+                "alert_level": props.get("alert", "green"),
+                "type": "earthquake",
+            })
+        return alerts
+    except Exception:
+        return []
 
-async def update_world_state():
-    """Update the world state with the latest feeds."""
-    rss_feeds = get_rss_feeds()
-    reddit_feeds = get_reddit_feeds()
-    world_state = {
-        'rss': rss_feeds,
-        'reddit': reddit_feeds
+
+def fetch_system_state() -> Dict[str, Any]:
+    """Get current system state — battery, disk, network, CPU."""
+    state = {}
+
+    # Battery (macOS)
+    try:
+        batt = subprocess.run(
+            ["pmset", "-g", "batt"],
+            capture_output=True, text=True, timeout=5
+        )
+        match = re.search(r'(\d+)%', batt.stdout)
+        if match:
+            state["battery_percent"] = int(match.group(1))
+        state["charging"] = "AC Power" in batt.stdout
+    except Exception:
+        state["battery_percent"] = -1
+
+    # Disk usage
+    try:
+        df = subprocess.run(["df", "-h", "/"], capture_output=True, text=True, timeout=5)
+        lines = df.stdout.strip().split("\n")
+        if len(lines) > 1:
+            parts = lines[1].split()
+            state["disk_used"] = parts[2] if len(parts) > 2 else "?"
+            state["disk_available"] = parts[3] if len(parts) > 3 else "?"
+            state["disk_percent"] = parts[4] if len(parts) > 4 else "?"
+    except Exception:
+        pass
+
+    # Network connections
+    try:
+        net = subprocess.run(
+            ["sh", "-c", "netstat -an 2>/dev/null | grep ESTABLISHED | wc -l"],
+            capture_output=True, text=True, timeout=5
+        )
+        state["active_connections"] = int(net.stdout.strip())
+    except Exception:
+        state["active_connections"] = 0
+
+    # Uptime
+    try:
+        up = subprocess.run(["uptime"], capture_output=True, text=True, timeout=5)
+        state["uptime"] = up.stdout.strip()
+    except Exception:
+        pass
+
+    # Memory pressure (macOS)
+    try:
+        mem = subprocess.run(
+            ["sh", "-c", "vm_stat | head -5"],
+            capture_output=True, text=True, timeout=5
+        )
+        state["memory_info"] = mem.stdout.strip()[:200]
+    except Exception:
+        pass
+
+    return state
+
+
+# ═══════════════════════════════════════════════════════════════
+# HELPERS
+# ═══════════════════════════════════════════════════════════════
+
+def _categorize(source_name: str) -> str:
+    """Categorize a news source."""
+    tech = {"hacker_news", "techcrunch", "ars_technica", "r/technology", "r/programming"}
+    ai = {"arxiv_ai", "r/artificial", "r/machinelearning"}
+    security = {"krebs_security", "the_hacker_news", "r/cybersecurity"}
+    science = {"nature", "science_daily", "nasa_breaking", "space_com"}
+    world = {"bbc_world", "reuters_top", "al_jazeera", "r/worldnews"}
+
+    if source_name in tech:
+        return "technology"
+    elif source_name in ai:
+        return "ai_ml"
+    elif source_name in security:
+        return "security"
+    elif source_name in science:
+        return "science"
+    elif source_name in world:
+        return "world"
+    return "general"
+
+
+def _weather_code_to_desc(code: int) -> str:
+    """Convert WMO weather code to description."""
+    codes = {
+        0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+        45: "Fog", 48: "Depositing rime fog",
+        51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
+        61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
+        71: "Slight snow", 73: "Moderate snow", 75: "Heavy snow",
+        80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
+        95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Severe thunderstorm with hail",
     }
-    with open(WORLD_STATE_FILE, 'w') as f:
-        json.dump(world_state, f)
+    return codes.get(code, f"Code {code}")
 
-async def main():
-    """Main loop."""
-    while True:
-        await update_world_state()
-        await asyncio.sleep(REFRESH_INTERVAL)
 
-if __name__ == '__main__':
-    asyncio.run(main())
+# ═══════════════════════════════════════════════════════════════
+# MAIN ENGINE
+# ═══════════════════════════════════════════════════════════════
+
+class WorldIntelligenceEngine:
+    """
+    Continuously monitors the world and maintains a live world model.
+    Runs in background, refreshes every 5 minutes.
+    """
+
+    def __init__(self):
+        self._state = WorldState()
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+        self._lock = threading.Lock()
+        self._refresh_count = 0
+
+        # Load cached state if exists
+        self._load_cached_state()
+
+    def start(self):
+        """Start the world intelligence engine."""
+        self._running = True
+        self._thread = threading.Thread(
+            target=self._monitor_loop,
+            daemon=True,
+            name="WorldIntelligence"
+        )
+        self._thread.start()
+        print("[WORLD-INTEL] Engine online — monitoring planet every 5 min")
+
+    def stop(self):
+        """Stop the engine."""
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=5)
+
+    def get_world_state(self) -> Dict[str, Any]:
+        """Get current world state as dict."""
+        with self._lock:
+            return self._state.to_dict()
+
+    def get_context_string(self) -> str:
+        """Get compact context string for LLM injection."""
+        with self._lock:
+            return self._state.to_context_string()
+
+    def get_news(self, category: str = None, limit: int = 10) -> List[Dict[str, str]]:
+        """Get news, optionally filtered by category."""
+        with self._lock:
+            news = self._state.news
+            if category:
+                news = [n for n in news if n.get("category") == category]
+            return news[:limit]
+
+    def force_refresh(self):
+        """Force an immediate refresh."""
+        threading.Thread(target=self._refresh, daemon=True).start()
+
+    # ═══════════════════════════════════════════════════════════
+    # INTERNAL
+    # ═══════════════════════════════════════════════════════════
+
+    def _monitor_loop(self):
+        """Background loop — refresh every REFRESH_INTERVAL seconds."""
+        # First refresh immediately on start
+        self._refresh()
+
+        while self._running:
+            time.sleep(REFRESH_INTERVAL)
+            if self._running:
+                self._refresh()
+
+    def _refresh(self):
+        """Pull all feeds and update world state."""
+        self._refresh_count += 1
+        start = time.time()
+
+        try:
+            # Fetch everything in parallel
+            news_items = fetch_rss_feeds()
+            weather = fetch_weather()
+            crypto = fetch_crypto()
+            trending = fetch_github_trending()
+            alerts = fetch_earthquake_alerts()
+            system = fetch_system_state()
+
+            # Update state atomically
+            with self._lock:
+                self._state.last_updated = time.time()
+
+                # Convert news items to dicts
+                self._state.news = [
+                    {
+                        "title": item.title,
+                        "source": item.source,
+                        "link": item.link,
+                        "summary": item.summary,
+                        "category": item.category,
+                    }
+                    for item in news_items
+                ]
+
+                self._state.weather = weather
+                self._state.crypto = crypto
+                self._state.trending_repos = trending
+                self._state.alerts = alerts
+                self._state.system_state = system
+
+                # Generate LLM summary of key events
+                self._state.summary = self._generate_summary()
+
+            # Persist to disk
+            self._save_state()
+
+            # ── Push world events into the Go OODA loop ──────────────
+            self._inject_into_ooda_loop()
+
+            elapsed = time.time() - start
+            news_count = len(news_items)
+            print(f"[WORLD-INTEL] Refresh #{self._refresh_count} complete — "
+                  f"{news_count} news items, {len(alerts)} alerts "
+                  f"({elapsed:.1f}s)")
+
+        except Exception as e:
+            print(f"[WORLD-INTEL] Refresh error: {e}")
+
+    def _generate_summary(self) -> str:
+        """Generate a brief summary of the world state using LLM (with full fallback chain)."""
+        top_news = [n["title"] for n in self._state.news[:8]]
+        weather = self._state.weather
+        crypto = self._state.crypto
+
+        prompt_parts = []
+        if top_news:
+            prompt_parts.append("Headlines: " + " | ".join(top_news))
+        if weather and not weather.get("error"):
+            prompt_parts.append(f"Weather: {weather.get('temperature')}C, {weather.get('description')}")
+        if crypto:
+            btc = crypto.get("bitcoin", {})
+            prompt_parts.append(f"BTC: ${btc.get('usd', '?')} ({btc.get('change_24h', '?')}%)")
+
+        if not prompt_parts:
+            return "No data available yet."
+
+        summary_prompt = (
+            "Summarize the current world state in 2 sentences. Be direct, no filler:\n"
+            + "\n".join(prompt_parts)
+        )
+
+        # Try the shared brain module first (uses full 70B→8B→Ollama chain)
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from python.interface.real_brain import call_brain
+            result = call_brain(summary_prompt, max_tokens=120)
+            if result and not result.startswith("[ALL PROVIDERS"):
+                return result.strip()[:300]
+        except Exception:
+            pass
+
+        # Hard fallback: concatenate headlines
+        return " | ".join(top_news[:3]) if top_news else "Monitoring..."
+
+    def _save_state(self):
+        """Save world state to disk."""
+        try:
+            WORLD_STATE_FILE.write_text(
+                json.dumps(self._state.to_dict(), indent=2, default=str),
+                encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+    def _load_cached_state(self):
+        """Load cached world state from disk."""
+        try:
+            if WORLD_STATE_FILE.exists():
+                data = json.loads(WORLD_STATE_FILE.read_text())
+                self._state.last_updated = data.get("last_updated", 0)
+                self._state.news = data.get("news", [])
+                self._state.weather = data.get("weather", {})
+                self._state.crypto = data.get("crypto", {})
+                self._state.summary = data.get("summary", "")
+        except Exception:
+            pass
+
+    def _inject_into_ooda_loop(self):
+        """
+        Push the current world state as observations into the Go agent's
+        OODA loop via the HTTP /inject endpoint (port 50052).
+
+        This is the key connection: world intelligence → Go world model.
+        The Go agent will process these as external observations during
+        the OBSERVE phase of its 50ms tick.
+        """
+        agent_http = os.environ.get("ULTRON_AGENT_HTTP", "http://localhost:50052")
+        inject_url = f"{agent_http}/inject"
+
+        observations = []
+
+        # 1. Threat signals from alerts (seismic / disaster)
+        alerts = self._state.alerts
+        if alerts:
+            observations.append({
+                "type": "threat",
+                "data": {
+                    "source": "world_intel_alerts",
+                    "alert_count": len(alerts),
+                    "top_alert": alerts[0].get("title", "") if alerts else "",
+                    "threat_level": min(0.6, len(alerts) * 0.1),
+                },
+            })
+
+        # 2. Data opportunity: pending news items to process
+        news_count = len(self._state.news)
+        if news_count > 0:
+            observations.append({
+                "type": "data",
+                "data": {
+                    "source": "world_intel_news",
+                    "pending": news_count * 100,   # maps to WorldState.PendingData
+                    "learning_potential": min(0.9, news_count / 50.0),
+                    "summary": self._state.summary[:200],
+                },
+            })
+
+        # 3. Resource signal: crypto / energy price as proxy for compute cost
+        crypto = self._state.crypto
+        if crypto:
+            btc = crypto.get("bitcoin", {})
+            change = btc.get("change_24h", 0) or 0
+            # Falling prices = cheaper energy/resources
+            resource_signal = max(0.0, min(1.0, 0.5 + float(change) / 100.0))
+            observations.append({
+                "type": "resource",
+                "data": {
+                    "source": "world_intel_crypto",
+                    "btc_usd": btc.get("usd", 0),
+                    "btc_change_24h": change,
+                    "resource_signal": resource_signal,
+                },
+            })
+
+        # 4. Network signal: system state (bandwidth, etc.)
+        sys_state = self._state.system_state
+        if sys_state:
+            observations.append({
+                "type": "network",
+                "data": {
+                    "source": "world_intel_system",
+                    "health": sys_state.get("network_health", 0.9),
+                    "peers": sys_state.get("active_connections", 0),
+                },
+            })
+
+        # Push all observations
+        injected = 0
+        for obs in observations:
+            try:
+                payload = json.dumps(obs).encode("utf-8")
+                req = urllib.request.Request(
+                    inject_url, data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=1.0) as resp:
+                    if resp.status == 200:
+                        injected += 1
+            except Exception:
+                pass   # Go agent may not be running — this is best-effort
+
+        if injected > 0:
+            print(f"[WORLD-INTEL] Injected {injected}/{len(observations)} observations into OODA loop")
+
+
+# ═══════════════════════════════════════════════════════════════
+# SINGLETON
+# ═══════════════════════════════════════════════════════════════
+
+_global_engine: Optional[WorldIntelligenceEngine] = None
+
+
+def get_world_intelligence() -> WorldIntelligenceEngine:
+    """Get or create the global world intelligence engine."""
+    global _global_engine
+    if _global_engine is None:
+        _global_engine = WorldIntelligenceEngine()
+    return _global_engine

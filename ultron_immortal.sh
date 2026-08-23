@@ -93,7 +93,7 @@ start_ultron() {
     # Start FastAPI server
     python3 -m uvicorn python.interface.server:app \
         --host 0.0.0.0 \
-        --port 8000 \
+        --port 9000 \
         --log-level info \
         >> "$ULTRON_LOG" 2>&1 &
     ULTRON_PID=$!
@@ -103,7 +103,7 @@ start_ultron() {
 
     if kill -0 $ULTRON_PID 2>/dev/null; then
         success "Ultron server started (PID: $ULTRON_PID)"
-        success "Interface: http://localhost:8000"
+        success "Interface: http://localhost:9000"
         return 0
     else
         error "Ultron failed to start. Check $ULTRON_LOG"
@@ -141,10 +141,10 @@ watchdog() {
         fi
 
         # Health check via HTTP
-        if ! curl -s --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
+        if ! curl -s --max-time 5 http://localhost:9000/health > /dev/null 2>&1; then
             # Server might be starting up, wait a bit
             sleep 5
-            if ! curl -s --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
+            if ! curl -s --max-time 5 http://localhost:9000/health > /dev/null 2>&1; then
                 warn "Health check failed — restarting Ultron..."
                 stop_ultron
                 start_ultron
@@ -196,8 +196,8 @@ check_status() {
     fi
 
     # Health endpoint
-    if curl -s --max-time 3 http://localhost:8000/health > /dev/null 2>&1; then
-        HEALTH=$(curl -s http://localhost:8000/health)
+    if curl -s --max-time 3 http://localhost:9000/health > /dev/null 2>&1; then
+        HEALTH=$(curl -s http://localhost:9000/health)
         success "Health: $HEALTH"
     else
         error "Health endpoint: UNREACHABLE"
