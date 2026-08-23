@@ -19,14 +19,14 @@ import time
 class EvaluationResult:
     """Result of evaluating an improvement."""
     patch_id: str
-    before_score: float
-    after_score: float
-    delta: float
+    initial_performance_score: float
+    updated_performance_score: float
+    performance_delta: float
     relative_improvement: float  # percentage
-    is_improvement: bool
-    is_regression: bool
+    is_performance_improvement: bool
+    is_performance_regression: bool
     recommendation: str  # "keep", "rollback", "neutral"
-    confidence: float
+    confidence_level: float
     evaluation_duration: float
 
 
@@ -40,160 +40,56 @@ class ImprovementEvaluator:
     """
 
     def __init__(self,
-                 improvement_threshold: float = 0.02,
-                 regression_threshold: float = -0.02,
-                 confidence_window: int = 10):
+                 minimum_improvement_threshold: float = 0.02,
+                 maximum_regression_threshold: float = -0.02,
+                 confidence_window_size: int = 10):
         
-        self.improvement_threshold = improvement_threshold
-        self.regression_threshold = regression_threshold
-        self.confidence_window = confidence_window
+        self.minimum_improvement_threshold = minimum_improvement_threshold
+        self.maximum_regression_threshold = maximum_regression_threshold
+        self.confidence_window_size = confidence_window_size
         
         # Strategy effectiveness tracking
-        self.strategy_history: Dict[str, List[float]] = {}
+        self.improvement_strategy_history: Dict[str, List[float]] = {}
         
         # Evaluation history
-        self.evaluations: List[EvaluationResult] = []
+        self.evaluation_results: List[EvaluationResult] = []
         
         # Meta-statistics
-        self.total_evaluations = 0
-        self.total_improvements = 0
-        self.total_regressions = 0
-        self.total_neutral = 0
+        self.total_evaluation_count = 0
+        self.total_performance_improvements = 0
+        self.total_performance_regressions = 0
+        self.total_neutral_outcomes = 0
 
     def evaluate(self,
-                before_score: float,
-                after_score: float,
-                patch_strategy: str = "unknown") -> EvaluationResult:
+                initial_performance_score: float,
+                updated_performance_score: float,
+                patch_generation_strategy: str = "unknown") -> EvaluationResult:
         """
         Evaluate whether a change was beneficial.
         
         Args:
-            before_score: System score before the change
-            after_score: System score after the change
-            patch_strategy: What strategy generated this patch
+            initial_performance_score: System score before the change
+            updated_performance_score: System score after the change
+            patch_generation_strategy: What strategy generated this patch
             
         Returns:
             EvaluationResult with recommendation
         """
         start = time.time()
         
-        delta = after_score - before_score
-        relative = delta / max(0.001, before_score)
+        performance_delta = updated_performance_score - initial_performance_score
+        relative_improvement = performance_delta / max(0.001, initial_performance_score)
         
-        is_improvement = delta > self.improvement_threshold
-        is_regression = delta < self.regression_threshold
+        is_performance_improvement = performance_delta > self.minimum_improvement_threshold
+        is_performance_regression = performance_delta < self.maximum_regression_threshold
         
-        if is_improvement:
+        if is_performance_improvement:
             recommendation = "keep"
-            self.total_improvements += 1
-        elif is_regression:
+            self.total_performance_improvements += 1
+        elif is_performance_regression:
             recommendation = "rollback"
-            self.total_regressions += 1
+            self.total_performance_regressions += 1
         else:
             recommendation = "neutral"
-            self.total_neutral += 1
-        
-        self.total_evaluations += 1
-        
-        # Calculate confidence based on magnitude of change
-        confidence = min(1.0, abs(delta) / 0.1)  # Full confidence at 10% change
-        
-        result = EvaluationResult(
-            patch_id=f"eval_{self.total_evaluations}",
-            before_score=before_score,
-            after_score=after_score,
-            delta=delta,
-            relative_improvement=relative,
-            is_improvement=is_improvement,
-            is_regression=is_regression,
-            recommendation=recommendation,
-            confidence=confidence,
-            evaluation_duration=time.time() - start,
-        )
-        
-        self.evaluations.append(result)
-        
-        # Update strategy effectiveness
-        if patch_strategy not in self.strategy_history:
-            self.strategy_history[patch_strategy] = []
-        self.strategy_history[patch_strategy].append(delta)
-        
-        return result
-
-    def get_best_strategies(self, top_k: int = 5) -> List[Tuple[str, float]]:
-        """Get the most effective improvement strategies."""
-        
-        strategy_scores = {}
-        for strategy, deltas in self.strategy_history.items():
-            if deltas:
-                # Average improvement from this strategy
-                strategy_scores[strategy] = np.mean(deltas)
-        
-        sorted_strategies = sorted(
-            strategy_scores.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )
-        
-        return sorted_strategies[:top_k]
-
-    def get_worst_strategies(self, top_k: int = 5) -> List[Tuple[str, float]]:
-        """Get strategies that tend to cause regressions."""
-        
-        strategy_scores = {}
-        for strategy, deltas in self.strategy_history.items():
-            if deltas:
-                strategy_scores[strategy] = np.mean(deltas)
-        
-        sorted_strategies = sorted(
-            strategy_scores.items(),
-            key=lambda x: x[1]
-        )
-        
-        return sorted_strategies[:top_k]
-
-    def should_try_strategy(self, strategy: str) -> float:
-        """
-        Return probability (0-1) that a strategy should be attempted.
-        Based on historical effectiveness.
-        """
-        if strategy not in self.strategy_history:
-            return 0.5  # Unknown strategy, try with neutral probability
-        
-        deltas = self.strategy_history[strategy]
-        if not deltas:
-            return 0.5
-        
-        success_rate = sum(1 for d in deltas if d > 0) / len(deltas)
-        avg_delta = np.mean(deltas)
-        
-        # Combine success rate and average improvement
-        score = success_rate * 0.6 + (avg_delta + 0.5) * 0.4  # Normalize delta
-        
-        return max(0.1, min(0.9, score))
-
-    def get_improvement_velocity(self, window: int = 20) -> float:
-        """Calculate how fast the system is improving (delta per evaluation)."""
-        
-        if len(self.evaluations) < 3:
-            return 0.0
-        
-        recent = self.evaluations[-window:]
-        deltas = [e.delta for e in recent]
-        
-        return np.mean(deltas)
-
-    def get_summary(self) -> Dict[str, Any]:
-        """Get evaluator summary statistics."""
-        return {
-            "total_evaluations": self.total_evaluations,
-            "improvements": self.total_improvements,
-            "regressions": self.total_regressions,
-            "neutral": self.total_neutral,
-            "improvement_rate": self.total_improvements / max(1, self.total_evaluations),
-            "regression_rate": self.total_regressions / max(1, self.total_evaluations),
-            "improvement_velocity": self.get_improvement_velocity(),
-            "best_strategies": self.get_best_strategies(3),
-            "worst_strategies": self.get_worst_strategies(3),
-            "total_strategies_tried": len(self.strategy_history),
-        }
+            self.total_neutral_outcomes += 1
+ 
