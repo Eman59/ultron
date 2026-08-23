@@ -75,21 +75,44 @@ class ImprovementEvaluator:
         Returns:
             EvaluationResult with recommendation
         """
-        start = time.time()
+        start_time = time.time()
         
-        performance_delta = updated_performance_score - initial_performance_score
-        relative_improvement = performance_delta / max(0.001, initial_performance_score)
+        performance_change = updated_performance_score - initial_performance_score
+        relative_improvement_percentage = performance_change / max(0.001, initial_performance_score)
         
-        is_performance_improvement = performance_delta > self.minimum_improvement_threshold
-        is_performance_regression = performance_delta < self.maximum_regression_threshold
+        is_performance_improvement = performance_change > self.minimum_improvement_threshold
+        is_performance_regression = performance_change < self.maximum_regression_threshold
         
+        recommendation = "keep"
         if is_performance_improvement:
             recommendation = "keep"
-            self.total_performance_improvements += 1
         elif is_performance_regression:
             recommendation = "rollback"
-            self.total_performance_regressions += 1
         else:
             recommendation = "neutral"
+        
+        confidence_level = 1.0  # default confidence level
+        
+        evaluation_result = EvaluationResult(
+            patch_id="unknown",
+            initial_performance_score=initial_performance_score,
+            updated_performance_score=updated_performance_score,
+            performance_delta=performance_change,
+            relative_improvement=relative_improvement_percentage,
+            is_performance_improvement=is_performance_improvement,
+            is_performance_regression=is_performance_regression,
+            recommendation=recommendation,
+            confidence_level=confidence_level,
+            evaluation_duration=time.time() - start_time
+        )
+        
+        self.evaluation_results.append(evaluation_result)
+        self.total_evaluation_count += 1
+        if is_performance_improvement:
+            self.total_performance_improvements += 1
+        elif is_performance_regression:
+            self.total_performance_regressions += 1
+        else:
             self.total_neutral_outcomes += 1
- 
+        
+        return evaluation_result
