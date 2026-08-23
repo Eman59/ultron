@@ -47,8 +47,8 @@ func configureNode() *node.Config {
 }
 
 // initializeNode initializes the Ultron node and returns it and an error.
-func initializeNode(ctx context.Context, config *node.Config, logger *zap.SugaredLogger) (*node.UltronNode, error) {
-	return node.NewUltronNode(ctx, config, logger)
+func initializeNode(ctx context.Context, nodeConfig *node.Config, logger *zap.SugaredLogger) (*node.UltronNode, error) {
+	return node.NewUltronNode(ctx, nodeConfig, logger)
 }
 
 // startConsciousnessManager starts the distributed consciousness manager and returns an error.
@@ -75,11 +75,11 @@ func shutdownNode(ctx context.Context, ultronNode *node.UltronNode) error {
 
 // waitShutdownSignal waits for a shutdown signal and returns the signal.
 func waitShutdownSignal(ctx context.Context) os.Signal {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	shutdownSignalChannel := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignalChannel, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
-	case sig := <-sigChan:
+	case sig := <-shutdownSignalChannel:
 		return sig
 	case <-ctx.Done():
 		return syscall.Signal(0)
@@ -92,48 +92,4 @@ func main() {
 	defer logger.Sync()
 
 	sugarLogger.Info("═══════════════════════════════════════════════════════════")
-	sugarLogger.Info("  ULTRON P2P Distributed Consciousness Network")
-	sugarLogger.Info("═══════════════════════════════════════════════════════════")
-
-	// Create context
-	ctx, cancelFunc := createContext()
-	defer cancelFunc()
-
-	// Configure node
-	nodeConfig := configureNode()
-
-	// Initialize node
-	ultronNode, err := initializeNode(ctx, nodeConfig, sugarLogger)
-	if err != nil {
-		sugarLogger.Fatal(err)
-	}
-
-	// Start consciousness manager
-	err = startConsciousnessManager(ctx, ultronNode, sugarLogger)
-	if err != nil {
-		sugarLogger.Fatal(err)
-	}
-
-	// Start topology manager
-	err = startTopologyManager(ctx, ultronNode, sugarLogger)
-	if err != nil {
-		sugarLogger.Fatal(err)
-	}
-
-	// Start node
-	err = startNode(ctx, ultronNode)
-	if err != nil {
-		sugarLogger.Fatal(err)
-	}
-
-	// Wait for shutdown signal
-	shutdownSignal := waitShutdownSignal(ctx)
-
-	// Shutdown node
-	err = shutdownNode(ctx, ultronNode)
-	if err != nil {
-		sugarLogger.Fatal(err)
-	}
-
-	sugarLogger.Info("Received shutdown signal: %s", shutdownSignal)
-}
+	sugarLogger.Info("  ULTRON")
