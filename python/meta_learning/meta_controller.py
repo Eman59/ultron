@@ -84,12 +84,91 @@ class MetaController:
         
         # Log initialization
         logger.info(f"Initializing MetaController with population_size={population_size}, exploration_budget={exploration_budget}, adaptation_threshold={adaptation_threshold}, evolution_interval={evolution_interval}")
-        
-        # Core components
-        self.algorithm_generator = AlgorithmGenerator(population_size=population_size)
-        logger.info("Initialized AlgorithmGenerator")
-        self.strategy_optimizer = StrategyOptimizer(exploration_weight=exploration_budget)
-        logger.info("Initialized StrategyOptimizer")
+
+        # Check for invalid inputs
+        if population_size <= 0:
+            raise ValueError("Population size must be greater than 0")
+        if exploration_budget < 0 or exploration_budget > 1:
+            raise ValueError("Exploration budget must be between 0 and 1")
+        if adaptation_threshold < 0 or adaptation_threshold > 1:
+            raise ValueError("Adaptation threshold must be between 0 and 1")
+        if evolution_interval <= 0:
+            raise ValueError("Evolution interval must be greater than 0")
+
+        self.population_size = population_size
+        self.exploration_budget = exploration_budget
+        self.adaptation_threshold = adaptation_threshold
+        self.evolution_interval = evolution_interval
+        self.system_state = SystemState()
+        self.algorithm_generator = AlgorithmGenerator()
+        self.strategy_optimizer = StrategyOptimizer()
         self.curriculum_designer = CurriculumDesigner()
-        logger.info("Initialized CurriculumDesigner")
-  
+        self.transfer_manager = TransferManager()
+
+        # Initialize system state
+        self.system_state.mode = SystemMode.EXPLORATION
+        self.system_state.phase = LearningPhase.INITIALIZATION
+        self.system_state.generation = 0
+        self.system_state.total_tasks_processed = 0
+        self.system_state.total_algorithms_generated = 0
+        self.system_state.total_transfers_performed = 0
+        self.system_state.current_best_performance = 0.0
+        self.system_state.improvement_rate = 0.0
+        self.system_state.resource_usage = 0.0
+        self.system_state.uptime = 0.0
+        self.system_state.errors = []
+
+    def start(self):
+        try:
+            # Start the meta-learning process
+            while True:
+                # Check for timeouts
+                if time.time() - self.system_state.uptime > 3600:  # 1 hour
+                    logger.warning("Timeout: System has been running for over an hour without progress")
+                    break
+
+                # Check for empty inputs
+                if not self.algorithm_generator.algorithms:
+                    logger.warning("No algorithms available for selection")
+                    break
+
+                # Perform meta-learning iterations
+                self.iterate()
+
+        except Exception as e:
+            logger.error(f"Error occurred during meta-learning: {e}")
+            self.system_state.errors.append(str(e))
+
+    def iterate(self):
+        # Check for None values
+        if self.algorithm_generator is None or self.strategy_optimizer is None or self.curriculum_designer is None or self.transfer_manager is None:
+            logger.error("One or more components are None")
+            return
+
+        # Perform a single iteration of the meta-learning process
+        self.system_state.generation += 1
+        self.system_state.total_tasks_processed += 1
+        self.system_state.uptime = time.time()
+
+        # Generate new algorithms
+        new_algorithms = self.algorithm_generator.generate_algorithms(self.population_size)
+        self.system_state.total_algorithms_generated += len(new_algorithms)
+
+        # Optimize strategies
+        optimized_strategies = self.strategy_optimizer.optimize_strategies(new_algorithms)
+        self.system_state.total_transfers_performed += len(optimized_strategies)
+
+        # Design curriculum
+        curriculum = self.curriculum_designer.design_curriculum(optimized_strategies)
+        self.system_state.current_best_performance = self.curriculum_designer.evaluate_curriculum(curriculum)
+
+        # Perform transfer learning
+        transferred_algorithms = self.transfer_manager.perform_transfer(optimized_strategies, curriculum)
+        self.system_state.total_transfers_performed += len(transferred_algorithms)
+
+        # Update system state
+        self.system_state.improvement_rate = self.curriculum_designer.calculate_improvement_rate()
+        self.system_state.resource_usage = self.curriculum_designer.calculate_resource_usage()
+
+    def get_system_state(self):
+        return self.system_state
