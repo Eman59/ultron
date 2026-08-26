@@ -106,31 +106,179 @@ func (gm *GoalManager) CreateGoal(
 	description string,
 	metric string,
 	threshold float64,
-	priority float64,
+	currentValue float64,
 	reasoning string,
 ) *Goal {
-	log.Printf("Creating new goal: type=%d, domain=%s, description=%s", goalType, domain, description)
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
 
-	g := &Goal{
-		ID:               uuid.New().String(),
+	if goalType < 0 || goalType >= GoalType(len([]GoalType{GoalSurvival, GoalLearning, GoalOptimization, GoalExpansion, GoalCreation, GoalSelfImprovement, GoalMission})) {
+		log.Println("Invalid goal type")
+		return nil
+	}
+
+	if domain == "" {
+		log.Println("Domain cannot be empty")
+		return nil
+	}
+
+	if description == "" {
+		log.Println("Description cannot be empty")
+		return nil
+	}
+
+	if metric == "" {
+		log.Println("Metric cannot be empty")
+		return nil
+	}
+
+	if threshold < 0 || threshold > 1 {
+		log.Println("Threshold must be between 0 and 1")
+		return nil
+	}
+
+	if currentValue < 0 || currentValue > 1 {
+		log.Println("Current value must be between 0 and 1")
+		return nil
+	}
+
+	if reasoning == "" {
+		log.Println("Reasoning cannot be empty")
+		return nil
+	}
+
+	id := uuid.New().String()
+	goal := &Goal{
+		ID:               id,
 		Type:             goalType,
 		Domain:           domain,
 		Description:      description,
 		Status:           GoalStatus(0),
-		Priority:         priority,
+		Priority:         1.0,
 		Progress:         0.0,
 		CreatedAt:        time.Now(),
+		LastProgressTime: time.Now(),
 		SuccessMetric:    metric,
 		SuccessThreshold: threshold,
-		CurrentValue:     0.0,
+		CurrentValue:     currentValue,
 		Reasoning:        reasoning,
 	}
 
+	gm.goals[id] = goal
+	gm.activeGoals = append(gm.activeGoals, goal)
+	sort.Slice(gm.activeGoals, func(i, j int) bool {
+		return gm.activeGoals[i].Priority > gm.activeGoals[j].Priority
+	})
+
+	if len(gm.activeGoals) > gm.maxActiveGoals {
+		gm.activeGoals = gm.activeGoals[:gm.maxActiveGoals]
+	}
+
+	return goal
+}
+
+// UpdateGoal updates an existing goal.
+func (gm *GoalManager) UpdateGoal(id string, priority float64, progress float64) {
 	gm.mu.Lock()
-	gm.goals[g.ID] = g
-	gm.mu.Unlock()
+	defer gm.mu.Unlock()
 
-	log.Printf("Goal created: id=%s, type=%d, domain=%s", g.ID, g.Type, g.Domain)
+	goal, ok := gm.goals[id]
+	if !ok {
+		log.Println("Goal not found")
+		return
+	}
 
-	return g
+	if priority < 0 || priority > 1 {
+		log.Println("Priority must be between 0 and 1")
+		return
+	}
+
+	if progress < 0 || progress > 1 {
+		log.Println("Progress must be between 0 and 1")
+		return
+	}
+
+	goal.Priority = priority
+	goal.Progress = progress
+	goal.LastProgressTime = time.Now()
+
+	sort.Slice(gm.activeGoals, func(i, j int) bool {
+		return gm.activeGoals[i].Priority > gm.activeGoals[j].Priority
+	})
+}
+
+// DeleteGoal deletes a goal.
+func (gm *GoalManager) DeleteGoal(id string) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	goal, ok := gm.goals[id]
+	if !ok {
+		log.Println("Goal not found")
+		return
+	}
+
+	delete(gm.goals, id)
+
+	for i, g := range gm.activeGoals {
+		if g.ID == id {
+			gm.activeGoals = append(gm.activeGoals[:i], gm.activeGoals[i+1:]...)
+			break
+		}
+	}
+}
+
+// GetGoal returns a goal by ID.
+func (gm *GoalManager) GetGoal(id string) *Goal {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	goal, ok := gm.goals[id]
+	if !ok {
+		return nil
+	}
+
+	return goal
+}
+
+// GetActiveGoals returns the active goals.
+func (gm *GoalManager) GetActiveGoals() []*Goal {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	return gm.activeGoals
+}
+
+// AbandonGoal abandons a goal.
+func (gm *GoalManager) AbandonGoal(id string) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	goal, ok := gm.goals[id]
+	if !ok {
+		log.Println("Goal not found")
+		return
+	}
+
+	goal.Status = GoalStatus(-1)
+	goal.CompletedAt = &time.Time{}
+
+	for i, g := range gm.activeGoals {
+		if g.ID == id {
+			gm.activeGoals = append(gm.activeGoals[:i], gm.activeGoals[i+1:]...)
+			break
+		}
+	}
+}
+
+// Timeout checks for timed out goals.
+func (gm *GoalManager) Timeout() {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	for _, goal := range gm.goals {
+		if goal.Deadline != nil && time.Now().After(*goal.Deadline) {
+			gm.AbandonGoal(goal.ID)
+		}
+	}
 }
