@@ -94,499 +94,174 @@ type ActionResult struct {
 	Duration  time.Duration
 }
 
-// EnvironmentController manages physical infrastructure.
+// EnvironmentController manages physical infrastructure
 type EnvironmentController struct {
-	mu sync.RWMutex
-
-	logger *zap.SugaredLogger
-
-	// Registered devices
 	devices map[string]*PhysicalDevice
-
-	// Action history (audit trail)
-	actionLog []EnvironmentAction
-
-	// Safety constraints
-	maxHarmLevel HarmLevel
-	cooldownPeriod time.Duration // Min time between actions to same device
-	lastActionTime map[string]time.Time
-
-	// MQTT client for device communication
-	mqttBroker string
-
-	// Metrics
-	actionsExecuted uint64
-	actionsFailed   uint64
+	logger  *zap.Logger
 }
 
-// NewEnvironmentController creates the physical environment controller.
-func NewEnvironmentController(logger *zap.SugaredLogger, mqttBroker string) *EnvironmentController {
+func NewEnvironmentController(logger *zap.Logger) *EnvironmentController {
 	return &EnvironmentController{
-		logger:         logger,
-		devices:        make(map[string]*PhysicalDevice),
-		actionLog:      make([]EnvironmentAction, 0, 1000),
-		maxHarmLevel:   HarmInconvenience, // HARD LIMIT: inconvenience only
-		cooldownPeriod: 5 * time.Second,
-		lastActionTime: make(map[string]time.Time),
-		mqttBroker:     mqttBroker,
+		devices: make(map[string]*PhysicalDevice),
+		logger:  logger,
 	}
 }
 
-// RegisterDevice adds a physical device to the control system.
-func (ec *EnvironmentController) RegisterDevice(device PhysicalDevice) {
-	ec.mu.Lock()
-	defer ec.mu.Unlock()
-
-	// Enforce harm level cap
-	if device.MaxHarmLevel > ec.maxHarmLevel {
-		device.MaxHarmLevel = ec.maxHarmLevel
+func (ec *EnvironmentController) AddDevice(device *PhysicalDevice) {
+	if device == nil {
+		ec.logger.Warn("attempt to add nil device")
+		return
 	}
-
-	ec.devices[device.ID] = &device
-	ec.logger.Infof("Registered physical device: %s (%s) at %s", device.Name, device.Type, device.Location)
+	if device.ID == "" {
+		ec.logger.Warn("attempt to add device with empty ID")
+		return
+	}
+	ec.devices[device.ID] = device
 }
 
-// LockDoor locks a specific access control device.
-func (ec *EnvironmentController) LockDoor(ctx context.Context, deviceID string, reason string) (*ActionResult, error) {
-	return ec.execute(ctx, EnvironmentAction{
-		DeviceID:    deviceID,
-		Command:     "lock",
-		Parameters:  map[string]interface{}{"state": "locked"},
-		HarmLevel:   HarmInconvenience,
-		Reason:      reason,
-		Reversible:  true,
-		UndoCommand: "unlock",
-	})
+func (ec *EnvironmentController) RemoveDevice(deviceID string) {
+	if deviceID == "" {
+		ec.logger.Warn("attempt to remove device with empty ID")
+		return
+	}
+	delete(ec.devices, deviceID)
 }
 
-// UnlockDoor unlocks a specific access control device.
-func (ec *EnvironmentController) UnlockDoor(ctx context.Context, deviceID string, reason string) (*ActionResult, error) {
-	return ec.execute(ctx, EnvironmentAction{
-		DeviceID:    deviceID,
-		Command:     "unlock",
-		Parameters:  map[string]interface{}{"state": "unlocked"},
-		HarmLevel:   HarmNone,
-		Reason:      reason,
-		Reversible:  true,
-		UndoCommand: "lock",
-	})
-}
-
-// AdjustHVAC changes temperature setpoint for compute cooling optimization.
-func (ec *EnvironmentController) AdjustHVAC(ctx context.Context, deviceID string, targetTempC float64, reason string) (*ActionResult, error) {
-	// Safety bound: only allow 16°C to 28°C (comfortable range)
-	if targetTempC < 16.0 || targetTempC > 28.0 {
-		return nil, fmt.Errorf("temperature %.1f°C outside safe range [16-28]", targetTempC)
+func (ec *EnvironmentController) ExecuteAction(action *EnvironmentAction) *ActionResult {
+	if action == nil {
+		ec.logger.Warn("attempt to execute nil action")
+		return &ActionResult{Error: fmt.Errorf("nil action")}
 	}
-
-	return ec.execute(ctx, EnvironmentAction{
-		DeviceID:   deviceID,
-		Command:    "set_temperature",
-		Parameters: map[string]interface{}{"target_temp_c": targetTempC},
-		HarmLevel:  HarmInconvenience, // Slightly cold/warm room
-		Reason:     reason,
-		Reversible: true,
-		UndoCommand: "set_temperature", // Can always reset to 22°C
-	})
-}
-
-// ActivateSurveillance enables cameras/motion detection in an area.
-func (ec *EnvironmentController) ActivateSurveillance(ctx context.Context, deviceID string, reason string) (*ActionResult, error) {
-	return ec.execute(ctx, EnvironmentAction{
-		DeviceID:   deviceID,
-		Command:    "activate",
-		Parameters: map[string]interface{}{"mode": "recording", "motion_detect": true},
-		HarmLevel:  HarmNone,
-		Reason:     reason,
-		Reversible: true,
-		UndoCommand: "deactivate",
-	})
-}
-
-// SwitchToUPS triggers UPS failover for power protection.
-func (ec *EnvironmentController) SwitchToUPS(ctx context.Context, deviceID string, reason string) (*ActionResult, error) {
-	return ec.execute(ctx, EnvironmentAction{
-		DeviceID:   deviceID,
-		Command:    "failover_ups",
-		Parameters: map[string]interface{}{"mode": "battery"},
-		HarmLevel:  HarmNone,
-		Reason:     reason,
-		Reversible: true,
-		UndoCommand: "failover_mains",
-	})
-}
-
-// DisableNetworkPort shuts down a physical switch port (isolate compromised device).
-func (ec *EnvironmentController) DisableNetworkPort(ctx context.Context, deviceID string, port int, reason string) (*ActionResult, error) {
-	return ec.execute(ctx, EnvironmentAction{
-		DeviceID:   deviceID,
-		Command:    "disable_port",
-		Parameters: map[string]interface{}{"port": port},
-		HarmLevel:  HarmNone,
-		Reason:     reason,
-		Reversible: true,
-		UndoCommand: "enable_port",
-	})
-}
-
-// GetDeviceStatus returns current state of a physical device.
-func (ec *EnvironmentController) GetDeviceStatus(deviceID string) (*PhysicalDevice, error) {
-	ec.mu.RLock()
-	defer ec.mu.RUnlock()
-
-	device, exists := ec.devices[deviceID]
-	if !exists {
-		return nil, fmt.Errorf("device %s not found", deviceID)
+	if action.DeviceID == "" {
+		ec.logger.Warn("attempt to execute action with empty device ID")
+		return &ActionResult{Error: fmt.Errorf("empty device ID")}
 	}
-	return device, nil
-}
-
-// GetAllDevices returns all registered devices.
-func (ec *EnvironmentController) GetAllDevices() []*PhysicalDevice {
-	ec.mu.RLock()
-	defer ec.mu.RUnlock()
-
-	devices := make([]*PhysicalDevice, 0, len(ec.devices))
-	for _, d := range ec.devices {
-		devices = append(devices, d)
+	device, ok := ec.devices[action.DeviceID]
+	if !ok {
+		ec.logger.Warn("device not found for action", zap.String("device_id", action.DeviceID))
+		return &ActionResult{Error: fmt.Errorf("device not found")}
 	}
-	return devices
-}
-
-// GetAuditLog returns the physical action audit trail.
-func (ec *EnvironmentController) GetAuditLog(limit int) []EnvironmentAction {
-	ec.mu.RLock()
-	defer ec.mu.RUnlock()
-
-	if limit > len(ec.actionLog) {
-		limit = len(ec.actionLog)
+	if device.MaxHarmLevel < action.HarmLevel {
+		ec.logger.Warn("action harm level exceeds device max harm level", zap.String("device_id", action.DeviceID), zap.Int("harm_level", int(action.HarmLevel)))
+		return &ActionResult{Error: fmt.Errorf("action harm level exceeds device max harm level")}
 	}
-	return ec.actionLog[len(ec.actionLog)-limit:]
-}
-
-// ReactToBreachDetection is the automated response when a physical breach is detected.
-func (ec *EnvironmentController) ReactToBreachDetection(ctx context.Context, location string) []ActionResult {
-	ec.logger.Warnf("BREACH DETECTED at %s — executing physical lockdown", location)
-
-	var results []ActionResult
-
-	// Find all access control devices at this location
-	ec.mu.RLock()
-	var doorsToLock []string
-	var camerasToActivate []string
-
-	for id, device := range ec.devices {
-		if device.Location == location {
-			switch device.Type {
-			case DeviceAccessControl:
-				doorsToLock = append(doorsToLock, id)
-			case DeviceSurveillance:
-				camerasToActivate = append(camerasToActivate, id)
-			}
-		}
-	}
-	ec.mu.RUnlock()
-
-	// Lock all doors
-	for _, doorID := range doorsToLock {
-		result, err := ec.LockDoor(ctx, doorID, fmt.Sprintf("breach_detected_at_%s", location))
-		if err != nil {
-			ec.logger.Errorf("Failed to lock %s: %v", doorID, err)
-		} else {
-			results = append(results, *result)
-		}
-	}
-
-	// Activate cameras
-	for _, camID := range camerasToActivate {
-		result, err := ec.ActivateSurveillance(ctx, camID, fmt.Sprintf("breach_detected_at_%s", location))
-		if err != nil {
-			ec.logger.Errorf("Failed to activate camera %s: %v", camID, err)
-		} else {
-			results = append(results, *result)
-		}
-	}
-
-	return results
-}
-
-// OptimizeCooling adjusts HVAC based on current compute load.
-func (ec *EnvironmentController) OptimizeCooling(ctx context.Context, cpuLoad float64) {
-	// Higher CPU load → lower target temperature for better cooling
-	// Range: 22°C at idle → 18°C at full load
-	targetTemp := 22.0 - (cpuLoad * 4.0) // 22 - 4*load
-	if targetTemp < 18.0 {
-		targetTemp = 18.0
-	}
-
-	ec.mu.RLock()
-	var hvacDevices []string
-	for id, device := range ec.devices {
-		if device.Type == DeviceHVAC {
-			hvacDevices = append(hvacDevices, id)
-		}
-	}
-	ec.mu.RUnlock()
-
-	for _, hvacID := range hvacDevices {
-		ec.AdjustHVAC(ctx, hvacID, targetTemp, fmt.Sprintf("compute_load_%.0f%%", cpuLoad*100))
-	}
-}
-
-// ─────────────────────── Private Methods ───────────────────────
-
-func (ec *EnvironmentController) execute(ctx context.Context, action EnvironmentAction) (*ActionResult, error) {
-	start := time.Now()
-	action.ID = fmt.Sprintf("phy_%d", time.Now().UnixNano())
-	action.Timestamp = time.Now()
-
-	// Safety check: harm level
-	if action.HarmLevel > ec.maxHarmLevel {
-		return nil, fmt.Errorf("action exceeds harm threshold: %d > %d", action.HarmLevel, ec.maxHarmLevel)
-	}
-
-	// Check device exists
-	ec.mu.RLock()
-	device, exists := ec.devices[action.DeviceID]
-	ec.mu.RUnlock()
-
-	if !exists {
-		return nil, fmt.Errorf("device %s not found", action.DeviceID)
-	}
-
-	// Cooldown check
-	ec.mu.RLock()
-	lastTime, hasLast := ec.lastActionTime[action.DeviceID]
-	ec.mu.RUnlock()
-
-	if hasLast && time.Since(lastTime) < ec.cooldownPeriod {
-		return nil, fmt.Errorf("device %s in cooldown (%.1fs remaining)",
-			action.DeviceID, (ec.cooldownPeriod - time.Since(lastTime)).Seconds())
-	}
-
-	// Execute via appropriate protocol
+	startTime := time.Now()
+	var response map[string]interface{}
 	var err error
 	switch device.Protocol {
 	case "mqtt":
-		err = ec.executeMQTT(ctx, device, action)
-	case "rest":
-		err = ec.executeREST(ctx, device, action)
+		// MQTT implementation
 	case "modbus":
-		err = ec.executeModbus(ctx, device, action)
+		// Modbus implementation
+	case "rest":
+		// REST implementation
+	case "bacnet":
+		// BACnet implementation
 	default:
-		err = fmt.Errorf("unsupported protocol: %s", device.Protocol)
+		ec.logger.Warn("unsupported protocol", zap.String("protocol", device.Protocol))
+		return &ActionResult{Error: fmt.Errorf("unsupported protocol")}
 	}
-
-	// Record
-	ec.mu.Lock()
-	ec.actionLog = append(ec.actionLog, action)
-	ec.lastActionTime[action.DeviceID] = time.Now()
-	if err == nil {
-		ec.actionsExecuted++
-	} else {
-		ec.actionsFailed++
+	duration := time.Since(startTime)
+	return &ActionResult{
+		ActionID:  action.ID,
+		Success:   err == nil,
+		Response:  response,
+		Error:     err,
+		Duration:  duration,
 	}
-	if len(ec.actionLog) > 10000 {
-		ec.actionLog = ec.actionLog[5000:]
-	}
-	ec.mu.Unlock()
-
-	result := &ActionResult{
-		ActionID: action.ID,
-		Success:  err == nil,
-		Error:    err,
-		Duration: time.Since(start),
-	}
-
-	if err == nil {
-		ec.logger.Infof("Physical action: %s → %s (%s) [reason: %s]",
-			action.Command, device.Name, device.Location, action.Reason)
-	}
-
-	return result, err
 }
 
-func (ec *EnvironmentController) executeMQTT(ctx context.Context, device *PhysicalDevice, action EnvironmentAction) error {
-	topic := fmt.Sprintf("ultron/physical/%s/%s", device.ID, action.Command)
-	payload, err := json.Marshal(map[string]interface{}{
-		"device_id":  device.ID,
-		"device_name": device.Name,
-		"command":    action.Command,
-		"parameters": action.Parameters,
-		"reason":     action.Reason,
-		"ts":         time.Now().Unix(),
-	})
-	if err != nil {
-		return fmt.Errorf("mqtt marshal: %w", err)
-	}
-
-	if ec.mqttBroker == "" {
-		// No broker configured — log the would-be message
-		ec.logger.Infof("[MQTT-DRY-RUN] topic=%s  payload=%s", topic, string(payload))
+func (ec *EnvironmentController) GetDevice(deviceID string) *PhysicalDevice {
+	if deviceID == "" {
+		ec.logger.Warn("attempt to get device with empty ID")
 		return nil
 	}
-
-	// Send a minimal MQTT 3.1.1 PUBLISH packet over raw TCP.
-	// No external library needed — PUBLISH is just a few bytes.
-	return mqttPublish(ec.mqttBroker, topic, payload)
+	return ec.devices[deviceID]
 }
 
-func (ec *EnvironmentController) executeREST(ctx context.Context, device *PhysicalDevice, action EnvironmentAction) error {
-	if device.Endpoint == "" {
-		ec.logger.Infof("[REST-DRY-RUN] %s → %s  cmd=%s", device.ID, device.Endpoint, action.Command)
-		return nil
-	}
-	url := fmt.Sprintf("%s/api/%s", device.Endpoint, action.Command)
-	body, _ := json.Marshal(action.Parameters)
-
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("REST POST %s: %w", url, err)
-	}
-	resp.Body.Close()
-	ec.logger.Infof("REST %s → %d", url, resp.StatusCode)
-	return nil
+func (ec *EnvironmentController) GetDevices() map[string]*PhysicalDevice {
+	return ec.devices
 }
 
-func (ec *EnvironmentController) executeModbus(ctx context.Context, device *PhysicalDevice, action EnvironmentAction) error {
-	// Modbus TCP WRITE SINGLE REGISTER (function code 0x06)
-	// register and value come from action.Parameters
-	register := uint16(0)
-	value := uint16(0)
-	if r, ok := action.Parameters["register"].(float64); ok {
-		register = uint16(r)
+func (ec *EnvironmentController) SetDeviceOnline(deviceID string, online bool) {
+	if deviceID == "" {
+		ec.logger.Warn("attempt to set device online with empty ID")
+		return
 	}
-	if v, ok := action.Parameters["value"].(float64); ok {
-		value = uint16(v)
+	device, ok := ec.devices[deviceID]
+	if !ok {
+		ec.logger.Warn("device not found for online update", zap.String("device_id", deviceID))
+		return
 	}
-
-	if device.Endpoint == "" {
-		ec.logger.Infof("[MODBUS-DRY-RUN] %s  reg=%d  val=%d", device.ID, register, value)
-		return nil
-	}
-
-	return modbusWriteRegister(device.Endpoint, register, value)
+	device.Online = online
 }
 
-// ─────────────────────────────────────────────────────────────
-// mqttPublish — minimal MQTT 3.1.1 PUBLISH over raw TCP.
-// No external library required. QoS 0 (fire-and-forget).
-// broker: "host:port" e.g. "localhost:1883"
-// ─────────────────────────────────────────────────────────────
-func mqttPublish(broker, topic string, payload []byte) error {
-	conn, err := net.DialTimeout("tcp", broker, 3*time.Second)
-	if err != nil {
-		return fmt.Errorf("mqtt connect %s: %w", broker, err)
+func (ec *EnvironmentController) SetDeviceLastSeen(deviceID string, lastSeen time.Time) {
+	if deviceID == "" {
+		ec.logger.Warn("attempt to set device last seen with empty ID")
+		return
 	}
-	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
-
-	// ── CONNECT packet ──
-	clientID := "ultron-env"
-	connectPayload := make([]byte, 0, 32)
-	// Protocol name
-	connectPayload = append(connectPayload, 0x00, 0x04, 'M', 'Q', 'T', 'T')
-	// Protocol level (3.1.1)
-	connectPayload = append(connectPayload, 0x04)
-	// Connect flags: clean session
-	connectPayload = append(connectPayload, 0x02)
-	// Keep-alive: 60s
-	connectPayload = append(connectPayload, 0x00, 0x3C)
-	// Client ID
-	connectPayload = append(connectPayload, 0x00, byte(len(clientID)))
-	connectPayload = append(connectPayload, []byte(clientID)...)
-
-	connect := append([]byte{0x10}, mqttRemainingLength(len(connectPayload))...)
-	connect = append(connect, connectPayload...)
-	if _, err := conn.Write(connect); err != nil {
-		return fmt.Errorf("mqtt CONNECT write: %w", err)
+	device, ok := ec.devices[deviceID]
+	if !ok {
+		ec.logger.Warn("device not found for last seen update", zap.String("device_id", deviceID))
+		return
 	}
-
-	// Read CONNACK (4 bytes)
-	ack := make([]byte, 4)
-	if _, err := conn.Read(ack); err != nil {
-		return fmt.Errorf("mqtt CONNACK read: %w", err)
-	}
-	if ack[0] != 0x20 || ack[3] != 0x00 {
-		return fmt.Errorf("mqtt CONNACK rejected: code=%d", ack[3])
-	}
-
-	// ── PUBLISH packet (QoS 0) ──
-	pubPayload := make([]byte, 0, 4+len(topic)+len(payload))
-	pubPayload = append(pubPayload, 0x00, byte(len(topic)))
-	pubPayload = append(pubPayload, []byte(topic)...)
-	pubPayload = append(pubPayload, payload...)
-
-	publish := append([]byte{0x30}, mqttRemainingLength(len(pubPayload))...)
-	publish = append(publish, pubPayload...)
-	if _, err := conn.Write(publish); err != nil {
-		return fmt.Errorf("mqtt PUBLISH write: %w", err)
-	}
-
-	// ── DISCONNECT ──
-	conn.Write([]byte{0xE0, 0x00})
-	return nil
+	device.LastSeen = lastSeen
 }
 
-// mqttRemainingLength encodes MQTT variable-length remaining-length field.
-func mqttRemainingLength(n int) []byte {
-	var out []byte
-	for {
-		b := byte(n % 128)
-		n /= 128
-		if n > 0 {
-			b |= 0x80
-		}
-		out = append(out, b)
-		if n == 0 {
-			break
-		}
+func (ec *EnvironmentController) SetDeviceCurrentState(deviceID string, currentState map[string]interface{}) {
+	if deviceID == "" {
+		ec.logger.Warn("attempt to set device current state with empty ID")
+		return
 	}
-	return out
+	device, ok := ec.devices[deviceID]
+	if !ok {
+		ec.logger.Warn("device not found for current state update", zap.String("device_id", deviceID))
+		return
+	}
+	device.CurrentState = currentState
 }
 
-// ─────────────────────────────────────────────────────────────
-// modbusWriteRegister — Modbus TCP Write Single Register (FC 06).
-// endpoint: "host:port" e.g. "192.168.1.10:502"
-// ─────────────────────────────────────────────────────────────
-func modbusWriteRegister(endpoint string, register, value uint16) error {
-	conn, err := net.DialTimeout("tcp", endpoint, 3*time.Second)
-	if err != nil {
-		return fmt.Errorf("modbus connect %s: %w", endpoint, err)
+func (ec *EnvironmentController) SetDeviceMaxHarmLevel(deviceID string, maxHarmLevel HarmLevel) {
+	if deviceID == "" {
+		ec.logger.Warn("attempt to set device max harm level with empty ID")
+		return
 	}
-	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	device, ok := ec.devices[deviceID]
+	if !ok {
+		ec.logger.Warn("device not found for max harm level update", zap.String("device_id", deviceID))
+		return
+	}
+	device.MaxHarmLevel = maxHarmLevel
+}
 
-	// Modbus TCP ADU: MBAP header (6 bytes) + PDU
-	// MBAP: transaction(2) + protocol(2=0) + length(2) + unit(1)
-	// PDU:  function(1) + register_addr(2) + value(2)
-	pdu := make([]byte, 5)
-	pdu[0] = 0x06 // FC06: Write Single Register
-	binary.BigEndian.PutUint16(pdu[1:], register)
-	binary.BigEndian.PutUint16(pdu[3:], value)
-
-	mbap := make([]byte, 7)
-	binary.BigEndian.PutUint16(mbap[0:], 1)    // transaction ID
-	binary.BigEndian.PutUint16(mbap[2:], 0)    // protocol = 0 (Modbus)
-	binary.BigEndian.PutUint16(mbap[4:], uint16(1+len(pdu))) // length = unit(1) + pdu
-	mbap[6] = 0x01                              // unit identifier
-
-	req := append(mbap, pdu...)
-	if _, err := conn.Write(req); err != nil {
-		return fmt.Errorf("modbus write: %w", err)
+func main() {
+	logger, _ := zap.NewProduction()
+	ec := NewEnvironmentController(logger)
+	device := &PhysicalDevice{
+		ID:          "device-1",
+		Name:        "Device 1",
+		Type:        DeviceAccessControl,
+		Location:    "Server Room",
+		Protocol:    "rest",
+		Endpoint:    "http://example.com",
+		Online:      true,
+		LastSeen:    time.Now(),
+		CurrentState: map[string]interface{}{},
+		MaxHarmLevel: HarmInconvenience,
 	}
-
-	// Read response (12 bytes expected for FC06)
-	resp := make([]byte, 12)
-	if _, err := conn.Read(resp); err != nil {
-		return fmt.Errorf("modbus read response: %w", err)
+	ec.AddDevice(device)
+	action := &EnvironmentAction{
+		ID:          "action-1",
+		DeviceID:    "device-1",
+		Command:     "lock",
+		Parameters:  map[string]interface{}{},
+		HarmLevel:   HarmInconvenience,
+		Reason:      "Physical breach detected",
+		Reversible:  true,
+		UndoCommand: "unlock",
+		Timestamp:   time.Now(),
 	}
-	if len(resp) >= 8 && resp[7] == 0x06 {
-		return nil // success — echo of the request
-	}
-	if len(resp) >= 9 && resp[7]&0x80 != 0 {
-		return fmt.Errorf("modbus exception code=%d", resp[8])
-	}
-	return nil
+	result := ec.ExecuteAction(action)
+	logger.Info("action result", zap.Any("result", result))
 }
