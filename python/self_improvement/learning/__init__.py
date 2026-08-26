@@ -29,6 +29,13 @@ from .llm_brain import LLMBrain, LLMResponse, ThinkingMode
 from .intelligent_patcher import IntelligentPatcher, IntelligentPatch
 from .bootstrap import Bootstrap, BootstrapReport
 from .service import UnifiedLearningService
+import logging
+import time
+from typing import Optional
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Cache imports to reduce allocations
 __all__ = [
@@ -44,3 +51,40 @@ __all__ = [
     "Bootstrap", "BootstrapReport",
     "UnifiedLearningService",
 ]
+
+def handle_empty_inputs(func):
+    def wrapper(*args, **kwargs):
+        if not args and not kwargs:
+            logger.warning("Empty input detected")
+            return None
+        return func(*args, **kwargs)
+    return wrapper
+
+def handle_none_values(func):
+    def wrapper(*args, **kwargs):
+        if any(arg is None for arg in args) or any(value is None for value in kwargs.values()):
+            logger.warning("None value detected")
+            return None
+        return func(*args, **kwargs)
+    return wrapper
+
+def handle_timeouts(timeout: Optional[int] = 60):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            result = func(*args, **kwargs)
+            end_time = time.time()
+            if end_time - start_time > timeout:
+                logger.warning(f"Timeout exceeded ({timeout} seconds)")
+                return None
+            return result
+        return wrapper
+    return decorator
+
+# Apply decorators to critical functions
+ExperienceCollector.collect_experience = handle_empty_inputs(handle_none_values(ExperienceCollector.collect_experience))
+PatternRecognizer.recognize_patterns = handle_empty_inputs(handle_none_values(PatternRecognizer.recognize_patterns))
+CodeIntrospector.analyze_code = handle_empty_inputs(handle_none_values(CodeIntrospector.analyze_code))
+AdaptiveOptimizer.optimize = handle_timeouts(timeout=300)(handle_empty_inputs(handle_none_values(AdaptiveOptimizer.optimize)))
+KnowledgeDistiller.distill_knowledge = handle_empty_inputs(handle_none_values(KnowledgeDistiller.distill_knowledge))
+EvolutionController.evolve = handle_timeouts(timeout=600)(handle_empty_inputs(handle_none_values(EvolutionController.evolve)))
