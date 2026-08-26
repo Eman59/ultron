@@ -123,5 +123,123 @@ type ActionInterface struct {
 // WebHandler defines web interaction capabilities.
 type WebHandler interface {
 	// HTTP operations
-	Get(ctx context.Context, url string) (interface{}, error)
+	Get(ctx context.Context, url string) (*http.Response, error)
+	Post(ctx context.Context, url string, data interface{}) (*http.Response, error)
+}
+
+// ExecuteAction performs an external action based on the request.
+func (a *ActionInterface) ExecuteAction(ctx context.Context, req *ActionRequest) (*ActionResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("action request is nil")
+	}
+	if req.RequestID == "" {
+		return nil, fmt.Errorf("request ID is empty")
+	}
+	if req.Domain == 0 {
+		return nil, fmt.Errorf("action domain is unknown")
+	}
+	if req.Operation == "" {
+		return nil, fmt.Errorf("operation is empty")
+	}
+	if req.Target == "" {
+		return nil, fmt.Errorf("target is empty")
+	}
+	if req.Parameters == nil {
+		req.Parameters = make(map[string]interface{})
+	}
+	if req.Priority < 0 {
+		req.Priority = 0
+	}
+	if req.Timeout <= 0 {
+		req.Timeout = 10 * time.Second
+	}
+
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	// Check rate limit
+	if a.rateLimiter != nil {
+		if !a.rateLimiter.Allow(req.RequestID) {
+			return nil, fmt.Errorf("rate limit exceeded")
+		}
+	}
+
+	// Check permission
+	for _, p := range a.permissions {
+		if p.Domain == req.Domain && p.Action == req.Operation {
+			if !p.Allowed {
+				return nil, fmt.Errorf("permission denied")
+			}
+			break
+		}
+	}
+
+	// Execute action
+	var resp *ActionResponse
+	var err error
+	switch req.Domain {
+	case DomainWeb:
+		resp, err = a.webHandler.Execute(ctx, req)
+	case DomainCloud:
+		resp, err = a.cloudHandler.Execute(ctx, req)
+	case DomainIoT:
+		resp, err = a.iotHandler.Execute(ctx, req)
+	case DomainFilesystem:
+		resp, err = a.fsHandler.Execute(ctx, req)
+	default:
+		return nil, fmt.Errorf("unknown domain")
+	}
+
+	// Log audit entry
+	a.logAuditEntry(req, resp)
+
+	return resp, err
+}
+
+// logAuditEntry logs an action audit entry.
+func (a *ActionInterface) logAuditEntry(req *ActionRequest, resp *ActionResponse) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	entry := ActionAuditEntry{
+		Timestamp:   time.Now(),
+		RequestID:   req.RequestID,
+		Domain:      req.Domain,
+		Operation:   req.Operation,
+		Target:      req.Target,
+		Success:     resp.Success,
+		Duration:    resp.Duration,
+		Error:       "",
+		RequestedBy: req.RequestedBy,
+	}
+
+	if resp.Error != nil {
+		entry.Error = resp.Error.Error()
+	}
+
+	a.auditLog = append(a.auditLog, entry)
+}
+
+// GetAuditLog returns the action audit log.
+func (a *ActionInterface) GetAuditLog() []ActionAuditEntry {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	return a.auditLog
+}
+
+// GetMetrics returns the action metrics.
+func (a *ActionInterface) GetMetrics() (uint64, uint64, uint64, time.Duration) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	return a.totalActions, a.successfulActions, a.failedActions, a.totalLatency
+}
+
+// ExecuteActionWithTimeout executes an action with a timeout.
+func (a *ActionInterface) ExecuteActionWithTimeout(ctx context.Context, req *ActionRequest, timeout time.Duration) (*ActionResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	return a.ExecuteAction(ctx, req)
 }
