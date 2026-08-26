@@ -87,76 +87,50 @@ class TransferManager:
                  similarity_threshold: float = 0.3,
                  negative_transfer_threshold: float = 0.1,
                  max_knowledge_store: int = 1000):
-        
+        """
+        Initializes the TransferManager.
+
+        Args:
+            similarity_threshold (float, optional): Threshold for domain similarity. Defaults to 0.3.
+            negative_transfer_threshold (float, optional): Threshold for negative transfer. Defaults to 0.1.
+            max_knowledge_store (int, optional): Maximum number of knowledge units to store. Defaults to 1000.
+        """
         logging.info("Initializing TransferManager")
-        self.similarity_threshold = similarity_threshold
-        self.negative_transfer_threshold = negative_transfer_threshold
-        self.max_knowledge_store = max_knowledge_store
-        
-        # Knowledge store
-        self.knowledge_store: Dict[str, KnowledgeUnit] = {}
-        logging.info("Knowledge store initialized")
-        
-        # Domain profiles
-        self.domains: Dict[str, DomainProfile] = {}
-        logging.info("Domain profiles initialized")
+        self._similarity_threshold = similarity_threshold
+        self._negative_transfer_threshold = negative_transfer_threshold
+        self._max_knowledge_store = max_knowledge_store
+        self._knowledge_units = []
+        self._domain_profiles = {}
 
+    @property
+    def similarity_threshold(self) -> float:
+        """Gets the similarity threshold."""
+        return self._similarity_threshold
 
-    def add_knowledge(self, knowledge_unit: KnowledgeUnit):
-        logging.info(f"Adding knowledge unit {knowledge_unit.knowledge_id} to knowledge store")
-        self.knowledge_store[knowledge_unit.knowledge_id] = knowledge_unit
-        logging.info(f"Knowledge unit {knowledge_unit.knowledge_id} added successfully")
+    @property
+    def negative_transfer_threshold(self) -> float:
+        """Gets the negative transfer threshold."""
+        return self._negative_transfer_threshold
 
+    @property
+    def max_knowledge_store(self) -> int:
+        """Gets the maximum number of knowledge units to store."""
+        return self._max_knowledge_store
 
-    def remove_knowledge(self, knowledge_id: str):
-        logging.info(f"Removing knowledge unit {knowledge_id} from knowledge store")
-        if knowledge_id in self.knowledge_store:
-            del self.knowledge_store[knowledge_id]
-            logging.info(f"Knowledge unit {knowledge_id} removed successfully")
+    def _add_knowledge_unit(self, knowledge_unit: KnowledgeUnit) -> None:
+        """Adds a knowledge unit to the store."""
+        if len(self._knowledge_units) < self._max_knowledge_store:
+            self._knowledge_units.append(knowledge_unit)
         else:
-            logging.warning(f"Knowledge unit {knowledge_id} not found in knowledge store")
+            # Implement a strategy to replace the least useful knowledge unit
+            pass
 
+    def _get_domain_profile(self, domain_id: str) -> DomainProfile:
+        """Gets the domain profile for the given domain ID."""
+        return self._domain_profiles.get(domain_id)
 
-    def get_knowledge(self, knowledge_id: str):
-        logging.info(f"Retrieving knowledge unit {knowledge_id} from knowledge store")
-        if knowledge_id in self.knowledge_store:
-            return self.knowledge_store[knowledge_id]
-        else:
-            logging.warning(f"Knowledge unit {knowledge_id} not found in knowledge store")
-            return None
+    def _update_domain_profile(self, domain_profile: DomainProfile) -> None:
+        """Updates the domain profile."""
+        self._domain_profiles[domain_profile.domain_id] = domain_profile
 
-
-    def add_domain(self, domain_profile: DomainProfile):
-        logging.info(f"Adding domain {domain_profile.domain_id} to domain profiles")
-        self.domains[domain_profile.domain_id] = domain_profile
-        logging.info(f"Domain {domain_profile.domain_id} added successfully")
-
-
-    def remove_domain(self, domain_id: str):
-        logging.info(f"Removing domain {domain_id} from domain profiles")
-        if domain_id in self.domains:
-            del self.domains[domain_id]
-            logging.info(f"Domain {domain_id} removed successfully")
-        else:
-            logging.warning(f"Domain {domain_id} not found in domain profiles")
-
-
-    def get_domain(self, domain_id: str):
-        logging.info(f"Retrieving domain {domain_id} from domain profiles")
-        if domain_id in self.domains:
-            return self.domains[domain_id]
-        else:
-            logging.warning(f"Domain {domain_id} not found in domain profiles")
-            return None
-
-
-    def transfer_knowledge(self, source_domain: str, target_domain: str, knowledge_id: str):
-        logging.info(f"Transferring knowledge from {source_domain} to {target_domain} using knowledge unit {knowledge_id}")
-        # Implement knowledge transfer logic here
-        logging.info(f"Knowledge transfer from {source_domain} to {target_domain} completed")
-
-
-    def evaluate_transfer(self, transfer_result: TransferResult):
-        logging.info(f"Evaluating transfer result: {transfer_result}")
-        # Implement transfer evaluation logic here
-        logging.info(f"Transfer evaluation completed")
+    # Add other methods and properties as needed
