@@ -32,6 +32,9 @@ def get_token() -> Optional[str]:
 
 def read_file(file_path: str) -> Optional[str]:
     """Read a file from the GitHub repo."""
+    if not file_path:
+        return None
+
     token = get_token()
     if not token:
         return None
@@ -44,9 +47,17 @@ def read_file(file_path: str) -> Optional[str]:
             "Accept": "application/vnd.github.v3+json",
         })
         with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status != 200:
+                return None
             data = json.loads(resp.read().decode())
+            if "content" not in data:
+                return None
             content = base64.b64decode(data["content"]).decode("utf-8")
             return content
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
     except Exception:
         return None
 
@@ -57,6 +68,9 @@ def write_file(file_path: str, content: str, commit_message: str) -> Dict[str, A
     
     Returns: {"success": bool, "commit_url": str, "error": str}
     """
+    if not file_path or not content or not commit_message:
+        return {"success": False, "error": "Invalid input: file_path, content, and commit_message are required"}
+
     token = get_token()
     if not token:
         return {"success": False, "error": "No GITHUB_TOKEN set. Get one at github.com/settings/tokens"}
@@ -86,6 +100,8 @@ def write_file(file_path: str, content: str, commit_message: str) -> Dict[str, A
             "Content-Type": "application/json",
         })
         with urllib.request.urlopen(req, timeout=15) as resp:
+            if resp.status != 201:
+                return {"success": False, "error": f"Failed to create commit (status {resp.status})"}
             result = json.loads(resp.read().decode())
             return {
                 "success": True,
@@ -93,34 +109,12 @@ def write_file(file_path: str, content: str, commit_message: str) -> Dict[str, A
                 "sha": result.get("content", {}).get("sha", ""),
             }
     except urllib.error.HTTPError as e:
-        body = e.read().decode()[:200]
-        return {"success": False, "error": f"GitHub API error {e.code}: {body}"}
+        return {"success": False, "error": f"Failed to create commit (status {e.code})"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
-def list_files(directory: str = "") -> list:
-    """List files in a directory on the repo."""
-    token = get_token()
-    if not token:
-        return []
-
-    url = f"{GITHUB_API}/repos/{REPO_OWNER}/{REPO_NAME}/contents/{directory}?ref={BRANCH}"
-    
-    try:
-        req = urllib.request.Request(url, headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github.v3+json",
-        })
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
-            return [{"name": f["name"], "path": f["path"], "type": f["type"]} for f in data]
-    except Exception:
-        return []
-
-
 def _get_file_sha(file_path: str, token: str) -> Optional[str]:
-    """Get the SHA of an existing file (needed for updates)."""
     url = f"{GITHUB_API}/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}?ref={BRANCH}"
     
     try:
@@ -129,7 +123,15 @@ def _get_file_sha(file_path: str, token: str) -> Optional[str]:
             "Accept": "application/vnd.github.v3+json",
         })
         with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status != 200:
+                return None
             data = json.loads(resp.read().decode())
-            return data.get("sha")
+            if "sha" not in data:
+                return None
+            return data["sha"]
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
     except Exception:
-        return None  # File doesn't exist yet (will be created)
+        return None
