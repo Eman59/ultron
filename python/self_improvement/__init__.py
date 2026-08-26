@@ -20,3 +20,36 @@ from .core.performance_monitor import PerformanceMonitor
 from .code_gen.patch_generator import PatchGenerator
 from .sandbox.test_runner import SandboxRunner
 from .evaluator.improvement_evaluator import ImprovementEvaluator
+
+def validate_input(input_data):
+    """Validate input data to prevent edge cases"""
+    if input_data is None:
+        raise ValueError("Input data cannot be None")
+    if not input_data:
+        raise ValueError("Input data cannot be empty")
+
+def handle_timeout(func, timeout=60):
+    """Handle timeouts for functions"""
+    import signal
+    def handler(signum, frame):
+        raise TimeoutError("Function timed out")
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(timeout)
+    try:
+        return func()
+    finally:
+        signal.alarm(0)
+
+try:
+    # Initialize components
+    self_improvement_engine = SelfImprovementEngine()
+    performance_monitor = PerformanceMonitor()
+    patch_generator = PatchGenerator()
+    sandbox_runner = SandboxRunner()
+    improvement_evaluator = ImprovementEvaluator()
+
+    # Validate inputs and handle timeouts
+    validate_input(self_improvement_engine.input_data)
+    handle_timeout(self_improvement_engine.run)
+except (ValueError, TimeoutError) as e:
+    print(f"Error: {e}")
