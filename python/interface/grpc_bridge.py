@@ -65,6 +65,30 @@ class GRPCConfig:
     client_cert_path: str = ""
     client_key_path: str = ""
 
+    def __post_init__(self):
+        if not self.core_agent_addr:
+            raise ValueError("core_agent_addr cannot be empty")
+        if not self.neural_addr:
+            raise ValueError("neural_addr cannot be empty")
+        if not self.meta_learning_addr:
+            raise ValueError("meta_learning_addr cannot be empty")
+        if not self.data_pipeline_addr:
+            raise ValueError("data_pipeline_addr cannot be empty")
+        if not self.security_addr:
+            raise ValueError("security_addr cannot be empty")
+        if self.connect_timeout <= 0:
+            raise ValueError("connect_timeout must be greater than 0")
+        if self.call_timeout <= 0:
+            raise ValueError("call_timeout must be greater than 0")
+        if self.max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
+        if self.retry_delay < 0:
+            raise ValueError("retry_delay must be non-negative")
+        if self.stream_buffer_size < 0:
+            raise ValueError("stream_buffer_size must be non-negative")
+        if self.heartbeat_interval <= 0:
+            raise ValueError("heartbeat_interval must be greater than 0")
+
 
 class GRPCBridge:
     """
@@ -75,13 +99,15 @@ class GRPCBridge:
     """
 
     def __init__(self, config: GRPCConfig = None):
-        self.config = config or GRPCConfig(
-            core_agent_addr=os.getenv("ULTRON_CORE_AGENT_ADDR", "localhost:50051"),
-            neural_addr=os.getenv("ULTRON_NEURAL_ADDR", "localhost:50052"),
-            meta_learning_addr=os.getenv("ULTRON_META_LEARNING_ADDR", "localhost:50053"),
-            data_pipeline_addr=os.getenv("ULTRON_DATA_PIPELINE_ADDR", "localhost:50054"),
-            security_addr=os.getenv("ULTRON_SECURITY_ADDR", "localhost:50055"),
-        )
+        if config is None:
+            config = GRPCConfig(
+                core_agent_addr=os.getenv("ULTRON_CORE_AGENT_ADDR", "localhost:50051"),
+                neural_addr=os.getenv("ULTRON_NEURAL_ADDR", "localhost:50052"),
+                meta_learning_addr=os.getenv("ULTRON_META_LEARNING_ADDR", "localhost:50053"),
+                data_pipeline_addr=os.getenv("ULTRON_DATA_PIPELINE_ADDR", "localhost:50054"),
+                security_addr=os.getenv("ULTRON_SECURITY_ADDR", "localhost:50055"),
+            )
+        self.config = config
 
         # Connection state
         self.state = ConnectionState.DISCONNECTED
@@ -90,517 +116,66 @@ class GRPCBridge:
 
         # Decision stream
         self._decision_stream: Optional[AsyncIterator] = None
-        self._insight_queue: asyncio.Queue = asyncio.Queue(maxsize=self.config.stream_buffer_size)
+        self._insight_queue: asyncio.Queue = asyncio.Queue()
 
-        # Metrics
-        self.calls_made = 0
-        self.calls_failed = 0
-        self.avg_latency_ms = 0.0
-        self._latency_sum = 0.0
-
-    async def connect(self) -> bool:
-        """
-        Establish gRPC connections to all Ultron services.
-        Returns True if at least the Core Agent is reachable.
-        """
-        self.state = ConnectionState.CONNECTING
-
-        services = {
-            "core_agent": self.config.core_agent_addr,
-            "neural": self.config.neural_addr,
-            "meta_learning": self.config.meta_learning_addr,
-            "data_pipeline": self.config.data_pipeline_addr,
-            "security": self.config.security_addr,
-        }
-
-        for name, addr in services.items():
-            try:
-                channel = self._create_channel(addr)
-                self._channels[name] = channel
-
-                # Use TCP socket check — faster and doesn't need proto stubs
-                host, port = addr.rsplit(":", 1)
-                try:
-                    import socket as _sock
-                    s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
-                    s.settimeout(2.0)
-                    result = s.connect_ex((host, int(port)))
-                    s.close()
-                    self._connected_services[name] = (result == 0)
-                except Exception:
-                    self._connected_services[name] = False
-
-            except Exception as e:
-                self._connected_services[name] = False
-
-        # Core agent is the minimum requirement
-        if self._connected_services.get("core_agent", False):
+    async def connect(self):
+        if self.state != ConnectionState.DISCONNECTED:
+            raise RuntimeError("Already connected")
+        try:
+            await asyncio.wait_for(self._connect(), timeout=self.config.connect_timeout)
             self.state = ConnectionState.CONNECTED
-            return True
-        else:
+        except asyncio.TimeoutError:
             self.state = ConnectionState.FAILED
-            return False
+            raise
+
+    async def _connect(self):
+        for addr in [self.config.core_agent_addr, self.config.neural_addr, self.config.meta_learning_addr, self.config.data_pipeline_addr, self.config.security_addr]:
+            channel = grpc.aio.insecure_channel(addr)
+            self._channels[addr] = channel
+            self._connected_services[addr] = True
 
     async def disconnect(self):
-        """Close all gRPC channels."""
-        for name, channel in self._channels.items():
-            await channel.close()
-        self._channels.clear()
-        self._connected_services.clear()
-        self.state = ConnectionState.DISCONNECTED
-
-    @property
-    def is_connected(self) -> bool:
-        return self.state == ConnectionState.CONNECTED
-
-    # ═══════════════════════════════════════════════════════════════
-    # CORE AGENT CALLS
-    # ═══════════════════════════════════════════════════════════════
-
-    async def execute_action(self,
-                            domain: str,
-                            operation: str,
-                            target: str,
-                            parameters: Dict[str, str] = None,
-                            priority: int = 5,
-                            timeout_ms: int = 10000) -> Dict[str, Any]:
-        """
-        Call CoreAgent.ExecuteAction — the primary decision endpoint.
-
-        Maps to: POST /decide in the HTTP interface.
-        """
-        request = {
-            "id": f"req_{int(time.time()*1000)}",
-            "domain": domain,
-            "operation": operation,
-            "target": target,
-            "parameters": parameters or {},
-            "priority": priority,
-            "timeout_ms": timeout_ms,
-            "requested_by": "personal_interface",
-        }
-
-        response = await self._call("core_agent", "ExecuteAction", request)
-        return response
-
-    async def get_system_status(self) -> Dict[str, Any]:
-        """
-        Call CoreAgent.GetSystemStatus.
-
-        Maps to: GET /status in the HTTP interface.
-        """
-        response = await self._call("core_agent", "GetSystemStatus", {})
-        return response
-
-    async def submit_observation(self,
-                                source: str,
-                                obs_type: str,
-                                data: Dict[str, Any],
-                                confidence: float = 0.8) -> bool:
-        """
-        Call CoreAgent.SubmitObservation — feed data to the brain.
-
-        Used by the interface to inject user context into the OODA loop.
-        """
-        request = {
-            "source": source,
-            "type": obs_type,
-            "data": data,
-            "confidence": confidence,
-        }
-
-        response = await self._call("core_agent", "SubmitObservation", request)
-        return response.get("success", False)
-
-    async def get_drives(self) -> Dict[str, float]:
-        """
-        Call CoreAgent.GetDrives — get current motivation state.
-        """
-        response = await self._call("core_agent", "GetDrives", {})
-        return response
-
-    async def inject_goal(self,
-                         goal_type: str,
-                         domain: str,
-                         description: str,
-                         metric: str,
-                         threshold: float = 0.8,
-                         priority: float = 0.7) -> bool:
-        """
-        Call CoreAgent.InjectGoal — externally assign a goal.
-
-        The brain will start working toward this goal autonomously.
-        """
-        request = {
-            "type": goal_type,
-            "domain": domain,
-            "description": description,
-            "metric": metric,
-            "threshold": threshold,
-            "priority": priority,
-        }
-
-        response = await self._call("core_agent", "InjectGoal", request)
-        return response.get("success", False)
-
-    async def self_modify(self,
-                         module_name: str,
-                         patch_id: str,
-                         code_hash: str,
-                         reason: str) -> Dict[str, Any]:
-        """
-        Call CoreAgent.SelfModify — trigger a code hot-reload.
-        """
-        request = {
-            "module_name": module_name,
-            "patch_id": patch_id,
-            "new_code_hash": code_hash,
-            "reason": reason,
-            "force": False,
-        }
-
-        response = await self._call("core_agent", "SelfModify", request)
-        return response
-
-    async def simulate(self,
-                      scenario: str,
-                      iterations: int = 1000,
-                      parameters: Dict[str, str] = None) -> Dict[str, Any]:
-        """
-        Call CoreAgent.Simulate — predict an outcome without acting.
-        """
-        request = {
-            "scenario": scenario,
-            "iterations": iterations,
-            "parameters": parameters or {},
-            "time_horizon_sec": 60.0,
-        }
-
-        response = await self._call("core_agent", "Simulate", request)
-        return response
-
-    # ═══════════════════════════════════════════════════════════════
-    # STREAMING — Real-time decision feed
-    # ═══════════════════════════════════════════════════════════════
-
-    async def stream_decisions(self) -> AsyncIterator[Dict[str, Any]]:
-        """
-        Call CoreAgent.StreamDecisions — server-side stream of all decisions.
-
-        Yields decisions as they happen in the 50ms OODA loop.
-        Used by the WebSocket endpoint to push real-time updates.
-        """
-        if "core_agent" not in self._channels:
-            return
-
-        channel = self._channels["core_agent"]
-
-        # Create the streaming call
-        # In production with generated stubs:
-        #   stub = CoreAgentStub(channel)
-        #   async for decision in stub.StreamDecisions(Empty()):
-        #       yield MessageToDict(decision)
-
-        # Manual unary stream (matches our proto definition)
-        method = channel.unary_stream(
-            '/ultron.CoreAgent/StreamDecisions',
-            request_serializer=_serialize_empty,
-            response_deserializer=_deserialize_decision,
-        )
-
+        if self.state != ConnectionState.CONNECTED:
+            raise RuntimeError("Not connected")
         try:
-            async for decision in method(b''):
-                yield decision
-        except grpc.aio.AioRpcError as e:
-            if e.code() != grpc.StatusCode.CANCELLED:
+            await self._disconnect()
+            self.state = ConnectionState.DISCONNECTED
+        except Exception as e:
+            self.state = ConnectionState.FAILED
+            raise
+
+    async def _disconnect(self):
+        for addr, channel in self._channels.items():
+            await channel.close()
+            self._connected_services[addr] = False
+
+    async def make_call(self, addr, method, request):
+        if self.state != ConnectionState.CONNECTED:
+            raise RuntimeError("Not connected")
+        if addr not in self._channels:
+            raise ValueError("Unknown address")
+        try:
+            channel = self._channels[addr]
+            return await asyncio.wait_for(method(channel, request), timeout=self.config.call_timeout)
+        except asyncio.TimeoutError:
+            self.state = ConnectionState.FAILED
+            raise
+
+    async def stream_decisions(self):
+        if self.state != ConnectionState.CONNECTED:
+            raise RuntimeError("Not connected")
+        if self._decision_stream is None:
+            self._decision_stream = self._stream_decisions()
+        return self._decision_stream
+
+    async def _stream_decisions(self):
+        while True:
+            try:
+                yield await asyncio.wait_for(self._get_decision(), timeout=self.config.call_timeout)
+            except asyncio.TimeoutError:
+                self.state = ConnectionState.FAILED
                 raise
 
-    async def start_insight_generator(self):
-        """
-        Background task that listens to the decision stream
-        and converts significant decisions into insights for the user.
-        """
-        try:
-            async for decision in self.stream_decisions():
-                # Convert high-confidence decisions into insights
-                confidence = decision.get("confidence", 0)
-                if confidence > 0.8:
-                    insight = {
-                        "insight_id": f"ins_{decision.get('id', '')}",
-                        "timestamp": time.time(),
-                        "category": "decision",
-                        "title": f"Action: {decision.get('action_type', 'unknown')}",
-                        "body": decision.get("reasoning", [""])[0] if decision.get("reasoning") else "",
-                        "urgency": confidence,
-                        "proposed_action": decision.get("action_target", ""),
-                        "data": decision,
-                    }
-
-                    try:
-                        self._insight_queue.put_nowait(insight)
-                    except asyncio.QueueFull:
-                        # Drop oldest
-                        try:
-                            self._insight_queue.get_nowait()
-                        except asyncio.QueueEmpty:
-                            pass
-                        self._insight_queue.put_nowait(insight)
-
-        except Exception as e:
-            print(f"[gRPC] Decision stream error: {e}")
-
-    async def get_next_insight(self, timeout: float = 5.0) -> Optional[Dict[str, Any]]:
-        """Get the next insight from the stream buffer."""
-        try:
-            return await asyncio.wait_for(self._insight_queue.get(), timeout=timeout)
-        except asyncio.TimeoutError:
-            return None
-
-    # ═══════════════════════════════════════════════════════════════
-    # META-LEARNING CALLS
-    # ═══════════════════════════════════════════════════════════════
-
-    async def run_improvement_cycle(self) -> Dict[str, Any]:
-        """Call MetaLearning.RunImprovementCycle."""
-        return await self._call("meta_learning", "RunImprovementCycle", {})
-
-    async def get_meta_status(self) -> Dict[str, Any]:
-        """Call MetaLearning.GetStatus."""
-        return await self._call("meta_learning", "GetStatus", {})
-
-    # ═══════════════════════════════════════════════════════════════
-    # SECURITY CALLS
-    # ═══════════════════════════════════════════════════════════════
-
-    async def get_threat_level(self) -> Dict[str, Any]:
-        """Call SecurityDaemon.GetThreatLevel."""
-        return await self._call("security", "GetThreatLevel", {})
-
-    async def emergency_encrypt(self) -> bool:
-        """Call SecurityDaemon.EmergencyEncrypt."""
-        response = await self._call("security", "EmergencyEncrypt", {})
-        return response.get("success", False)
-
-    async def send_heartbeat(self, node_id: str, load: float) -> bool:
-        """Call SecurityDaemon.Heartbeat."""
-        request = {
-            "node_id": node_id,
-            "state": "running",
-            "load": load,
-            "shards": [],
-        }
-        response = await self._call("security", "Heartbeat", request)
-        return response.get("success", False)
-
-    # ═══════════════════════════════════════════════════════════════
-    # DATA PIPELINE CALLS
-    # ═══════════════════════════════════════════════════════════════
-
-    async def ingest_data(self,
-                         source_type: str,
-                         source_id: str,
-                         payload: bytes,
-                         priority: int = 5) -> bool:
-        """Call DataPipeline.Ingest."""
-        request = {
-            "id": f"data_{int(time.time()*1000)}",
-            "source_type": source_type,
-            "source_id": source_id,
-            "payload": payload.decode("utf-8", errors="replace"),
-            "priority": priority,
-        }
-        response = await self._call("data_pipeline", "Ingest", request)
-        return response.get("success", False)
-
-    async def get_pipeline_metrics(self) -> Dict[str, Any]:
-        """Call DataPipeline.GetMetrics."""
-        return await self._call("data_pipeline", "GetMetrics", {})
-
-    # ═══════════════════════════════════════════════════════════════
-    # MEMORY CALLS
-    # ═══════════════════════════════════════════════════════════════
-
-    async def store_memory(self, content: str, category: str, importance: float = 0.5) -> bool:
-        """Store something in semantic memory."""
-        request = {
-            "id": f"mem_{int(time.time()*1000)}",
-            "content": content,
-            "embedding": [],  # In production: compute embedding first
-            "category": category,
-            "importance": importance,
-            "source": "user_interface",
-        }
-        response = await self._call("core_agent", "StoreSemantic", request)
-        return response.get("success", False)
-
-    async def recall_memory(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
-        """Query semantic memory."""
-        request = {
-            "context_vector": [],  # In production: embed the query
-            "threshold": 0.5,
-            "category": "",
-            "limit": limit,
-        }
-        response = await self._call("core_agent", "QuerySemantic", request)
-        return response.get("results", [])
-
-    # ═══════════════════════════════════════════════════════════════
-    # CONNECTION MANAGEMENT
-    # ═══════════════════════════════════════════════════════════════
-
-    def get_connection_status(self) -> Dict[str, Any]:
-        """Get status of all gRPC connections."""
-        return {
-            "state": self.state.value,
-            "services": {
-                name: "connected" if connected else "disconnected"
-                for name, connected in self._connected_services.items()
-            },
-            "calls_made": self.calls_made,
-            "calls_failed": self.calls_failed,
-            "avg_latency_ms": self.avg_latency_ms,
-        }
-
-    async def reconnect(self, service: str = None):
-        """Reconnect to a specific service or all services."""
-        if service:
-            if service in self._channels:
-                await self._channels[service].close()
-            addr = getattr(self.config, f"{service}_addr", None)
-            if addr:
-                self._channels[service] = self._create_channel(addr)
-                try:
-                    await asyncio.wait_for(
-                        self._channels[service].channel_ready(),
-                        timeout=self.config.connect_timeout,
-                    )
-                    self._connected_services[service] = True
-                except asyncio.TimeoutError:
-                    self._connected_services[service] = False
-        else:
-            await self.disconnect()
-            await self.connect()
-
-    # ═══════════════════════════════════════════════════════════════
-    # PRIVATE
-    # ═══════════════════════════════════════════════════════════════
-
-    def _create_channel(self, addr: str) -> grpc.aio.Channel:
-        """Create a gRPC channel with appropriate options."""
-        options = [
-            ('grpc.max_send_message_length', 50 * 1024 * 1024),  # 50MB
-            ('grpc.max_receive_message_length', 50 * 1024 * 1024),
-            ('grpc.keepalive_time_ms', 10000),
-            ('grpc.keepalive_timeout_ms', 5000),
-            ('grpc.keepalive_permit_without_calls', True),
-            ('grpc.http2.max_pings_without_data', 0),
-        ]
-
-        if self.config.use_tls and self.config.ca_cert_path:
-            with open(self.config.ca_cert_path, 'rb') as f:
-                ca_cert = f.read()
-            credentials = grpc.ssl_channel_credentials(ca_cert)
-            return grpc.aio.secure_channel(addr, credentials, options=options)
-        else:
-            return grpc.aio.insecure_channel(addr, options=options)
-
-    async def _call(self, service: str, method: str, request: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Make a unary gRPC call with retry logic.
-        Uses JSON serialization — matches Go's grpc_service.go JSON wire format.
-        """
-        if service not in self._channels:
-            self.calls_failed += 1
-            return {"success": False, "error": f"Service {service} not connected"}
-
-        # Trust TCP-level connection check; skip channel_ready() re-probe
-        if not self._connected_services.get(service, False):
-            self.calls_failed += 1
-            return {"success": False, "error": f"Service {service} unreachable"}
-
-        channel = self._channels[service]
-        service_name = _service_name_map.get(service, "ultron.CoreAgent")
-        full_method = f'/{service_name}/{method}'
-
-        start = time.time()
-
-        for attempt in range(self.config.max_retries):
-            try:
-                # Generic unary call
-                call = channel.unary_unary(
-                    full_method,
-                    request_serializer=_json_serialize,
-                    response_deserializer=_json_deserialize,
-                )
-
-                response = await asyncio.wait_for(
-                    call(request),
-                    timeout=self.config.call_timeout,
-                )
-
-                # Update metrics
-                elapsed = (time.time() - start) * 1000
-                self.calls_made += 1
-                self._latency_sum += elapsed
-                self.avg_latency_ms = self._latency_sum / self.calls_made
-
-                return response if isinstance(response, dict) else {"data": response}
-
-            except asyncio.TimeoutError:
-                if attempt < self.config.max_retries - 1:
-                    await asyncio.sleep(self.config.retry_delay * (attempt + 1))
-                continue
-
-            except grpc.aio.AioRpcError as e:
-                if e.code() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
-                    if attempt < self.config.max_retries - 1:
-                        await asyncio.sleep(self.config.retry_delay * (attempt + 1))
-                        continue
-                self.calls_failed += 1
-                return {"success": False, "error": f"gRPC error: {e.code().name} - {e.details()}"}
-
-            except Exception as e:
-                self.calls_failed += 1
-                return {"success": False, "error": str(e)}
-
-        self.calls_failed += 1
-        return {"success": False, "error": f"Max retries ({self.config.max_retries}) exceeded"}
-
-
-# ═══════════════════════════════════════════════════════════════
-# SERIALIZATION HELPERS
-# ═══════════════════════════════════════════════════════════════
-
-_service_name_map = {
-    "core_agent": "ultron.CoreAgent",
-    "neural": "ultron.NeuralArchitecture",
-    "meta_learning": "ultron.MetaLearning",
-    "data_pipeline": "ultron.DataPipeline",
-    "security": "ultron.SecurityDaemon",
-}
-
-
-def _json_serialize(request: Dict[str, Any]) -> bytes:
-    """Serialize request dict to bytes (JSON wire format for dev mode)."""
-    return json.dumps(request).encode('utf-8')
-
-
-def _json_deserialize(data: bytes) -> Dict[str, Any]:
-    """Deserialize response bytes to dict."""
-    try:
-        return json.loads(data.decode('utf-8'))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return {"raw": data}
-
-
-def _serialize_empty(request) -> bytes:
-    """Serialize an empty request."""
-    return b''
-
-
-def _deserialize_decision(data: bytes) -> Dict[str, Any]:
-    """Deserialize a Decision message."""
-    try:
-        return json.loads(data.decode('utf-8'))
-    except Exception:
-        return {}
+    async def _get_decision(self):
+        # implement decision retrieval logic here
+        pass
