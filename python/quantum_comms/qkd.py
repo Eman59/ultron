@@ -79,6 +79,8 @@ class BB84Protocol:
             error_threshold: Maximum QBER before declaring eavesdropping.
                             BB84 theory shows >11% error = guaranteed eavesdropper.
         """
+        if error_threshold < 0 or error_threshold > 1:
+            raise ValueError("Error threshold must be between 0 and 1")
         self.error_threshold: float = error_threshold
         self.sessions: Dict[str, QKDSession] = {}
 
@@ -94,8 +96,30 @@ class BB84Protocol:
             alice_node: Sender node ID
             bob_node: Receiver node ID
             key_length: Desired key length in bits
-            eavesdropper_present: Simulate an eavesdropper (for testing)
-        
+            eavesdropper_present: Simulate an eavesdropper
+
         Returns:
-            QKDSession: The quantum key distribution session.
+            QKDSession: The quantum key distribution session
         """
+        if not alice_node or not bob_node:
+            raise ValueError("Node IDs cannot be empty")
+        if key_length <= 0:
+            raise ValueError("Key length must be a positive integer")
+        
+        session_id = secrets.token_hex(16)
+        session = QKDSession(session_id, alice_node, bob_node, key_length)
+        self.sessions[session_id] = session
+        session.started_at = time.time()
+
+        try:
+            # ... (rest of the method remains the same)
+        except Exception as e:
+            session.status = "failed"
+            session.completed_at = time.time()
+            raise e
+        finally:
+            if session.status != "failed":
+                session.status = "completed"
+                session.completed_at = time.time()
+
+        return session
