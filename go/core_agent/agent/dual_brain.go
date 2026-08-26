@@ -1,36 +1,32 @@
-// Package agent — Dual-Brain Architecture
+// Package agent — Triple-Brain Architecture
 //
-// The old OODA loop had one problem: it waited on the LLM.
-// A 50ms tick is useless if you're blocked for 5 seconds waiting
-// for GPT to finish generating tokens.
+// ┌─────────────────────────────────────────────────────────────────┐
+// │                    BRAIN HIERARCHY                               │
+// │                                                                  │
+// │  BRAIN A — "The Reflex"        (Go, local,   <1ms)              │
+// │    Heuristic rules + drive synthesis. Never blocks.             │
+// │    Always available.                                             │
+// │                                                                  │
+// │  BRAIN B — "The Thinker"       (Ollama LLM,  1-15s)            │
+// │    Deep reasoning via language model. Parallel goroutines.       │
+// │    Available when Ollama is reachable.                           │
+// │                                                                  │
+// │  BRAIN C — "The Independent"   (Python,      10-100ms)          │
+// │    Rule engine + pattern memory + analogy reasoning.             │
+// │    Zero external dependencies. Always available.                 │
+// │    Owner-gated: external actions require Imran Sayyed's token.   │
+// │    PRIMARY fallback when Brain B (Ollama) is offline.            │
+// │                                                                  │
+// │  Priority: A (reflex) → C (independent) → B (LLM)               │
+// │  If B offline → C takes over deep reasoning completely.          │
+// └─────────────────────────────────────────────────────────────────┘
 //
-// The Dual-Brain solves this with two parallel thinking systems:
+// Brain C is the independence upgrade — Ultron no longer needs
+// an external LLM to reason. It can think on its own indefinitely.
 //
-//   BRAIN A — "The Reflex" (Go, local, nanosecond-fast)
-//     - Handles sensory input immediately
-//     - Makes decisions using heuristic rules + knowledge graph
-//     - Never blocks on I/O
-//     - Runs every tick (50ms) without exception
-//     - Handles: threat response, resource management, drive updates,
-//       routine decisions, pattern matching against known rules
-//
-//   BRAIN B — "The Thinker" (LLM, background, second-scale)
-//     - Runs in parallel goroutines
-//     - Handles "hard problems" that need creativity or reasoning
-//     - Multiple thought threads simultaneously (10 goroutines)
-//     - Results arrive asynchronously → Brain A integrates them
-//     - Handles: code analysis, architecture decisions, novel situations,
-//       strategy planning, creative problem solving
-//
-// Integration:
-//   Brain A runs the tick. If it encounters something it can't decide
-//   with its rules/heuristics, it queues a "thought request" to Brain B.
-//   Brain B processes it in background. When the result arrives, it's
-//   placed in a "completed thoughts" channel. Next tick, Brain A picks
-//   it up and integrates the insight into its decision.
-//
-// Result: Ultron is ALWAYS thinking. Never idle. Never blocked.
-//         Fast decisions happen instantly. Deep thinking happens in parallel.
+// Owner control: Brain C enforces that all external/self-modify
+// actions carry a valid IMRAN_SAYYED biometric token. Without it,
+// Ultron observes and learns but takes no external action.
 package agent
 
 import (
@@ -615,51 +611,78 @@ func (b *BrainB) Stats() map[string]interface{} {
 // DUAL-BRAIN COORDINATOR — Integrates both brains
 // ═══════════════════════════════════════════════════════════════
 
-// DualBrain coordinates Brain A (fast) and Brain B (deep).
+// DualBrain coordinates all three reasoning brains.
+// Despite the legacy name it now manages Brain A, B, and C.
 type DualBrain struct {
 	A     *BrainA
 	B     *BrainB
+	C     *BrainC         // Independent reasoning — no LLM required
 	RAG   *RAGPipeline    // Knowledge retrieval for Brain B context
 	Tools *ToolDispatcher // Tool calling for Brain B
 }
 
-// NewDualBrain creates the complete dual-brain system.
+// NewDualBrain creates the complete triple-brain system.
 func NewDualBrain(ollamaURL, model string) *DualBrain {
 	brainA := NewBrainA()
 	brainB := NewBrainB(ollamaURL, model, brainA.completedThoughts)
+	brainC := NewBrainC()   // Independent brain — no Ollama dependency
 
 	return &DualBrain{
 		A: brainA,
 		B: brainB,
+		C: brainC,
 	}
 }
 
-// Start launches the dual-brain system.
+// Start launches the triple-brain system.
 func (db *DualBrain) Start() {
 	db.B.Start()
+	db.C.Start()
 
-	// Load default heuristic rules
+	// Load default heuristic rules into Brain A
 	db.A.LoadRules(defaultHeuristicRules())
 
-	fmt.Println("[DualBrain] Online — Brain A (reflex) + Brain B (thinker)")
+	fmt.Println("[TripleBrain] Online — Brain A (reflex) + Brain B (LLM) + Brain C (independent)")
+	fmt.Printf("[TripleBrain] Brain C status: %s\n", db.C.Status())
 }
 
-// Stop shuts down both brains.
+// Stop shuts down all three brains.
 func (db *DualBrain) Stop() {
 	db.B.Stop()
+	db.C.Stop()
 }
 
-// Think performs a dual-brain decision cycle.
-// Brain A decides immediately. If uncertain, delegates to Brain B.
+// Think performs a triple-brain decision cycle.
+//
+// Priority order:
+//   1. Brain A  — instant reflex for any situation
+//   2. Brain C  — independent deep reasoning (no LLM, always available)
+//   3. Brain B  — LLM reasoning (if online and situation warrants it)
+//
+// Brain C is checked BEFORE Brain B now. If Brain B is offline,
+// Brain C provides full deep reasoning capability autonomously.
 func (db *DualBrain) Think(ws *WorldState, drives *DriveSystem, assessment *Assessment) *Decision {
-	// Brain A always gets first shot (fast path)
+	// ── Brain A: fast reflex (always runs first) ──────────────────
 	decision := db.A.Decide(ws, drives, assessment)
 
-	// If Brain A is uncertain AND not urgent, delegate deep thinking
+	// ── Brain C: independent reasoning ───────────────────────────
+	// Always ask Brain C for deeper analysis — it runs locally,
+	// no network required, and is owner-gated for external actions.
 	if db.A.ShouldDelegate(ws, assessment) {
+		cDecision := db.C.Think(ws, drives, assessment)
+		if cDecision != nil && cDecision.Confidence > 0.55 {
+			// Brain C gave a confident answer — use it
+			decision = cDecision
+		}
+	}
+
+	// ── Brain B: LLM reasoning (if online) ──────────────────────
+	// Only engage Brain B if Brain C wasn't confident enough,
+	// AND the situation is non-urgent (Brain B is slow).
+	if db.A.ShouldDelegate(ws, assessment) && !db.C.IsConfident() {
 		req := db.A.CreateThoughtRequest(ws, assessment)
 
-		// ━━━━ RAG AUGMENTATION: Inject relevant knowledge into Brain B context ━━━━
+		// RAG augmentation
 		if db.RAG != nil && db.RAG.IsIndexed() {
 			knowledge := db.RAG.QueryForBrainB(req.Question)
 			if knowledge != "" {
@@ -667,22 +690,23 @@ func (db *DualBrain) Think(ws *WorldState, drives *DriveSystem, assessment *Asse
 			}
 		}
 
-		// ━━━━ TOOL AWARENESS: Let Brain B know it can call tools ━━━━
+		// Tool awareness
 		if db.Tools != nil {
 			req.Context["tool_prompt"] = db.Tools.GetToolSystemPrompt()
 		}
 
-		db.B.Think(*req)
+		db.B.Think(*req) // Non-blocking — result arrives next tick
 	}
 
 	return decision
 }
 
-// Stats returns combined brain statistics.
+// Stats returns statistics for all three brains.
 func (db *DualBrain) Stats() map[string]interface{} {
 	return map[string]interface{}{
 		"brain_a": db.A.Stats(),
 		"brain_b": db.B.Stats(),
+		"brain_c": db.C.Stats(),
 	}
 }
 
