@@ -1473,27 +1473,21 @@ async function _streamAudioSpeak(text){
         done(false);
       };
       // Timeout: only reject if audio never started loading
-      // If it started, keep waiting (long responses can take time)
+      // Piper needs up to 10s on first call (model cold load)
+      // After warmup it's ~1-2s
       setTimeout(()=>{
         if(!playStarted) done(false);
         // If playStarted but not ended yet — keep waiting, don't time out
-      },7000);
+      },12000);
       audio.load();
     });
   }catch(e){return false;}
 }
 function _browserSynthSpeak(text){
-  const sents=text.match(/[^.!?…]+[.!?…]+|\S[^.!?]*$/g)||[text];
-  let i=0;
-  function next(){
-    if(i>=sents.length||!isSpeaking){_afterSpeak();return;}
-    const u=new SpeechSynthesisUtterance(sents[i].trim());
-    u.rate=0.78;u.pitch=0.55;u.volume=1.0;if(bestVoice)u.voice=bestVoice;
-    u.onend=()=>{i++;setTimeout(next,60);};
-    u.onerror=()=>{_afterSpeak();};
-    synth.speak(u);
-  }
-  setTimeout(next,80);
+  // Browser synth disabled — Piper+SoX is the only voice for Ultron.
+  // If /tts/stream failed, stay silent rather than play the robotic browser voice.
+  _afterSpeak();
+  console.warn('[TTS] stream failed — staying silent (Piper unavailable?)');
 }
 function stopSpeaking(){
   if(_curAudio){try{_curAudio.pause();_curAudio.src='';}catch(e){}_curAudio=null;}

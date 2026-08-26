@@ -464,12 +464,13 @@ class VoiceEvolutionEngine:
         # Try providers in order of preference
         for provider in self._available_providers:
             try:
-                if provider == VoiceProvider.EDGE_TTS:
+                if provider == VoiceProvider.PIPER:
+                    # Route through our dark-processed tts_engine
+                    return self._synth_piper_dark(request_id, text, params)
+                elif provider == VoiceProvider.EDGE_TTS:
                     return self._synth_edge_tts(request_id, text, params, emotion)
                 elif provider == VoiceProvider.OPENAI_TTS:
                     return self._synth_openai_tts(request_id, text, params, emotion)
-                elif provider == VoiceProvider.PIPER:
-                    return self._synth_piper(request_id, text, params)
                 elif provider == VoiceProvider.SYSTEM:
                     return self._synth_system(request_id, text, params)
             except Exception:
@@ -480,6 +481,24 @@ class VoiceEvolutionEngine:
             success=False,
             error="No TTS provider available",
         )
+
+    def _synth_piper_dark(self, request_id: str, text: str,
+                          params: Dict[str, Any]) -> "SpeechResult":
+        """
+        Route through tts_engine.py which does Piper + SoX dark processing.
+        Deep, dark, powerful — the real Ultron voice.
+        """
+        from .tts_engine import synthesize as _synth
+        path = _synth(text)
+        if path and os.path.exists(path):
+            return SpeechResult(
+                request_id=request_id,
+                success=True,
+                audio_path=path,
+                provider="piper_dark",
+                voice_used="en_US-ryan-high+sox",
+            )
+        raise RuntimeError("Piper dark synthesis failed")
 
     def _synth_edge_tts(self, request_id: str, text: str,
                          params: Dict[str, Any], emotion: VoiceEmotion) -> SpeechResult:
@@ -734,8 +753,19 @@ class VoiceEvolutionEngine:
     def _detect_providers(self):
         """Detect which TTS providers are available."""
         self._available_providers = []
-        
-        # Check for edge-tts (pip install edge-tts)
+
+        # ── PRIORITY 1: Piper + SoX dark processing ──────────────
+        # Check if our processed piper engine works (model file exists)
+        try:
+            from pathlib import Path as _P
+            _model = _P(__file__).parent.parent.parent / "models" / "tts" / "en_US-ryan-high.onnx"
+            if _model.exists():
+                from piper.voice import PiperVoice  # noqa — just checking import
+                self._available_providers.append(VoiceProvider.PIPER)
+        except Exception:
+            pass
+
+        # ── PRIORITY 2: edge-tts ──────────────────────────────────
         try:
             result = subprocess.run(["edge-tts", "--list-voices"],
                                    capture_output=True, timeout=5)
@@ -743,19 +773,11 @@ class VoiceEvolutionEngine:
                 self._available_providers.append(VoiceProvider.EDGE_TTS)
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
-        
+
         # Check for OpenAI API key
         if os.environ.get("OPENAI_API_KEY"):
             self._available_providers.append(VoiceProvider.OPENAI_TTS)
-        
-        # Check for Piper
-        try:
-            result = subprocess.run(["piper", "--help"], capture_output=True, timeout=5)
-            if result.returncode == 0:
-                self._available_providers.append(VoiceProvider.PIPER)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-        
+
         # System TTS (macOS say / Linux espeak) — always available as fallback
         try:
             result = subprocess.run(["say", ""], capture_output=True, timeout=2)
@@ -766,7 +788,7 @@ class VoiceEvolutionEngine:
                 self._available_providers.append(VoiceProvider.SYSTEM)
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
-        
+
         if not self._available_providers:
             self._available_providers = [VoiceProvider.SYSTEM]
 

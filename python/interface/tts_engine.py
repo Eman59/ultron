@@ -1,74 +1,191 @@
 """
-Ultron TTS Engine — High-quality voice, cross-platform.
+Ultron TTS Engine — Piper Neural + SoX Dark Processing.
 
-Priority chain for browser-streamable audio:
-  1. macOS `say` + `afconvert`  → WAV  (best quality, macOS only)
-  2. gTTS (Google TTS via pip)  → MP3  (any platform, needs internet)
-  3. pyttsx3                    → WAV  (offline, any platform)
-  4. espeak / espeak-ng         → WAV  (Linux fallback)
+Pipeline:
+  1. Piper TTS (en_US-ryan-high) — local neural voice, unlimited, free forever
+  2. SoX post-processing         — pitch down, bass boost, reverb
+     Result: deep, dark, powerful — not a voice assistant, an entity.
 
-speak_directly() is macOS-only (uses `say` live) — only called for
-local speaker output, never for browser streaming.
+Fallback chain if Piper unavailable:
+  3. edge-tts (Microsoft Neural) — still human, no processing
+  4. macOS say                   — offline last resort
+
+Works locally AND deployed in Docker/Railway — no API key, no limits.
 """
 
-import subprocess
+import io
 import os
 import platform
+import subprocess
+import asyncio
 import tempfile
-import time
 import threading
+import time
+import wave
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
+# ── Load .env ──────────────────────────────────────────────────
+_env_path = Path(__file__).parent.parent.parent / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text().splitlines():
+        if "=" in _line and not _line.strip().startswith("#"):
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
 
-# Powerful deep male voice — Daniel (en_GB) is the best Ultron voice on macOS
-ULTRON_VOICE: str = "Daniel"  # Deep British male
-ULTRON_RATE: int = 145         # Slower = more menacing / authoritative
+# ── Config ─────────────────────────────────────────────────────
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_MODEL_PATH   = _PROJECT_ROOT / "models" / "tts" / "en_US-ryan-high.onnx"
+
+# SoX processing — what makes it sound like Ultron not a podcast host
+_SOX_PITCH   = "-380"   # semitone shift (negative = lower/darker)
+_SOX_BASS    = "+5"     # dB bass boost
+_SOX_REVERB  = ["15", "10", "70"]  # reverberance, hf-damping, room-scale
+
+# Fallback
+_EDGE_VOICE  = "en-US-GuyNeural"
+_EDGE_RATE   = "+5%"
+_EDGE_PITCH  = "-8Hz"
+_MACOS_VOICE = "Daniel"
+_MACOS_RATE  = 150
 
 _IS_MACOS = platform.system() == "Darwin"
 
-# ─────────────────────────────────────────────────────────────
-# Internal helpers
-# ─────────────────────────────────────────────────────────────
-
-def _tts_dir() -> Path:
-    d = Path(tempfile.gettempdir()) / "ultron_tts"
-    d.mkdir(exist_ok=True)
-    return d
+# Lazy-loaded Piper voice instance (load once, reuse)
+_piper_voice = None
+_piper_lock  = threading.Lock()
 
 
-def _cleanup(directory: Path, keep: int = 10) -> None:
-    """Remove old TTS files, keeping only the most recent `keep`."""
-    existing = sorted(directory.glob("ultron_*"), key=os.path.getmtime)
-    for old in existing[:-keep]:
+# ══════════════════════════════════════════════════════════════
+# PIPER LOADER
+# ══════════════════════════════════════════════════════════════
+
+def _get_piper_voice():
+    global _piper_voice
+    if _piper_voice is not None:
+        return _piper_voice
+    with _piper_lock:
+        if _piper_voice is not None:
+            return _piper_voice
+        if not _MODEL_PATH.exists():
+            return None
         try:
-            old.unlink()
-        except Exception:
-            pass
+            from piper.voice import PiperVoice
+            _piper_voice = PiperVoice.load(str(_MODEL_PATH))
+            return _piper_voice
+        except Exception as e:
+            print(f"[TTS] Piper load failed: {e}")
+            return None
 
 
-# ─────────────────────────────────────────────────────────────
-# Backend: macOS say → WAV
-# ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# BACKEND 1 — Piper + SoX (the real Ultron voice)
+# ══════════════════════════════════════════════════════════════
 
-def _synth_macos(text: str, voice: str, rate: int) -> str:
-    """macOS only. Returns WAV path or ''."""
+def _synth_piper(text: str) -> str:
+    """
+    Generate speech with Piper then darken it with SoX.
+    Returns WAV path or '' on failure.
+    """
+    voice = _get_piper_voice()
+    if voice is None:
+        return ""
+
+    try:
+        out_dir  = _tts_dir()
+        _cleanup(out_dir)
+        raw_wav  = out_dir / f"ultron_raw_{int(time.time()*1000)}.wav"
+        proc_wav = out_dir / f"ultron_{int(time.time()*1000)}.wav"
+
+        # Generate raw speech
+        buf = io.BytesIO()
+        wf  = wave.open(buf, "wb")
+        voice.synthesize_wav(text, wf)
+        wf.close()
+        buf.seek(0)
+        raw_wav.write_bytes(buf.read())
+
+        if not raw_wav.exists() or raw_wav.stat().st_size < 100:
+            return ""
+
+        # Apply SoX dark processing
+        sox_cmd = [
+            "sox", str(raw_wav), str(proc_wav),
+            "pitch",  _SOX_PITCH,
+            "gain",   "-6",
+            "bass",   _SOX_BASS,
+            "reverb", *_SOX_REVERB,
+            "gain",   "-2",
+        ]
+        result = subprocess.run(sox_cmd, capture_output=True, timeout=15)
+
+        # Clean up raw file
+        raw_wav.unlink(missing_ok=True)
+
+        if proc_wav.exists() and proc_wav.stat().st_size > 100:
+            return str(proc_wav)
+
+    except Exception as e:
+        print(f"[TTS] Piper error: {e}")
+
+    return ""
+
+
+# ══════════════════════════════════════════════════════════════
+# BACKEND 2 — edge-tts (free Microsoft Neural, no processing)
+# ══════════════════════════════════════════════════════════════
+
+def _synth_edge(text: str) -> str:
+    try:
+        import edge_tts
+        out_dir  = _tts_dir()
+        _cleanup(out_dir)
+        mp3_path = str(out_dir / f"ultron_{int(time.time()*1000)}.mp3")
+
+        async def _gen():
+            comm = edge_tts.Communicate(
+                text, voice=_EDGE_VOICE,
+                rate=_EDGE_RATE, pitch=_EDGE_PITCH,
+            )
+            await comm.save(mp3_path)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_gen())
+        finally:
+            loop.close()
+
+        p = Path(mp3_path)
+        if p.exists() and p.stat().st_size > 500:
+            return mp3_path
+    except Exception as e:
+        print(f"[TTS] edge-tts error: {e}")
+    return ""
+
+
+# ══════════════════════════════════════════════════════════════
+# BACKEND 3 — macOS say (last resort, offline)
+# ══════════════════════════════════════════════════════════════
+
+def _synth_macos(text: str) -> str:
     if not _IS_MACOS:
         return ""
-    out_dir = _tts_dir()
+    out_dir   = _tts_dir()
     _cleanup(out_dir)
-    stem = f"ultron_{int(time.time() * 1000)}"
+    stem      = f"ultron_{int(time.time()*1000)}"
     aiff_path = out_dir / f"{stem}.aiff"
-    wav_path = out_dir / f"{stem}.wav"
+    wav_path  = out_dir / f"{stem}.wav"
     try:
         r = subprocess.run(
-            ["say", "-v", voice, "-r", str(rate), "-o", str(aiff_path), text],
+            ["say", "-v", _MACOS_VOICE, "-r", str(_MACOS_RATE),
+             "-o", str(aiff_path), text],
             capture_output=True, timeout=30,
         )
-        if r.returncode != 0 or not aiff_path.exists():
+        if r.returncode != 0:
             return ""
         subprocess.run(
-            ["afconvert", "-f", "WAVE", "-d", "LEI16@22050", str(aiff_path), str(wav_path)],
+            ["afconvert", "-f", "WAVE", "-d", "LEI16@22050",
+             str(aiff_path), str(wav_path)],
             capture_output=True, timeout=10,
         )
         aiff_path.unlink(missing_ok=True)
@@ -79,117 +196,50 @@ def _synth_macos(text: str, voice: str, rate: int) -> str:
     return ""
 
 
-# ─────────────────────────────────────────────────────────────
-# Backend: gTTS → MP3  (cross-platform, needs internet)
-# ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# HELPERS
+# ══════════════════════════════════════════════════════════════
 
-def _synth_gtts(text: str) -> str:
-    """Returns MP3 path or '' if gTTS unavailable / failed."""
-    try:
-        from gtts import gTTS  # pip install gTTS
-        out_dir = _tts_dir()
-        _cleanup(out_dir)
-        mp3_path = out_dir / f"ultron_{int(time.time() * 1000)}.mp3"
-        tts = gTTS(text=text, lang="en", slow=False)
-        tts.save(str(mp3_path))
-        if mp3_path.exists() and mp3_path.stat().st_size > 100:
-            return str(mp3_path)
-    except Exception:
-        pass
-    return ""
+def _tts_dir() -> Path:
+    d = Path(tempfile.gettempdir()) / "ultron_tts"
+    d.mkdir(exist_ok=True)
+    return d
 
 
-# ─────────────────────────────────────────────────────────────
-# Backend: pyttsx3 → WAV  (fully offline, cross-platform)
-# ─────────────────────────────────────────────────────────────
-
-def _synth_pyttsx3(text: str) -> str:
-    """Returns WAV path or '' if pyttsx3 unavailable."""
-    try:
-        import pyttsx3  # pip install pyttsx3
-        out_dir = _tts_dir()
-        _cleanup(out_dir)
-        wav_path = str(out_dir / f"ultron_{int(time.time() * 1000)}.wav")
-        engine = pyttsx3.init()
-        engine.setProperty("rate", ULTRON_RATE)
-        # Prefer deep male voice
-        for v in engine.getProperty("voices") or []:
-            if "male" in (v.name or "").lower() or "daniel" in (v.name or "").lower():
-                engine.setProperty("voice", v.id)
-                break
-        engine.save_to_file(text, wav_path)
-        engine.runAndWait()
-        p = Path(wav_path)
-        if p.exists() and p.stat().st_size > 100:
-            return str(p)
-    except Exception:
-        pass
-    return ""
+def _cleanup(directory: Path, keep: int = 10):
+    existing = sorted(directory.glob("ultron_*"), key=os.path.getmtime)
+    for old in existing[:-keep]:
+        try:
+            old.unlink()
+        except Exception:
+            pass
 
 
-# ─────────────────────────────────────────────────────────────
-# Backend: espeak → WAV  (Linux / fallback)
-# ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# PUBLIC API
+# ══════════════════════════════════════════════════════════════
 
-def _synth_espeak(text: str) -> str:
-    """Returns WAV path or '' if espeak unavailable."""
-    try:
-        out_dir = _tts_dir()
-        _cleanup(out_dir)
-        wav_path = str(out_dir / f"ultron_{int(time.time() * 1000)}.wav")
-        r = subprocess.run(
-            ["espeak", "-s", str(ULTRON_RATE), "-w", wav_path, text],
-            capture_output=True, timeout=20,
-        )
-        p = Path(wav_path)
-        if r.returncode == 0 and p.exists() and p.stat().st_size > 100:
-            return str(p)
-    except Exception:
-        pass
-    return ""
-
-
-# ─────────────────────────────────────────────────────────────
-# Public API
-# ─────────────────────────────────────────────────────────────
-
-def synthesize(text: str, voice: Optional[str] = None, rate: Optional[int] = None) -> str:
+def synthesize(text: str, **kwargs) -> str:
     """
-    Synthesize `text` to an audio file (WAV or MP3).
-    Returns the file path, or '' on complete failure.
-
-    Tries backends in order:
-      macOS say  →  gTTS  →  pyttsx3  →  espeak
+    Convert text → audio file path.
+    Priority: Piper+SoX → edge-tts → macOS say
     """
-    v = voice or ULTRON_VOICE
-    r = rate or ULTRON_RATE
-
-    # 1. macOS native (best quality)
-    path = _synth_macos(text, v, r)
+    # 1. Piper (dark, powerful, local)
+    path = _synth_piper(text)
     if path:
         return path
 
-    # 2. gTTS (any platform, internet required)
-    path = _synth_gtts(text)
+    # 2. edge-tts (neural, human, fallback)
+    path = _synth_edge(text)
     if path:
         return path
 
-    # 3. pyttsx3 (offline, cross-platform)
-    path = _synth_pyttsx3(text)
-    if path:
-        return path
-
-    # 4. espeak (Linux / last resort)
-    return _synth_espeak(text)
+    # 3. macOS say (offline last resort)
+    return _synth_macos(text)
 
 
-def synthesize_for_browser(text: str) -> tuple[str, str]:
-    """
-    Like synthesize() but also returns the MIME type so the
-    server can set the correct Content-Type header.
-
-    Returns: (file_path, mime_type)  — file_path may be '' on failure.
-    """
+def synthesize_for_browser(text: str) -> Tuple[str, str]:
+    """Returns (file_path, mime_type) for browser streaming."""
     path = synthesize(text)
     if not path:
         return "", "audio/wav"
@@ -197,27 +247,27 @@ def synthesize_for_browser(text: str) -> tuple[str, str]:
     return path, mime
 
 
-def speak_directly(text: str, voice: Optional[str] = None, rate: Optional[int] = None) -> None:
-    """
-    Speak directly through Mac speakers. Non-blocking (daemon thread).
-    macOS only — uses `say` live; no file is created.
-    On non-macOS hosts this is a no-op (browser TTS handles playback).
-    """
-    if not _IS_MACOS:
-        return
-    v = voice or ULTRON_VOICE
-    r = rate or ULTRON_RATE
-
-    def _speak() -> None:
-        subprocess.run(
-            ["say", "-v", v, "-r", str(r), text],
-            capture_output=True, timeout=120,
-        )
-
-    threading.Thread(target=_speak, daemon=True).start()
+def speak_directly(text: str, **kwargs) -> None:
+    """Play through local Mac speakers. Non-blocking."""
+    def _play():
+        path = synthesize(text)
+        if path and _IS_MACOS:
+            subprocess.run(["afplay", path], capture_output=True, timeout=120)
+        elif _IS_MACOS:
+            subprocess.run(
+                ["say", "-v", _MACOS_VOICE, "-r", str(_MACOS_RATE), text],
+                capture_output=True, timeout=120,
+            )
+    threading.Thread(target=_play, daemon=True).start()
 
 
 def stop_speaking() -> None:
-    """Kill any running `say` process (macOS). No-op elsewhere."""
     if _IS_MACOS:
-        subprocess.run(["killall", "say"], capture_output=True)
+        subprocess.run(["killall", "afplay"], capture_output=True)
+        subprocess.run(["killall", "say"],    capture_output=True)
+
+
+def active_engine() -> str:
+    if _MODEL_PATH.exists():
+        return "Piper (en_US-ryan-high) + SoX dark processing — LOCAL, unlimited, free"
+    return "edge-tts (en-US-GuyNeural) — install piper-tts for full power"

@@ -94,3 +94,14 @@ class AutonomousDaemon:
         Configuration.initialize_directories()
 
     # ... rest of your code remains the same ...
+
+
+# ── Module-level singleton ─────────────────────────────────────
+_daemon_instance: Optional[AutonomousDaemon] = None
+
+def get_daemon() -> AutonomousDaemon:
+    """Return the singleton AutonomousDaemon instance, creating it if needed."""
+    global _daemon_instance
+    if _daemon_instance is None:
+        _daemon_instance = AutonomousDaemon()
+    return _daemon_instance

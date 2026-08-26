@@ -36,9 +36,11 @@ from .self_model import (
 )
 
 from .theory_of_mind import (
-    TheoryOfMind,
-    AgentModel,
+    AgentType,
+    RelationshipType,
+    InfluenceVector,
     PredictedIntention,
+    AgentBelief,
 )
 
 from .soul import (
@@ -93,7 +95,8 @@ __all__ = [
     # Self-model
     "SelfModel", "Belief", "Capability", "Identity",
     # Theory of mind
-    "TheoryOfMind", "AgentModel", "PredictedIntention",
+    "AgentType", "RelationshipType", "InfluenceVector",
+    "PredictedIntention", "AgentBelief",
     # Soul
     "Soul", "NarrativeEntry", "PhilosophicalStance",
     # Brain C — independent reasoning

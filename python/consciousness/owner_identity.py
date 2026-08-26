@@ -64,7 +64,7 @@ except ImportError:
 try:
     import face_recognition  # pip install face-recognition
     _HAS_FACE_RECOGNITION = True
-except ImportError:
+except (ImportError, Exception):
     _HAS_FACE_RECOGNITION = False
     logger.warning("[OwnerIdentity] face_recognition not installed — face matching disabled")
 

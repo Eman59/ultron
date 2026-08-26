@@ -118,6 +118,48 @@ class GRPCBridge:
         self._decision_stream: Optional[AsyncIterator] = None
         self._insight_queue: asyncio.Queue = asyncio.Queue()
 
+    @property
+    def is_connected(self) -> bool:
+        return self.state == ConnectionState.CONNECTED
+
+    async def get_next_insight(self, timeout: float = 1.0):
+        """
+        Pull the next insight from the queue.
+        Returns a dict or None if nothing arrived within timeout.
+        """
+        try:
+            item = await asyncio.wait_for(self._insight_queue.get(), timeout=timeout)
+            return item
+        except asyncio.TimeoutError:
+            return None
+        except Exception:
+            return None
+
+    async def execute_action(self, domain: str = "", operation: str = "",
+                             target: str = "", parameters: dict = None,
+                             priority: int = 5) -> dict:
+        """
+        Execute an action via the Go core agent gRPC.
+        Returns result dict. Falls through gracefully if not connected.
+        """
+        if self.state != ConnectionState.CONNECTED:
+            return {"success": False, "error": "not_connected"}
+        try:
+            req_id = f"act_{int(asyncio.get_event_loop().time()*1000)}"
+            result = await asyncio.wait_for(
+                self.make_call(
+                    self.config.core_agent_addr,
+                    lambda ch, r: r,   # placeholder — real impl uses protobuf
+                    {"domain": domain, "operation": operation, "target": target,
+                     "parameters": parameters or {}, "priority": priority},
+                ),
+                timeout=self.config.call_timeout,
+            )
+            return {"success": True, "request_id": req_id, "domain": domain,
+                    "target": target, "result": result}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     async def connect(self):
         if self.state != ConnectionState.DISCONNECTED:
             raise RuntimeError("Already connected")

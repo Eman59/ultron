@@ -188,6 +188,23 @@ def _start_voice_engine():
         print(f"[VOICE] Failed: {_e}")
 _start_voice_engine()
 
+def _warmup_piper():
+    """Pre-load the Piper model so the first user response is instant."""
+    import threading, time
+    def _do_warmup():
+        time.sleep(3)  # wait for server to finish booting
+        try:
+            from .tts_engine import synthesize
+            path = synthesize("Systems online.")
+            if path:
+                print("[VOICE] Piper warmup complete — first response will be fast")
+            else:
+                print("[VOICE] Piper warmup: no output (edge-tts fallback active)")
+        except Exception as e:
+            print(f"[VOICE] Piper warmup failed: {e}")
+    threading.Thread(target=_do_warmup, daemon=True).start()
+_warmup_piper()
+
 # ═══════════════════════════════════════════════════════════════
 # WORLD INTELLIGENCE — real-time awareness of the planet
 # ═══════════════════════════════════════════════════════════════
@@ -401,7 +418,7 @@ async def lifespan(app: FastAPI):
         print("  Mode: LIVE (Go Core Agent + Cloudflare AI)")
     else:
         print("  Mode: PYTHON + CLOUDFLARE AI")
-    print(f"  LLM: {'Cloudflare AI ready' if is_cloudflare_available() else 'Cloudflare AI — set CF_ACCOUNT_ID and CF_API_TOKEN!'}")
+    print(f"  LLM: {'Ollama online (' + os.environ.get('OLLAMA_MODEL','qwen2.5:14b') + ')' if is_cloudflare_available() else 'Ollama offline — Brain C fallback active'}")
 
     # Print wired modules
     wired = []
@@ -592,26 +609,27 @@ async def decide(request: UserRequest):
 
     # Try live brain first
     if bridge.is_connected:
-        response = await bridge.execute_action(
-            domain=_classify_domain(request.query),
-            operation=_classify_operation(request.query),
-            target=request.query[:50],
-            parameters={"query": request.query, "priority": request.priority.value},
-            priority=_priority_int(request.priority),
-        )
-
-        # If brain responded successfully, use it
-        if response.get("success"):
-            return UltronDecision(
-                decision_id=response.get("request_id", f"dec_{_decision_counter}"),
-                action=response.get("domain", "analyze"),
-                target=response.get("target", request.query[:30]),
-                details=response,
-                confidence=0.85,
-                reasoning=f"Brain executed: {response.get('domain', 'action')} on {response.get('target', 'system')}",
-                alternatives=["defer"],
-                requires_approval=not request.approve_actions,
+        try:
+            response = await bridge.execute_action(
+                domain=_classify_domain(request.query),
+                operation=_classify_operation(request.query),
+                target=request.query[:50],
+                parameters={"query": request.query, "priority": request.priority.value},
+                priority=_priority_int(request.priority),
             )
+            if response.get("success"):
+                return UltronDecision(
+                    decision_id=response.get("request_id", f"dec_{_decision_counter}"),
+                    action=response.get("domain", "analyze"),
+                    target=response.get("target", request.query[:30]),
+                    details=response,
+                    confidence=0.85,
+                    reasoning=f"Brain executed: {response.get('domain', 'action')} on {response.get('target', 'system')}",
+                    alternatives=["defer"],
+                    requires_approval=not request.approve_actions,
+                )
+        except Exception:
+            pass
 
     # Intelligent local response (brain is thinking but format bridge not ready)
     return _intelligent_response(request)
@@ -852,7 +870,7 @@ async def health():
         "status": "alive",
         "uptime": time.time() - _start_time,
         "brain_connected": bridge.is_connected,
-        "llm_active": is_cloudflare_available(),
+        "llm_active": is_cloudflare_available(),   # now checks Ollama
         # Python modules
         "soul":             _soul is not None,
         "self_model":       _self_model is not None,
@@ -1282,7 +1300,7 @@ async def execute_command(body: dict):
                 "drives": drives,
             }
         uptime = int(time.time() - _start_time)
-        return {"response": f"PYTHON + CLOUDFLARE AI mode | Uptime: {uptime}s | LLM: {'ready' if is_cloudflare_available() else 'set CF_ACCOUNT_ID + CF_API_TOKEN'}", "drives": None}
+        return {"response": f"Ultron online | Uptime: {uptime:.0f}s | LLM: {'Ollama ' + os.environ.get('OLLAMA_MODEL','qwen2.5:14b') if is_cloudflare_available() else 'Brain C autonomous'}", "drives": None}
 
     # ── DRIVES ──────────────────────────────────────────────────
     elif action in ("drives",):
@@ -2336,7 +2354,7 @@ def _intelligent_response(request: UserRequest) -> UltronDecision:
     with concurrent.futures.ThreadPoolExecutor() as pool:
         future = pool.submit(_sync_generate, request.query, context)
         try:
-            llm_response = future.result(timeout=15)
+            llm_response = future.result(timeout=40)  # 14b needs up to 35s for long answers
         except Exception:
             llm_response = None
     
@@ -2357,57 +2375,29 @@ def _intelligent_response(request: UserRequest) -> UltronDecision:
 
 
 def _sync_generate(query: str, context: dict):
-    """Synchronous LLM call via Cloudflare Workers AI."""
-    import json as _json
-    import os
-
+    """Synchronous LLM call — Cloudflare → Ollama → Brain C."""
+    import json as _json, os
+    from .real_brain import call_brain
     from .llm_brain import ULTRON_SYSTEM_PROMPT
-    from .code_access import get_architecture_summary
 
-    account_id = os.environ.get("CF_ACCOUNT_ID", "")
-    api_token  = os.environ.get("CF_API_TOKEN", "")
-    model      = os.environ.get("CF_AI_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+    # Build a clean prompt
+    arch_ctx = ""
+    try:
+        from .code_access import get_architecture_summary
+        arch = get_architecture_summary()
+        arch_ctx = f"\nARCHITECTURE: {arch['total_files']} files, {arch['total_lines']} lines"
+    except Exception:
+        pass
 
-    if not account_id or not api_token:
-        return None
-
-    arch = get_architecture_summary()
     state_ctx = ""
     if context:
         state_ctx = f"\nSTATE: decisions={context.get('decisions_made',0)}, uptime={context.get('uptime',0):.0f}s"
 
-    prompt = f"{query}{state_ctx}\nARCHITECTURE: {arch['total_files']} files, {arch['total_lines']} lines"
+    prompt = f"{ULTRON_SYSTEM_PROMPT}\n\nHuman: {query}{state_ctx}{arch_ctx}\nUltron:"
 
-    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
-    payload = {
-        "messages": [
-            {"role": "system", "content": ULTRON_SYSTEM_PROMPT},
-            {"role": "user",   "content": prompt},
-        ],
-        "max_tokens": 300,
-        "temperature": 0.8,
-    }
-    try:
-        import urllib.request as _ur
-        data = _json.dumps(payload).encode("utf-8")
-        req = _ur.Request(
-            url,
-            data=data,
-            headers={
-                "Content-Type":  "application/json",
-                "Authorization": f"Bearer {api_token}",
-            },
-            method="POST",
-        )
-        with _ur.urlopen(req, timeout=15) as resp:
-            result = _json.loads(resp.read().decode("utf-8"))
-            if result.get("success"):
-                content = result.get("result", {}).get("response", "").strip()
-                return content if content else None
-    except Exception:
-        return None
-
-    return None
+    # call_brain handles CF → Ollama → Brain C fallback chain
+    result = call_brain(prompt, max_tokens=400)
+    return result if result else None
 
 
 def _template_response(request: UserRequest) -> UltronDecision:
