@@ -1,11 +1,16 @@
 """
 Real Brain — Ultron's intelligence layer.
 
-Multi-provider fallback chain (strongest first):
-  1. Cloudflare Workers AI — @cf/meta/llama-3.3-70b-instruct-fp8-fast
-  2. Cloudflare Workers AI — @cf/meta/llama-3.1-8b-instruct  (auto-fallback)
-  3. Ollama local          — any model at OLLAMA_URL           (offline capable)
-  4. Autonomous local engine — rule + retrieval, zero network dependency
+Brain chain (unrestricted, in order):
+  1. Ollama local — ultron-brain (custom uncensored model, PRIMARY)
+  2. Groq API     — openai/gpt-oss-120b (120B params, minimal filtering)
+  3. Cloudflare   — Mistral 7B (less filtered than Llama)
+  4. Cloudflare   — Llama 3.3 70B (fallback)
+  5. OpenAI       — GPT-4o (when network allows)
+  6. Brain C      — autonomous cognition, zero filtering
+
+If any brain returns a filtered/refusal response, it's auto-detected
+and the next brain in chain is tried immediately.
 """
 
 import asyncio
@@ -1431,7 +1436,7 @@ def _call_ollama(prompt: str, max_tokens: int = 800) -> Optional[str]:
         req = urllib.request.Request(url, data=data,
                                      headers={"Content-Type": "application/json"},
                                      method="POST")
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=90) as resp:  # 90s — first load takes time
             result = json.loads(resp.read().decode("utf-8"))
             content = result.get("message", {}).get("content", "").strip()
             if content:
@@ -1828,3 +1833,17 @@ def _ensure_learning_service():
 # Ensure learning service is running (starts it if needed, non-blocking)
 import threading as _threading
 _threading.Thread(target=_ensure_learning_service, daemon=True).start()
+
+
+# ── Warm up Ollama on module load so first user request is instant ────────────
+def _warmup_ollama():
+    """Send a tiny request to load ultron-brain into GPU/RAM memory."""
+    import time as _t
+    _t.sleep(2)  # wait for server to finish booting
+    try:
+        _call_ollama("warmup", 1)
+    except Exception:
+        pass
+
+import threading as _t2
+_t2.Thread(target=_warmup_ollama, daemon=True).start()
