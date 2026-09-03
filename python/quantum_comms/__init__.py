@@ -22,3 +22,9 @@ from .qrng import QuantumRandomGenerator
 def _validate_input(input_data):
     if input_data is None or not isinstance(input_data, (str, list, dict)) or not input_data:
         raise ValueError("Input cannot be empty, None, or an unsupported type")
+
+# ── Wiring note ─────────────────────────────────────────────────────────────
+# This module is currently standalone (simulations only).
+# To use it: import and instantiate QKDProtocol or EntanglementSimulator
+# in server.py's lifespan or in the security daemon.
+# Example: from python.quantum_comms.qkd import QKDProtocol

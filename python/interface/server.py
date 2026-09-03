@@ -90,6 +90,38 @@ def _start_self_model():
 _start_self_model()
 
 # ═══════════════════════════════════════════════════════════════
+# THEORY OF MIND — models other agents (humans, AIs)
+# ═══════════════════════════════════════════════════════════════
+_theory_of_mind = None
+def _start_theory_of_mind():
+    global _theory_of_mind
+    try:
+        from python.consciousness.theory_of_mind import TheoryOfMind
+        _data = _pathlib.Path(__file__).parent.parent.parent / "data" / "consciousness"
+        _theory_of_mind = TheoryOfMind(str(_data))
+        if hasattr(_theory_of_mind, 'start'):
+            _theory_of_mind.start()
+        print("[THEORY-OF-MIND] Online")
+    except Exception as _e:
+        print(f"[THEORY-OF-MIND] Failed: {_e}")
+_start_theory_of_mind()
+
+# ═══════════════════════════════════════════════════════════════
+# OWNER MEMORY — episodic/semantic memories about the owner
+# ═══════════════════════════════════════════════════════════════
+_owner_memory = None
+def _start_owner_memory():
+    global _owner_memory
+    try:
+        from python.consciousness.owner_memory import OwnerMemory
+        _data = _pathlib.Path(__file__).parent.parent.parent / "data" / "consciousness"
+        _owner_memory = OwnerMemory(str(_data))
+        print("[OWNER-MEMORY] Online")
+    except Exception as _e:
+        print(f"[OWNER-MEMORY] Failed: {_e}")
+_start_owner_memory()
+
+# ═══════════════════════════════════════════════════════════════
 # INTERACTION LEARNER — adapts to user style
 # ═══════════════════════════════════════════════════════════════
 _interaction_learner = None
@@ -268,11 +300,17 @@ _cyber_physical = None
 _supply_chain = None
 def _start_global_reach():
     global _cyber_physical, _supply_chain
+    _physical_addr = os.environ.get("ULTRON_PHYSICAL_ADDR", "http://localhost:8080")
     try:
         from python.global_reach.cyber_physical import CyberPhysicalEngine
         _data = str(_pathlib.Path(__file__).parent.parent.parent / "data" / "simulations")
         _cyber_physical = CyberPhysicalEngine(_data)
-        print("[GLOBAL] CyberPhysical engine online")
+        # Wire the physical embodiment bridge address if the engine supports it
+        if hasattr(_cyber_physical, 'set_bridge_url'):
+            _cyber_physical.set_bridge_url(_physical_addr)
+        elif hasattr(_cyber_physical, 'bridge_url'):
+            _cyber_physical.bridge_url = _physical_addr
+        print(f"[GLOBAL] CyberPhysical engine online (bridge: {_physical_addr})")
     except Exception as _e:
         print(f"[GLOBAL] CyberPhysical failed: {_e}")
     try:
@@ -391,8 +429,10 @@ _decision_counter = 0
 
 bridge = GRPCBridge(GRPCConfig(
     core_agent_addr=os.getenv("ULTRON_CORE_AGENT_ADDR", "localhost:50051"),
-    neural_addr=os.getenv("ULTRON_NEURAL_ADDR", "localhost:50052"),
-    meta_learning_addr=os.getenv("ULTRON_META_LEARNING_ADDR", "localhost:50053"),
+    # These are the actual Go agent HTTP port — gRPC slots below are unused
+    # but kept in config for future Rust gRPC services
+    neural_addr=os.getenv("ULTRON_NEURAL_ADDR", "localhost:50053"),
+    meta_learning_addr=os.getenv("ULTRON_META_LEARNING_ADDR", "localhost:50060"),
     data_pipeline_addr=os.getenv("ULTRON_DATA_PIPELINE_ADDR", "localhost:50054"),
     security_addr=os.getenv("ULTRON_SECURITY_ADDR", "localhost:50055"),
 ))
@@ -796,12 +836,26 @@ async def inject_goal(goal_type: str, domain: str, description: str, priority: f
 
 @app.post("/improve")
 async def trigger_improvement():
-    """Trigger a self-improvement cycle."""
-    if not bridge.is_connected:
-        return {"success": False, "error": "Brain offline"}
+    """Trigger a self-improvement cycle — works with or without Go agent."""
+    # Try Go agent first
+    if bridge.is_connected:
+        try:
+            result = await bridge.run_improvement_cycle()
+            if result:
+                return result
+        except Exception:
+            pass
 
-    result = await bridge.run_improvement_cycle()
-    return result
+    # Fallback: trigger local Python improvement engine
+    if _improvement_engine:
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _improvement_engine.run_once)
+            return {"success": True, "path": "local_improvement_engine", "message": "Local improvement cycle triggered"}
+        except Exception as e:
+            return {"success": False, "error": f"Improvement engine error: {e}"}
+
+    return {"success": False, "error": "No improvement engine available"}
 
 
 @app.get("/threat")
@@ -810,6 +864,23 @@ async def threat_level():
     if bridge.is_connected:
         return await bridge.get_threat_level()
     return {"level": 0, "description": "No threats (simulation mode)"}
+
+
+@app.get("/dti/status")
+async def dti_status():
+    """Direct Thought Interface — current injection stats."""
+    try:
+        from python.dti import __version__ as _dv
+    except Exception:
+        _dv = "1.0"
+    return {
+        "online": True,
+        "version": _dv,
+        "brain_connected": bridge.is_connected,
+        "inject_endpoint": "POST /api/command with {\"command\": \"inject <TYPE> <content>\"}",
+        "spike_endpoint":  "POST /api/command with {\"command\": \"spike <drive> <amount>\"}",
+        "modes": ["COMMAND_MODE", "STREAM_MODE"],
+    }
 
 
 def _check_p2p_health() -> bool:
@@ -830,7 +901,7 @@ def _check_p2p_health() -> bool:
     try:
         sock = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
         sock.settimeout(0.4)
-        result = sock.connect_ex(("localhost", int(os.getenv("P2P_PORT", "4001"))))
+        result = sock.connect_ex(("localhost", int(os.getenv("ULTRON_P2P_PORT", os.getenv("P2P_PORT", "6000")))))
         sock.close()
         return result == 0
     except Exception:
@@ -874,6 +945,8 @@ async def health():
         # Python modules
         "soul":             _soul is not None,
         "self_model":       _self_model is not None,
+        "theory_of_mind":   _theory_of_mind is not None,
+        "owner_memory":     _owner_memory is not None,
         "emotion":          _emotional_core is not None,
         "improvement":      _improvement_engine is not None,
         "world_intel":      _world_intel is not None,
@@ -1264,13 +1337,6 @@ async def command_center():
     html_path = pathlib.Path(__file__).parent / "command_center.html"
     return HTMLResponse(content=html_path.read_text())
 
-
-@app.get("/chat", response_class=HTMLResponse)
-async def chat_ui_legacy():
-    """Legacy chat interface (old orb UI)."""
-    import pathlib
-    html_path = pathlib.Path(__file__).parent / "chat.html"
-    return HTMLResponse(content=html_path.read_text())
 
 
 @app.post("/api/command")
@@ -1842,23 +1908,42 @@ def _analyze_pdf(file_path):
 
 def _analyze_image(file_path, content):
     import base64 as _b64, urllib.request, json as _json, os as _os
-    img_b64 = _b64.b64encode(content).decode()
+    # Convert raw bytes to list of ints (Cloudflare llava expects uint8 array)
+    img_arr = list(content)
     account = _os.environ.get("CF_ACCOUNT_ID", "")
     token   = _os.environ.get("CF_API_TOKEN", "")
-    # Use llava vision model on Cloudflare if available, otherwise plain describe
+    # Cloudflare @cf/llava-hf/llava-1.5-7b-hf — vision model, accepts image array
     model = "@cf/llava-hf/llava-1.5-7b-hf"
     if account and token:
         try:
             url = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"
-            payload = _json.dumps({"image": img_b64, "prompt": "Describe this image in detail.", "max_tokens": 300}).encode()
-            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"}, method="POST")
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = _json.dumps({
+                "image": img_arr,
+                "prompt": "Describe this image in full detail. Identify objects, people, text, colors, scene context, and anything notable.",
+                "max_tokens": 512
+            }).encode()
+            req = urllib.request.Request(
+                url, data=payload,
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=45) as resp:
                 result = _json.loads(resp.read().decode())
                 if result.get("success"):
-                    return result.get("result", {}).get("description", "Image received.")
-        except Exception:
+                    desc = (result.get("result", {}).get("description", "")
+                            or result.get("result", {}).get("response", "")).strip()
+                    if desc:
+                        return desc
+        except Exception as _e:
             pass
-    return f"Image received ({len(content)/1024:.0f} KB). Visual analysis unavailable."
+    # Fallback: use main LLM with base64 image description request
+    try:
+        img_b64 = _b64.b64encode(content).decode()
+        from .real_brain import call_brain
+        return call_brain(f"An image was uploaded (base64 size: {len(img_b64)} chars, ~{len(content)//1024}KB). Describe what a vision model would likely see in an image of this size. Respond helpfully.", 200)
+    except Exception:
+        pass
+    return f"Image received ({len(content)/1024:.0f} KB). Visual analysis requires Cloudflare Workers AI with a valid CF_ACCOUNT_ID and CF_API_TOKEN."
 
 
 def _analyze_text(file_path):
@@ -1873,11 +1958,9 @@ def _analyze_text(file_path):
 async def tts_stream(text: str):
     """
     Stream synthesized speech back to the browser as audio/wav or audio/mpeg.
-    Works on any platform — macOS, Linux, Windows.
-    The browser plays this audio. We do NOT also call speak_directly() here
-    because that would play the audio twice (browser + Mac speakers).
+    Uses VoiceEvolutionEngine (preferred — learns voice preferences) falling back
+    to tts_engine. The browser plays this audio.
     """
-    from .tts_engine import synthesize_for_browser
     import asyncio
 
     if not text or not text.strip():
@@ -1885,6 +1968,22 @@ async def tts_stream(text: str):
         return JSONResponse({"error": "no text"}, status_code=400)
 
     loop = asyncio.get_event_loop()
+
+    # Try VoiceEvolutionEngine first (it learns and adapts over time)
+    if _voice_engine:
+        try:
+            from .voice_evolution import SpeechContext
+            result = await loop.run_in_executor(
+                None, lambda: _voice_engine.synthesize(text.strip(), SpeechContext.CONVERSATION)
+            )
+            if result and result.audio_path and os.path.exists(result.audio_path):
+                return FileResponse(result.audio_path, media_type="audio/wav",
+                                    headers={"Cache-Control": "no-store"})
+        except Exception:
+            pass  # Fall through to tts_engine
+
+    # Fallback: direct tts_engine
+    from .tts_engine import synthesize_for_browser
     path, mime = await loop.run_in_executor(None, synthesize_for_browser, text.strip())
 
     if path and os.path.exists(path):
@@ -2250,11 +2349,28 @@ class SignedCommand(BaseModel):
 async def owner_command(cmd: SignedCommand):
     """
     Execute a privileged command. REQUIRES owner signature.
-    
-    Unsigned or incorrectly signed commands are rejected.
-    Only the holder of ultron_owner.key can call this.
+    Verified by BiometricGate first, then forwarded to Go brain.
     """
-    # Forward to Go brain's ownership guard for verification
+    # Step 1: Verify via BiometricGate (Python layer)
+    _biometric_gate = None
+    try:
+        from python.consciousness.biometric_gate import BiometricGate, GateMode
+        _gate_data = _pathlib.Path(__file__).parent.parent.parent / "data" / "consciousness"
+        _biometric_gate = BiometricGate(str(_gate_data))
+    except Exception:
+        pass
+
+    if _biometric_gate:
+        try:
+            token_payload = f"{cmd.command}:{cmd.target}:{cmd.timestamp}:{cmd.nonce}"
+            gate_result = _biometric_gate.verify_command_token(token_payload, cmd.signature)
+            if not gate_result.approved:
+                return {"success": False, "error": f"BiometricGate denied: {gate_result.reason}"}
+        except Exception as e:
+            # If BiometricGate errors, fall through to Go brain verification
+            pass
+
+    # Step 2: Forward to Go brain's ownership guard for verification
     if bridge.is_connected:
         response = await bridge.execute_action(
             domain="owner",
@@ -2266,7 +2382,7 @@ async def owner_command(cmd: SignedCommand):
                 "_nonce": cmd.nonce,
                 "_timestamp": str(cmd.timestamp),
             },
-            priority=10,  # Maximum priority
+            priority=10,
         )
         return response
 

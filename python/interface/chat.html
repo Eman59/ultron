@@ -640,8 +640,9 @@ button,textarea,input{font-family:inherit}
         <div id="owner-status-bar" class="live-feed" style="margin-bottom:5px">—</div>
         <div class="qa-grid">
           <button class="qa" onclick="fetchOwnerStatus()">OWNER STATUS</button>
-          <button class="qa" onclick="promptOwnerCmd()">OWNER CMD</button>
+          <button class="qa" onclick="promptOwnerCmd()" title="Requires HMAC signature — run: python scripts/sign_command.py">OWNER CMD ⚠</button>
         </div>
+        <div style="font-size:10px;opacity:0.45;margin-top:3px">Owner CMD needs Ed25519 sig from scripts/sign_command.py</div>
       </div>
       <div class="panel-sec">
         <div class="sec">Quick Commands</div>
@@ -1761,7 +1762,7 @@ async function connectWS(){
   ws.onmessage=e=>{
     try{
       const d=JSON.parse(e.data);
-      if(d.type==='status'){updateMetrics(d);return;}
+      if(d.type==='status'){updateMetrics(d);if(d.ui_config)applyUIConfig(d.ui_config);return;}
       if(d.soul_diary&&d.type!=='response')document.getElementById('soul-txt').textContent=d.soul_diary;
       const respText=(d.type==='response'&&d.content)?d.content:(d.response||null);
       if(respText)onResp(respText);
@@ -1857,6 +1858,17 @@ async function pollHealth(){
   const pl=document.getElementById('led-p2p'),ps=document.getElementById('st-p2p');
   if(pl)pl.className='led warm';
   if(ps){ps.textContent='RUN';ps.className='mod-s live';}
+  // Neural stats: dim cells when Rust offline, show tooltip
+  try{const r=await fetch('/rust/metrics',{signal:AbortSignal.timeout(800)});const all=await r.json();
+    const nm=all['neural_mesh']||{};
+    const off=nm.status==='offline';
+    ['ns-neurons','ns-conn','ns-evo','ns-plas','ns-spk'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(!el)return;
+      if(off){el.style.opacity='0.3';el.title='Rust neural mesh offline';}
+      else{el.style.opacity='1';el.title='';}
+    });
+  }catch(e){}
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -2192,14 +2204,21 @@ setInterval(()=>{
       const el=document.getElementById('ns-mods');
       if(el) el.textContent=(d.total_mods||0)+(d.success_rate?' / '+d.success_rate.toFixed(0)+'%':'');
     }).catch(()=>{});
-    // BTC from rust/metrics
+    // BTC from rust/metrics — show value if online, or "OFFLINE" with tooltip
     fetch('/rust/metrics',{signal:AbortSignal.timeout(2000)}).then(r=>r.json()).then(all=>{
       const rtd=all['real_time_data']||{};
+      const el=document.getElementById('ns-btc');
+      if(!el)return;
       if(rtd.btc_usd){
-        const el=document.getElementById('ns-btc');
-        if(el) el.textContent='$'+Math.round(rtd.btc_usd).toLocaleString();
+        el.textContent='$'+Math.round(rtd.btc_usd).toLocaleString();
+        el.title='';el.style.opacity='1';
+      }else{
+        el.textContent='—';el.title='Data pipeline offline';el.style.opacity='0.3';
       }
-    }).catch(()=>{});
+    }).catch(()=>{
+      const el=document.getElementById('ns-btc');
+      if(el){el.textContent='—';el.title='Data pipeline offline';el.style.opacity='0.3';}
+    });
     fetch('/threat',{signal:AbortSignal.timeout(2000)}).then(r=>r.json()).then(d=>{
       const el=document.getElementById('ns-threat');
       if(el) el.textContent=(d.threat_level||'NONE').toUpperCase();
@@ -2552,6 +2571,30 @@ setInterval(()=>{
     fetchSystemStatus();
   }
 },20000);
+
+/* ── Adaptive UI config from server ─────────────────────────── */
+function applyUIConfig(cfg){
+  if(!cfg)return;
+  // Apply theme color overrides
+  if(cfg.accent_color){
+    document.documentElement.style.setProperty('--accent',cfg.accent_color);
+  }
+  // Apply font size scaling
+  if(cfg.font_scale&&cfg.font_scale>0.5&&cfg.font_scale<2.0){
+    document.documentElement.style.fontSize=(cfg.font_scale*16)+'px';
+  }
+  // Show/hide panels based on adaptive preference
+  if(cfg.panels_visible===false){
+    const lp=document.getElementById('left-panel'),rp=document.getElementById('right-panel');
+    if(lp)lp.style.display='none';if(rp)rp.style.display='none';
+  }
+  // Record voice preference feedback if engine sent it
+  if(cfg.voice_feedback&&window._lastTTSText){
+    fetch('/voice/feedback',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:window._lastTTSText,rating:cfg.voice_feedback})
+    }).catch(()=>{});
+  }
+}
 
 </script>
 </html>

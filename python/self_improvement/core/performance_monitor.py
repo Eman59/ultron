@@ -15,7 +15,7 @@ from collections import defaultdict
 import statistics
 
 
-@dataclass
+@dataclass(frozen=True)
 class PerformanceSnapshot:
     """A point-in-time capture of system performance."""
     timestamp: float = field(default_factory=time.time)
@@ -25,7 +25,7 @@ class PerformanceSnapshot:
     throughputs: Dict[str, float] = field(default_factory=dict)  # ops/sec
     error_rates: Dict[str, float] = field(default_factory=dict)
     resource_efficiency: float = 0.5
-    failure_patterns: List[Dict[str, Any]] = field(default_factory=list)
+    failure_patterns: Tuple[Dict[str, Any], ...] = field(default_factory=tuple)
     memory_usage_mb: float = 0.0
     cpu_utilization: float = 0.0
 
@@ -90,24 +90,51 @@ class PerformanceMonitor:
             self._error_log = self._error_log[-2500:]
 
     def take_snapshot(self) -> PerformanceSnapshot:
-        """Take a complete performance snapshot."""
+        """Take a complete performance snapshot including real codebase analysis."""
         try:
             elapsed = time.time() - self._last_reset
-            if elapsed < 0.001:  # Avoid division by zero
-                return PerformanceSnapshot()
+            if elapsed <= 0:
+                elapsed = 0.001  # avoid division by zero, but don't skip
+
             snapshot = PerformanceSnapshot()
+
+            # Real metrics from recorded data
             for component, latency_samples in self._latency_samples.items():
                 if latency_samples:
                     snapshot.latencies[component] = statistics.mean(latency_samples)
+
             for component, throughput_counter in self._throughput_counters.items():
                 if throughput_counter > 0:
                     snapshot.throughputs[component] = throughput_counter / elapsed
+
             for component, error_counter in self._error_counters.items():
                 if self._call_counters[component] > 0:
                     snapshot.error_rates[component] = error_counter / self._call_counters[component]
+
+            # ── Real codebase quality scan ─────────────────────────────
+            project_root = _find_project_root()
+            if project_root:
+                quality = _scan_code_quality(project_root)
+                snapshot.component_scores = quality["scores"]
+                snapshot.overall_score    = quality["overall"]
+                snapshot.failure_patterns = quality["issues"]
+                snapshot.resource_efficiency = quality["overall"]
+
+            # ── Real system resources ──────────────────────────────────
+            try:
+                import psutil
+                proc = psutil.Process()
+                snapshot.memory_usage_mb  = proc.memory_info().rss / 1024 / 1024
+                snapshot.cpu_utilization  = proc.cpu_percent(interval=0.1)
+            except ImportError:
+                # psutil not installed — use basic fallback
+                import resource
+                snapshot.memory_usage_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+
             self._history.append(snapshot)
             if len(self._history) > self._max_history:
                 self._history = self._history[-self._max_history:]
+
             return snapshot
         except Exception as e:
             print(f"Error taking snapshot: {e}", file=sys.stderr)
@@ -126,3 +153,91 @@ class PerformanceMonitor:
         self._last_reset = time.time()
         self._error_log = []
         self._history = []
+
+
+# ═══════════════════════════════════════════════════════════════
+# REAL CODEBASE QUALITY SCANNER
+# ═══════════════════════════════════════════════════════════════
+
+def _find_project_root() -> "Optional[Path]":
+    """Find the Ultron project root."""
+    import pathlib
+    candidate = pathlib.Path(__file__).parent.parent.parent.parent
+    if (candidate / "python" / "interface" / "server.py").exists():
+        return candidate
+    return None
+
+
+def _scan_code_quality(project_root: "Path") -> dict:
+    """
+    Scan key Python files for real quality issues.
+    Returns scores per component and a list of issues.
+    """
+    import ast as _ast, pathlib as _pathlib, re as _re
+
+    TARGET_FILES = {
+        "interface":      "python/interface/real_brain.py",
+        "action_engine":  "python/interface/action_engine.py",
+        "server":         "python/interface/server.py",
+        "improvement":    "python/self_improvement/core/improvement_loop.py",
+        "monitor":        "python/self_improvement/core/performance_monitor.py",
+    }
+
+    scores = {}
+    issues = []
+
+    for component, rel_path in TARGET_FILES.items():
+        path = project_root / rel_path
+        if not path.exists():
+            scores[component] = 0.5
+            continue
+
+        try:
+            src = path.read_text(encoding="utf-8", errors="replace")
+            lines = src.splitlines()
+            score = 1.0
+
+            # Penalise: long functions (>80 lines)
+            try:
+                tree = _ast.parse(src)
+                for node in _ast.walk(tree):
+                    if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                        func_lines = (node.end_lineno or 0) - node.lineno
+                        if func_lines > 80:
+                            score -= 0.12  # bigger penalty per long function
+                            issues.append({
+                                "component": component,
+                                "count": 1,
+                                "error": f"long_function:{node.name}:{func_lines}lines",
+                            })
+            except Exception:
+                pass
+
+            # Penalise: TODO / FIXME / pass bodies
+            todo_count = sum(1 for l in lines if _re.search(r'\b(TODO|FIXME|HACK|XXX)\b', l))
+            pass_only  = sum(1 for l in lines if l.strip() == "pass")
+            score -= min(0.3, todo_count * 0.03 + pass_only * 0.02)
+
+            # Penalise: lines > 120 chars (readability)
+            long_lines = sum(1 for l in lines if len(l) > 120)
+            score -= min(0.2, long_lines * 0.01)
+
+            # Penalise: bare except clauses
+            bare_excepts = sum(1 for l in lines if l.strip() in ("except:", "except Exception:"))
+            score -= min(0.2, bare_excepts * 0.02)
+
+            scores[component] = max(0.1, round(score, 3))
+
+            # Flag any component scoring below 0.6
+            if scores[component] < 0.6:
+                issues.append({
+                    "component": component,
+                    "count": 4,
+                    "error": f"quality_score:{scores[component]:.2f}",
+                })
+
+        except Exception:
+            scores[component] = 0.5
+
+    overall = sum(scores.values()) / max(1, len(scores))
+    return {"scores": scores, "overall": round(overall, 3), "issues": issues}

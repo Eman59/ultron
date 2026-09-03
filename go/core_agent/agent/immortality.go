@@ -104,15 +104,6 @@ type DecisionSnapshot struct {
 	DecisionDetails string `json:"decision_details"`
 }
 
-// immortality package functions
-func init() {
-	// Initialize the immortality protocol
-}
-
-func main() {
-	// Start the immortality protocol
-}
-
 // utils package functions
 func hash(data []byte) string {
 	hash := sha256.Sum256(data)

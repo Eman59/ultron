@@ -1,0 +1,461 @@
+"""
+Self-Improvement Engine - The core loop that makes Ultron get smarter over time.
+
+This is the "recursive" in "recursive self-improving neural architecture."
+It doesn't just learn from data — it learns how to learn better, and then
+modifies its own code to implement those improvements.
+
+The improvement cycle:
+  MONITOR → DIAGNOSE → GENERATE → TEST → APPLY → VERIFY → REPEAT
+"""
+
+import asyncio
+import time
+import hashlib
+import json
+import os
+import importlib
+import traceback
+from typing import Dict, Any, List, Optional, Tuple
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+
+from .performance_monitor import PerformanceMonitor, PerformanceSnapshot
+from ..code_gen.patch_generator import PatchGenerator, CodePatch
+from ..sandbox.test_runner import SandboxRunner, TestResult
+from ..evaluator.improvement_evaluator import ImprovementEvaluator
+
+
+class ImprovementPhase(Enum):
+    """Current phase of the self-improvement cycle."""
+    MONITORING = "monitoring"
+    DIAGNOSING = "diagnosing"
+    GENERATING = "generating"
+    TESTING = "testing"
+    APPLYING = "applying"
+    VERIFYING = "verifying"
+    IDLE = "idle"
+
+
+class PatchStatus(Enum):
+    """Status of a generated patch."""
+    PENDING = "pending"
+    TESTING = "testing"
+    PASSED = "passed"
+    FAILED = "failed"
+    APPLIED = "applied"
+    REVERTED = "reverted"
+
+
+@dataclass
+class ImprovementRecord:
+    """Record of a single improvement attempt."""
+    id: str
+    timestamp: float
+    target_component: str
+    diagnosis: str
+    patch: Optional[CodePatch] = None
+    test_result: Optional[TestResult] = None
+    applied: bool = False
+    improvement_delta: float = 0.0  # Performance change after applying
+    reverted: bool = False
+    notes: str = ""
+
+
+@dataclass
+class SystemProfile:
+    """Self-knowledge: what Ultron knows about its own performance."""
+    overall_score: float = 0.5
+    component_scores: Dict[str, float] = field(default_factory=dict)
+    bottlenecks: List[str] = field(default_factory=list)
+    failure_patterns: List[Dict[str, Any]] = field(default_factory=list)
+    improvement_rate: float = 0.0  # How fast it's getting better
+    total_improvements_applied: int = 0
+    total_improvements_reverted: int = 0
+    generation: int = 0  # How many self-improvement cycles completed
+
+
+class SelfImprovementEngine:
+    """
+    The recursive self-improvement engine.
+    
+    This is the most dangerous and most powerful component of Ultron.
+    It reads its own code, finds weaknesses, generates fixes, and applies them.
+    
+    Safety: All changes are tested in sandbox before application.
+    Rollback: Every change can be reverted if it causes regression.
+    """
+
+    def __init__(self,
+                 project_root: str,
+                 improvement_interval: float = 60.0,  # seconds between cycles
+                 max_patches_per_cycle: int = 3,
+                 min_improvement_threshold: float = 0.05,
+                 auto_apply: bool = True):
+        
+        self.project_root = Path(project_root)
+        self.improvement_interval = improvement_interval
+        self.max_patches_per_cycle = max_patches_per_cycle
+        self.min_improvement_threshold = min_improvement_threshold
+        self.auto_apply = auto_apply
+        
+        # Core components
+        self.monitor = PerformanceMonitor()
+        self.generator = PatchGenerator(project_root)
+        self.sandbox = SandboxRunner(project_root)
+        self.evaluator = ImprovementEvaluator()
+        
+        # State
+        self.phase = ImprovementPhase.IDLE
+        self.profile = SystemProfile()
+        self.improvement_history: List[ImprovementRecord] = []
+        self.pending_patches: List[CodePatch] = []
+        self.applied_patches: List[CodePatch] = []
+        
+        # The improvement curve (tracks score over time)
+        self.score_history: List[Tuple[float, float]] = []  # (timestamp, score)
+        
+        # Running
+        self._running = False
+        self._cycle_count = 0
+
+    async def start(self):
+        """Start the self-improvement loop."""
+        self._running = True
+        print("=" * 60)
+        print("  SELF-IMPROVEMENT ENGINE ACTIVATED")
+        print(f"  Interval: {self.improvement_interval}s")
+        print(f"  Auto-apply: {self.auto_apply}")
+        print(f"  Project root: {self.project_root}")
+        print("=" * 60)
+        
+        while self._running:
+            await self.run_improvement_cycle()
+            await asyncio.sleep(self.improvement_interval)
+
+    def stop(self):
+        """Stop the self-improvement loop."""
+        self._running = False
+        print("Self-improvement engine stopped.")
+
+    async def run_improvement_cycle(self) -> Dict[str, Any]:
+        """
+        Execute one complete self-improvement cycle.
+        
+        MONITOR → DIAGNOSE → GENERATE → TEST → APPLY → VERIFY
+        """
+        self._cycle_count += 1
+        cycle_start = time.time()
+        
+        print(f"\n{'─'*60}")
+        print(f"  IMPROVEMENT CYCLE #{self._cycle_count} (Generation {self.profile.generation})")
+        print(f"{'─'*60}")
+        
+        results = {
+            "cycle": self._cycle_count,
+            "generation": self.profile.generation,
+            "patches_generated": 0,
+            "patches_passed": 0,
+            "patches_applied": 0,
+            "improvement_delta": 0.0,
+        }
+
+        try:
+            # ━━━━ PHASE 1: MONITOR ━━━━
+            self.phase = ImprovementPhase.MONITORING
+            snapshot = await self._monitor()
+            
+            # ━━━━ PHASE 2: DIAGNOSE ━━━━
+            self.phase = ImprovementPhase.DIAGNOSING
+            diagnoses = await self._diagnose(snapshot)
+            
+            if not diagnoses:
+                print("  No issues found. System performing optimally.")
+                self.phase = ImprovementPhase.IDLE
+                return results
+            
+            # ━━━━ PHASE 3: GENERATE PATCHES ━━━━
+            self.phase = ImprovementPhase.GENERATING
+            patches = await self._generate_patches(diagnoses)
+            results["patches_generated"] = len(patches)
+            
+            if not patches:
+                print("  Could not generate patches for identified issues.")
+                self.phase = ImprovementPhase.IDLE
+                return results
+            
+            # ━━━━ PHASE 4: TEST IN SANDBOX ━━━━
+            self.phase = ImprovementPhase.TESTING
+            passed_patches = await self._test_patches(patches)
+            results["patches_passed"] = len(passed_patches)
+            
+            # ━━━━ PHASE 5: APPLY ━━━━
+            if passed_patches and self.auto_apply:
+                self.phase = ImprovementPhase.APPLYING
+                applied = await self._apply_patches(passed_patches)
+                results["patches_applied"] = len(applied)
+                
+                # ━━━━ PHASE 6: VERIFY ━━━━
+                self.phase = ImprovementPhase.VERIFYING
+                delta = await self._verify_improvement(snapshot)
+                results["improvement_delta"] = delta
+                
+                if delta > 0:
+                    self.profile.generation += 1
+                    self.profile.total_improvements_applied += len(applied)
+                    print(f"  ✓ IMPROVED: +{delta:.4f} (Generation {self.profile.generation})")
+                elif delta < -self.min_improvement_threshold:
+                    # Regression detected — rollback
+                    print(f"  ✗ REGRESSION: {delta:.4f} — Rolling back...")
+                    await self._rollback_patches(applied)
+                    self.profile.total_improvements_reverted += len(applied)
+                    results["patches_applied"] = 0
+
+        except Exception as e:
+            print(f"  ERROR in improvement cycle: {e}")
+            traceback.print_exc()
+        
+        # Update score history
+        self.score_history.append((time.time(), self.profile.overall_score))
+        self._update_improvement_rate()
+        
+        self.phase = ImprovementPhase.IDLE
+        
+        elapsed = time.time() - cycle_start
+        print(f"  Cycle completed in {elapsed:.2f}s")
+        
+        return results
+
+    # ═══════════════════════════════════════════════════════════════
+    # PHASE IMPLEMENTATIONS
+    # ═══════════════════════════════════════════════════════════════
+
+    async def _monitor(self) -> PerformanceSnapshot:
+        """Phase 1: Gather performance metrics from all components."""
+        print("  [1/6] Monitoring system performance...")
+        
+        snapshot = self.monitor.take_snapshot()
+        self.profile.overall_score = snapshot.overall_score
+        self.profile.component_scores = snapshot.component_scores
+        
+        return snapshot
+
+    async def _diagnose(self, snapshot: PerformanceSnapshot) -> List[Dict[str, Any]]:
+        """Phase 2: Identify what needs improvement."""
+        print("  [2/6] Diagnosing performance issues...")
+        
+        diagnoses = []
+        
+        # Find underperforming components
+        for component, score in snapshot.component_scores.items():
+            if score < 0.7:   # lowered threshold from 0.6
+                diagnoses.append({
+                    "component": component,
+                    "score": score,
+                    "type": "underperformance",
+                    "severity": 1.0 - score,
+                    "description": f"{component} scoring {score:.2f}, below threshold 0.7"
+                })
+        
+        # Find recurring failures
+        for pattern in snapshot.failure_patterns:
+            if pattern.get("count", 0) > 0:    # was > 3, now catches all real issues
+                diagnoses.append({
+                    "component": pattern["component"],
+                    "score": 0.4,
+                    "type": "underperformance",
+                    "severity": 0.6,
+                    "description": f"Code quality issue in {pattern['component']}: {pattern.get('error', 'unknown')}",
+                    "error_pattern": pattern.get("error", ""),
+                })
+        
+        # Find bottlenecks (slow components)
+        for component, latency in snapshot.latencies.items():
+            if latency > 100.0:  # >100ms is slow
+                diagnoses.append({
+                    "component": component,
+                    "score": max(0, 1.0 - latency / 500.0),
+                    "type": "latency_bottleneck",
+                    "severity": min(1.0, latency / 500.0),
+                    "description": f"{component} latency {latency:.0f}ms exceeds threshold",
+                    "current_latency": latency,
+                })
+        
+        # Find inefficiencies (high resource usage, low output)
+        if snapshot.resource_efficiency < 0.5:
+            diagnoses.append({
+                "component": "system",
+                "score": snapshot.resource_efficiency,
+                "type": "inefficiency",
+                "severity": 1.0 - snapshot.resource_efficiency,
+                "description": f"Resource efficiency at {snapshot.resource_efficiency:.2f}",
+            })
+        
+        # Sort by severity
+        diagnoses.sort(key=lambda d: d["severity"], reverse=True)
+        
+        self.profile.bottlenecks = [d["component"] for d in diagnoses[:5]]
+        self.profile.failure_patterns = [d for d in diagnoses if d["type"] == "recurring_failure"]
+        
+        print(f"    Found {len(diagnoses)} issues")
+        for d in diagnoses[:3]:
+            print(f"      • {d['component']}: {d['type']} (severity: {d['severity']:.2f})")
+        
+        return diagnoses
+
+    async def _generate_patches(self, diagnoses: List[Dict[str, Any]]) -> List[CodePatch]:
+        """Phase 3: Generate code patches to address diagnosed issues."""
+        print("  [3/6] Generating improvement patches...")
+        
+        patches = []
+        
+        for diagnosis in diagnoses[:self.max_patches_per_cycle]:
+            patch = self.generator.generate_patch(diagnosis)
+            if patch:
+                patches.append(patch)
+                print(f"    Generated patch: {patch.name} ({patch.target_file})")
+        
+        return patches
+
+    async def _test_patches(self, patches: List[CodePatch]) -> List[CodePatch]:
+        """Phase 4: Test each patch in an isolated sandbox."""
+        print("  [4/6] Testing patches in sandbox...")
+        
+        passed = []
+        
+        for patch in patches:
+            result = self.sandbox.test_patch(patch)
+            
+            if result.passed:
+                passed.append(patch)
+                print(f"    ✓ PASS: {patch.name} (score: {result.score:.3f})")
+            else:
+                print(f"    ✗ FAIL: {patch.name} — {result.failure_reason}")
+            
+            # Record
+            self.improvement_history.append(ImprovementRecord(
+                id=patch.patch_id,
+                timestamp=time.time(),
+                target_component=patch.target_file,
+                diagnosis=patch.diagnosis_ref,
+                patch=patch,
+                test_result=result,
+            ))
+        
+        return passed
+
+    async def _apply_patches(self, patches: List[CodePatch]) -> List[CodePatch]:
+        """Phase 5: Apply tested patches to the live system."""
+        print("  [5/6] Applying patches to live system...")
+        
+        applied = []
+        
+        for patch in patches:
+            try:
+                # Backup original file
+                target_path = self.project_root / patch.target_file
+                if target_path.exists():
+                    backup_path = target_path.with_suffix(target_path.suffix + '.bak')
+                    backup_path.write_text(target_path.read_text())
+                
+                # Apply patch
+                self._apply_code_patch(patch)
+                applied.append(patch)
+                self.applied_patches.append(patch)
+                
+                print(f"    Applied: {patch.name}")
+                
+            except Exception as e:
+                print(f"    Failed to apply {patch.name}: {e}")
+        
+        return applied
+
+    async def _verify_improvement(self, before_snapshot: PerformanceSnapshot) -> float:
+        """Phase 6: Verify that changes actually improved things."""
+        print("  [6/6] Verifying improvement...")
+        
+        # Take new snapshot after changes
+        after_snapshot = self.monitor.take_snapshot()
+        
+        # Calculate delta
+        delta = after_snapshot.overall_score - before_snapshot.overall_score
+        
+        self.profile.overall_score = after_snapshot.overall_score
+        
+        return delta
+
+    async def _rollback_patches(self, patches: List[CodePatch]):
+        """Rollback applied patches on regression."""
+        for patch in reversed(patches):
+            try:
+                target_path = self.project_root / patch.target_file
+                backup_path = target_path.with_suffix(target_path.suffix + '.bak')
+                
+                if backup_path.exists():
+                    target_path.write_text(backup_path.read_text())
+                    backup_path.unlink()
+                    print(f"    Reverted: {patch.name}")
+                    
+            except Exception as e:
+                print(f"    Failed to revert {patch.name}: {e}")
+
+    # ═══════════════════════════════════════════════════════════════
+    # UTILITIES
+    # ═══════════════════════════════════════════════════════════════
+
+    def _apply_code_patch(self, patch: CodePatch):
+        """Apply a code patch to the filesystem."""
+        target_path = self.project_root / patch.target_file
+        
+        if patch.patch_type == "replace":
+            content = target_path.read_text()
+            new_content = content.replace(patch.old_code, patch.new_code)
+            if new_content == content:
+                raise ValueError(f"Old code not found in {patch.target_file}")
+            target_path.write_text(new_content)
+            
+        elif patch.patch_type == "append":
+            with open(target_path, 'a') as f:
+                f.write('\n' + patch.new_code)
+                
+        elif patch.patch_type == "new_file":
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(patch.new_code)
+
+    def _update_improvement_rate(self):
+        """Calculate the rate of improvement over time."""
+        if len(self.score_history) < 10:
+            self.profile.improvement_rate = 0.0
+            return
+        
+        recent = self.score_history[-20:]
+        if len(recent) >= 2:
+            time_delta = recent[-1][0] - recent[0][0]
+            score_delta = recent[-1][1] - recent[0][1]
+            
+            if time_delta > 0:
+                # Improvement per hour
+                self.profile.improvement_rate = (score_delta / time_delta) * 3600.0
+
+    def get_status(self) -> Dict[str, Any]:
+        """Get current self-improvement status."""
+        return {
+            "phase": self.phase.value,
+            "generation": self.profile.generation,
+            "overall_score": self.profile.overall_score,
+            "improvement_rate_per_hour": self.profile.improvement_rate,
+            "total_cycles": self._cycle_count,
+            "total_applied": self.profile.total_improvements_applied,
+            "total_reverted": self.profile.total_improvements_reverted,
+            "success_rate": (
+                self.profile.total_improvements_applied /
+                max(1, self.profile.total_improvements_applied + self.profile.total_improvements_reverted)
+            ),
+            "bottlenecks": self.profile.bottlenecks,
+            "running": self._running,
+        }
+
+    def get_improvement_curve(self) -> List[Tuple[float, float]]:
+        """Get the improvement curve (score over time)."""
+        return self.score_history

@@ -66,7 +66,7 @@ class ImprovementRecord:
 @dataclass
 class SystemProfile:
     """Self-knowledge: what Ultron knows about its own performance."""
-    overall_score: float = 0.5
+    overall_score: float = 0.0
     component_scores: Dict[str, float] = field(default_factory=dict)
     bottlenecks: List[str] = field(default_factory=list)
     failure_patterns: List[Dict[str, Any]] = field(default_factory=list)
@@ -249,24 +249,24 @@ class SelfImprovementEngine:
         
         # Find underperforming components
         for component, score in snapshot.component_scores.items():
-            if score < 0.6:
+            if score < 0.7:   # lowered threshold from 0.6
                 diagnoses.append({
                     "component": component,
                     "score": score,
                     "type": "underperformance",
                     "severity": 1.0 - score,
-                    "description": f"{component} scoring {score:.2f}, below threshold 0.6"
+                    "description": f"{component} scoring {score:.2f}, below threshold 0.7"
                 })
         
         # Find recurring failures
         for pattern in snapshot.failure_patterns:
-            if pattern.get("count", 0) > 3:
+            if pattern.get("count", 0) > 0:    # was > 3, now catches all real issues
                 diagnoses.append({
                     "component": pattern["component"],
-                    "score": 0.0,
-                    "type": "recurring_failure",
-                    "severity": 0.8,
-                    "description": f"Recurring failure in {pattern['component']}: {pattern.get('error', 'unknown')}",
+                    "score": 0.4,
+                    "type": "underperformance",
+                    "severity": 0.6,
+                    "description": f"Code quality issue in {pattern['component']}: {pattern.get('error', 'unknown')}",
                     "error_pattern": pattern.get("error", ""),
                 })
         

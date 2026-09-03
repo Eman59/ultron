@@ -14,11 +14,12 @@
 #   2. Go Watchdog          — Keeps agent alive after crashes
 #   3. Rust Neural Mesh     — Hebbian plasticity, hot-swap architecture
 #   4. Rust Security Daemon — Threat monitor, integrity checker
-#   5. Python Learning Svc  — Unified self-improvement hub
-#   6. Python Interface     — FastAPI server (UI + REST API + WebSocket)
+#   5. Brain C Sidecar      — Autonomous reasoning HTTP sidecar
+#   6. Python Learning Svc  — Unified self-improvement hub
+#   7. Python Interface     — FastAPI server (UI + REST API + WebSocket)
+#   8. Rust Neuromorphic + Data Pipeline
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
-
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$PROJECT_ROOT/data/logs"
 PID_DIR="$PROJECT_ROOT/data/pids"
@@ -226,7 +227,18 @@ else
 fi
 
 # ── 5. Python Learning Service ────────────────────────────────────────────────
-echo -e "\n${CYAN}[5/6] Python Learning Service — Meta-Learning Hub${NC}"
+echo -e "\n${CYAN}[5/8] Brain C Sidecar — Autonomous Reasoning${NC}"
+BRAIN_C_PORT=50070
+if ! port_up "$BRAIN_C_PORT"; then
+    start_proc "brain_c_sidecar" \
+        python3 -m python.consciousness.brain_c_server --port "$BRAIN_C_PORT"
+    wait_port "$BRAIN_C_PORT" "Brain C Sidecar" 10 || true
+else
+    ok "Brain C Sidecar already running (:$BRAIN_C_PORT)"
+fi
+
+# ── 6. Python Learning Service ────────────────────────────────────────────────
+echo -e "\n${CYAN}[6/8] Python Learning Service — Meta-Learning Hub${NC}"
 LEARNING_PORT="${ULTRON_LEARNING_PORT:-50060}"
 if ! port_up "$LEARNING_PORT"; then
     start_proc "python_learning" \
@@ -236,8 +248,18 @@ else
     ok "Learning Service already running (:$LEARNING_PORT)"
 fi
 
-# ── 6. Python Interface Server ────────────────────────────────────────────────
-echo -e "\n${CYAN}[6/6] Python Interface Server — The Face${NC}"
+# ── 7. Python Interface Server ────────────────────────────────────────────────
+echo -e "\n${CYAN}[7/8] Python Interface Server — The Face${NC}"
+
+# Ensure Playwright Chromium is installed (needed for browser_browse/browser_search)
+if ! python3 -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); p.stop()" 2>/dev/null; then
+    info "Installing Playwright + Chromium (one-time, ~150MB)..."
+    pip3 install --quiet playwright 2>/dev/null || true
+    python3 -m playwright install chromium 2>/dev/null || true
+    ok "Playwright Chromium installed"
+else
+    ok "Playwright Chromium ready"
+fi
 UI_PORT="${PORT:-9000}"
 if ! port_up "$UI_PORT"; then
     start_proc "python_ui" \
@@ -249,6 +271,39 @@ if ! port_up "$UI_PORT"; then
     wait_port "$UI_PORT" "Python UI" 20 || true
 else
     ok "Python UI already running (:$UI_PORT)"
+fi
+
+# ── 8. Rust Neuromorphic + Data Pipeline ─────────────────────────────────────
+if [ "$SKIP_RUST" = false ]; then
+    echo -e "\n${CYAN}[8/8] Rust Neuromorphic + Data Pipeline${NC}"
+    RUST_NEURO="$PROJECT_ROOT/rust/target/release/ultron-neuromorphic"
+    RUST_DATA="$PROJECT_ROOT/rust/target/release/ultron-real-time-data"
+    NEURO_PORT="${ULTRON_NEURO_PORT:-50056}"
+    DATA_PORT="${ULTRON_DATA_PORT:-50054}"
+
+    if [ -f "$RUST_NEURO" ]; then
+        if ! port_up "$NEURO_PORT"; then
+            start_proc "rust_neuromorphic" "$RUST_NEURO"
+            wait_port "$NEURO_PORT" "Rust Neuromorphic" 8 || true
+        else
+            ok "Neuromorphic already running (:$NEURO_PORT)"
+        fi
+    else
+        warn "Neuromorphic binary not found — run: cd rust && cargo build --release"
+    fi
+
+    if [ -f "$RUST_DATA" ]; then
+        if ! port_up "$DATA_PORT"; then
+            start_proc "rust_data_pipeline" "$RUST_DATA"
+            wait_port "$DATA_PORT" "Data Pipeline" 8 || true
+        else
+            ok "Data Pipeline already running (:$DATA_PORT)"
+        fi
+    else
+        warn "Data pipeline binary not found — run: cd rust && cargo build --release"
+    fi
+else
+    warn "[8/8] Rust neuromorphic+data skipped (--no-rust)"
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════

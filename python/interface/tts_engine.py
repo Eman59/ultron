@@ -38,12 +38,12 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _MODEL_PATH   = _PROJECT_ROOT / "models" / "tts" / "en_US-ryan-high.onnx"
 
 # SoX processing — what makes it sound like Ultron not a podcast host
-_SOX_PITCH   = "-380"   # semitone shift (negative = lower/darker)
+_SOX_PITCH   = "-600"   # semitone shift (negative = lower/darker)
 _SOX_BASS    = "+5"     # dB bass boost
 _SOX_REVERB  = ["15", "10", "70"]  # reverberance, hf-damping, room-scale
 
 # Fallback
-_EDGE_VOICE  = "en-US-GuyNeural"
+_EDGE_VOICE  = "en-GB-RyanNeural"
 _EDGE_RATE   = "+5%"
 _EDGE_PITCH  = "-8Hz"
 _MACOS_VOICE = "Daniel"
@@ -82,7 +82,7 @@ def _get_piper_voice():
 # BACKEND 1 — Piper + SoX (the real Ultron voice)
 # ══════════════════════════════════════════════════════════════
 
-def _synth_piper(text: str) -> str:
+def _synth_piper(text: str, rate: float = 0.8) -> str:
     """
     Generate speech with Piper then darken it with SoX.
     Returns WAV path or '' on failure.

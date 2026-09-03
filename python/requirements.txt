@@ -50,3 +50,8 @@ ipython==8.18.1
 polars==0.20.1
 pyarrow==14.0.2
 duckdb==0.9.2
+
+# Web browsing automation (human-like browser control)
+playwright==1.44.0
+beautifulsoup4==4.12.3
+lxml==5.1.0

@@ -926,14 +926,14 @@ def dispatch(user_input: str) -> Optional[Dict]:
     if m:
         return app_focus(m.group(1).strip())
 
-    # ── URL ──────────────────────────────────────────────────────────
-    m = re.match(r'(open|browse|go to)\s+(https?://\S+)', ql)
+    # ── URL — browser_browse (real content fetch, not just OS open) ─────────
+    m = re.match(r'(open|browse|visit|go to|navigate to)\s+(https?://\S+)', ql)
     if m:
-        return open_url(m.group(2))
+        return browser_browse(m.group(2))
 
+    # Bare HTTPS URL
     if re.match(r'^https?://', q):
-        return http_get(q)
-
+        return browser_browse(q)
     # ── Clipboard ────────────────────────────────────────────────────
     if re.search(r'(what.?s in|read|get|show)\s+(the\s+)?clipboard', ql):
         return clipboard_get()
@@ -1004,6 +1004,47 @@ def dispatch(user_input: str) -> Optional[Dict]:
     if m:
         return edit_own_code(m.group(1), m.group(2), m.group(3))
 
+    # ── Browser / Web — search commands (URL dispatch already handled above) ──
+    # "search for X", "google X", "look up X", "find X online"
+    m = re.match(r'(search\s+for|google|bing|look\s+up|find\s+online|search\s+the\s+web\s+for|web\s+search|search)\s+(.+)', ql)
+    if m:
+        engine = "google" if "google" in m.group(1) else "bing" if "bing" in m.group(1) else "duckduckgo"
+        return browser_search(m.group(2).strip(), engine=engine)
+
+    # "click <selector>" on current page
+    m = re.match(r'click\s+(?:on\s+)?(.+)', ql)
+    if m and not re.search(r'\b(mouse|pixel|coordinate|x=|y=)\b', ql):
+        return browser_click(m.group(1).strip())
+
+    # "type <text> into <selector>"
+    m = re.match(r'type\s+"([^"]+)"\s+into\s+(.+)', ql)
+    if m:
+        return browser_type(m.group(2).strip(), m.group(1), submit=False)
+
+    m = re.match(r'type\s+(.+)\s+in\s+(the\s+)?search', ql)
+    if m:
+        return browser_type("input[type='search'], input[type='text'], [role='search'] input", m.group(1).strip(), submit=True)
+
+    # "scroll down", "scroll page"
+    if re.search(r'scroll\s+(down|page|more|further)', ql):
+        amount = 3
+        m2 = re.search(r'scroll\s+(\d+)', ql)
+        if m2:
+            amount = int(m2.group(1))
+        return browser_scroll(amount)
+
+    # "screenshot of <url>"
+    m = re.match(r'screenshot\s+of\s+(https?://\S+)', ql)
+    if m:
+        res = browser_browse(m.group(1))
+        if res.get("success"):
+            return browser_screenshot()
+        return res
+
+    # "what's on the page", "read this page", "what does it say"
+    if re.search(r"what.?s on (the|this) page|read (this |the )?page|page content|what does it say", ql):
+        return browser_get_text()
+
     # Nothing matched — let LLM handle it
     return None
 
@@ -1011,6 +1052,245 @@ def dispatch(user_input: str) -> Optional[Dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 # 13. INTERNET LEARNING — REAL POWER
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 14. BROWSER CONTROL — Python Playwright (full human-like web browsing)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_browser_instance = None
+_browser_page     = None   # persistent page (keeps session/cookies)
+
+def _get_browser():
+    """Lazy-init a persistent Playwright Chromium browser. Returns (browser, page)."""
+    global _browser_instance, _browser_page
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None, None
+
+    # Ensure Chromium can be found regardless of environment
+    import os as _os
+    for candidate in [
+        _os.path.expanduser("~/.playwright"),
+        _os.path.expanduser("~/Library/Caches/ms-playwright"),
+        "/Users/IMSAYYED2401/.playwright",
+    ]:
+        if _os.path.isdir(candidate):
+            _os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", candidate)
+            break
+
+    if _browser_instance is None:
+        try:
+            _pw = sync_playwright().start()
+            _browser_instance = _pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+            )
+        except Exception:
+            return None, None
+
+    if _browser_page is None or _browser_page.is_closed():
+        try:
+            ctx = _browser_instance.new_context(
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+            )
+            _browser_page = ctx.new_page()
+        except Exception:
+            return _browser_instance, None
+
+    return _browser_instance, _browser_page
+
+
+def _page_to_text(page) -> str:
+    """Extract clean readable text from a Playwright page."""
+    try:
+        text = page.evaluate("""() => {
+            ['script','style','nav','footer','aside','noscript'].forEach(t =>
+                document.querySelectorAll(t).forEach(e => e.remove())
+            );
+            return document.body ? document.body.innerText : '';
+        }""")
+        # Collapse blank lines
+        lines = [l.strip() for l in (text or "").splitlines() if l.strip()]
+        return "\n".join(lines)[:8000]
+    except Exception:
+        return ""
+
+
+def browser_browse(url: str) -> Dict:
+    """Navigate to a URL and return title + readable text + links."""
+    _, page = _get_browser()
+    if page is None:
+        # Graceful fallback: plain HTTP fetch (always works)
+        try:
+            import urllib.request as _ur, re as _re, html as _html
+            req = _ur.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "Accept": "text/html",
+            })
+            raw = _ur.urlopen(req, timeout=15).read().decode("utf-8", errors="ignore")
+            # Preserve block structure
+            raw = _re.sub(r'<(br|p|div|h[1-6]|li|tr)[^>]*>', '\n', raw, flags=_re.I)
+            raw = _re.sub(r'<[^>]+>', ' ', raw)
+            raw = _html.unescape(_re.sub(r'\s+', ' ', raw)).strip()
+            # Extract title
+            title_m = _re.search(r'<title[^>]*>(.*?)</title>', raw, _re.I)
+            title = title_m.group(1).strip() if title_m else ""
+            return _ok({"url": url, "title": title, "content": raw[:6000], "links": []}, f"browse {url}")
+        except Exception as e:
+            return _err(f"Browser unavailable and HTTP fetch failed: {e}")
+    try:
+        response = page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        status   = response.status if response else 200
+        title    = page.title()
+        content  = _page_to_text(page)
+        links    = page.evaluate("""() =>
+            Array.from(document.querySelectorAll('a[href]'))
+                .map(a => a.href).filter(h => h.startsWith('http')).slice(0, 40)
+        """) or []
+        return _ok({"url": page.url, "title": title, "content": content,
+                    "status": status, "links": links}, f"browse {url}")
+    except Exception as e:
+        return _err(str(e))
+
+
+def browser_search(query: str, engine: str = "duckduckgo") -> Dict:
+    """Search the web — uses browser if available, otherwise HTTP fallback."""
+    _, page = _get_browser()
+
+    if page is None:
+        # HTTP fallback — always works
+        try:
+            from .real_brain import tool_web_search
+            return _ok(tool_web_search(query), f"search {query}")
+        except Exception as e:
+            return _err(f"Search failed: {e}")
+
+    # Browser path
+    if engine == "google":
+        search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}&num=10"
+    else:
+        search_url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl=en-US&gl=US&ceid=US:en"
+
+    try:
+        page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
+        content = _page_to_text(page)
+        return _ok(f"[Search: {query}]\n\n{content[:4000]}", f"search {query}")
+    except Exception as e:
+        # Fallback to HTTP
+        try:
+            from .real_brain import tool_web_search
+            return _ok(tool_web_search(query), f"search {query}")
+        except Exception:
+            return _err(str(e))
+
+
+def browser_click(selector: str) -> Dict:
+    """Click an element on the current browser page by CSS selector or text."""
+    _, page = _get_browser()
+    if page is None:
+        return _err("Browser not running — call browser_browse first")
+    try:
+        # Try CSS selector, then text match
+        try:
+            page.click(selector, timeout=5000)
+        except Exception:
+            page.click(f"text={selector}", timeout=5000)
+        page.wait_for_load_state("domcontentloaded", timeout=8000)
+        title   = page.title()
+        content = _page_to_text(page)
+        return _ok({"url": page.url, "title": title, "content": content[:3000]}, f"click {selector}")
+    except Exception as e:
+        return _err(str(e))
+
+
+def browser_type(selector: str, text: str, submit: bool = False) -> Dict:
+    """Type text into an input field (by CSS selector or placeholder text)."""
+    _, page = _get_browser()
+    if page is None:
+        return _err("Browser not running — call browser_browse first")
+    try:
+        try:
+            page.fill(selector, text, timeout=5000)
+        except Exception:
+            # Try by placeholder
+            page.fill(f"[placeholder*='{selector}']", text, timeout=5000)
+        if submit:
+            page.keyboard.press("Enter")
+            page.wait_for_load_state("domcontentloaded", timeout=8000)
+        content = _page_to_text(page)
+        return _ok({"url": page.url, "content": content[:3000], "submitted": submit}, f"type into {selector}")
+    except Exception as e:
+        return _err(str(e))
+
+
+def browser_scroll(amount: int = 3) -> Dict:
+    """Scroll down the current page to load lazy content."""
+    _, page = _get_browser()
+    if page is None:
+        return _err("Browser not running — call browser_browse first")
+    try:
+        for _ in range(max(1, amount)):
+            page.evaluate("window.scrollBy(0, window.innerHeight)")
+            page.wait_for_timeout(400)
+        content = _page_to_text(page)
+        return _ok({"url": page.url, "content": content[:6000]}, f"scroll {amount}x")
+    except Exception as e:
+        return _err(str(e))
+
+
+def browser_screenshot(path: str = "/tmp/ultron_browser.png") -> Dict:
+    """Take a screenshot of the current browser page."""
+    _, page = _get_browser()
+    if page is None:
+        return _err("Browser not running — call browser_browse first")
+    try:
+        page.screenshot(path=path, full_page=False)
+        return _ok({"path": path, "url": page.url}, f"screenshot → {path}")
+    except Exception as e:
+        return _err(str(e))
+
+
+def browser_js(script: str) -> Dict:
+    """Execute JavaScript on the current browser page and return the result."""
+    _, page = _get_browser()
+    if page is None:
+        return _err("Browser not running — call browser_browse first")
+    try:
+        result = page.evaluate(script)
+        return _ok(result, f"js eval")
+    except Exception as e:
+        return _err(str(e))
+
+
+def browser_get_text() -> Dict:
+    """Get the full readable text content of the current browser page."""
+    _, page = _get_browser()
+    if page is None:
+        return _err("No active browser page")
+    try:
+        content = _page_to_text(page)
+        title   = page.title()
+        return _ok({"url": page.url, "title": title, "content": content}, "get_text")
+    except Exception as e:
+        return _err(str(e))
+
+
+def browser_close() -> Dict:
+    """Close the browser instance and free resources."""
+    global _browser_instance, _browser_page
+    try:
+        if _browser_page and not _browser_page.is_closed():
+            _browser_page.close()
+        if _browser_instance:
+            _browser_instance.close()
+        _browser_instance = None
+        _browser_page     = None
+        return _ok("Browser closed", "close")
+    except Exception as e:
+        return _err(str(e))
+
 
 def internet_learn(topic: str, depth: int = 1) -> Dict:
     """
@@ -1149,6 +1429,16 @@ TOOL_REGISTRY: Dict[str, Any] = {
     "internet_execute_any": internet_execute_any,
     "internet_search":     internet_search,
     "internet_commands":   internet_commands,
+    # BROWSER CONTROL — Python Playwright (full human-like browsing)
+    "browser_browse":      browser_browse,
+    "browser_search":      browser_search,
+    "browser_click":       browser_click,
+    "browser_type":        browser_type,
+    "browser_scroll":      browser_scroll,
+    "browser_screenshot":  browser_screenshot,
+    "browser_js":          browser_js,
+    "browser_get_text":    browser_get_text,
+    "browser_close":       browser_close,
 }
 
 

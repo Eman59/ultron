@@ -148,10 +148,11 @@ func main() {
 		projectRoot = "."
 	}
 	sugar.Info("Initializing Self-Modification Engine...")
-	selfMod := agent.NewSelfModificationEngine(sugar, projectRoot)
-	selfMod.Start(ctx)
-	coreAgent.SetSelfModEngine(selfMod)
-	sugar.Info("✓ Self-Modification Engine online (max 10 patches/hour)")
+	// agent.SelfModificationEngine disabled — selfmod.SelfModEngine (HTTP-exposed) is the active one.
+	// selfMod := agent.NewSelfModificationEngine(sugar, projectRoot)
+	// selfMod.Start(ctx)
+	// coreAgent.SetSelfModEngine(selfMod)
+	sugar.Info("✓ Self-Modification Engine: using selfmod.SelfModEngine (HTTP /mutate endpoint)")
 
 	// ━━━━━━━━━━ Start Action Interface (Web/Cloud/Mesh/Compute drivers) ━━━━━━━━━━
 	sugar.Info("Initializing Action Interface...")
@@ -354,7 +355,9 @@ func main() {
 	snapshotWriter.Start()
 	sugar.Info("✓ Snapshot Writer online (state saved every 5s → watchdog can resume after crash)")
 
-	// ━━━━━━━━━━ Self-Mod Engine (sandbox→compile→test→swap) ━━━━━━━━━━
+	// ━━━━━━━━━━ Self-Mod Engine (sandbox→compile→test→swap) — primary ━━━━━━━━━━
+	// NOTE: agent.SelfModificationEngine (internal) is disabled to avoid two competing
+	// self-mod systems. selfmod.SelfModEngine is the HTTP-exposed one used by Python layer.
 	selfModEngine := selfmod.NewSelfModEngine(projectRoot)
 	sugar.Info("✓ Self-Mod Engine (self_mod/engine.go) online — compile→test→benchmark→swap pipeline")
 
