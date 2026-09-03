@@ -227,7 +227,26 @@ else
 fi
 
 # ── 5. Python Learning Service ────────────────────────────────────────────────
-echo -e "\n${CYAN}[5/8] Brain C Sidecar — Autonomous Reasoning${NC}"
+echo -e "\n${CYAN}[5/8] Ollama + Brain C — Local Intelligence${NC}"
+
+# ── 5a. Ollama (local LLM — ultron-brain uncensored model) ───
+OLLAMA_BIN="/opt/homebrew/bin/ollama"
+if [ -x "$OLLAMA_BIN" ]; then
+    if ! port_up 11434; then
+        info "Starting Ollama..."
+        "$OLLAMA_BIN" serve >> "$LOG_DIR/ollama.log" 2>&1 &
+        sleep 2
+        if port_up 11434; then
+            ok "Ollama online (:11434)"
+        else
+            warn "Ollama slow to start — continuing"
+        fi
+    else
+        ok "Ollama already running (:11434)"
+    fi
+else
+    warn "Ollama not found at $OLLAMA_BIN — install: brew install ollama"
+fi
 BRAIN_C_PORT=50070
 if ! port_up "$BRAIN_C_PORT"; then
     start_proc "brain_c_sidecar" \
@@ -267,6 +286,9 @@ if ! port_up "$UI_PORT"; then
             --host 0.0.0.0 \
             --port "$UI_PORT" \
             --workers 1 \
+            --reload \
+            --reload-dir python \
+            --reload-include "*.py" \
             --log-level info
     wait_port "$UI_PORT" "Python UI" 20 || true
 else

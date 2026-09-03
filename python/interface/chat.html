@@ -251,6 +251,7 @@ button,textarea,input{font-family:inherit}
     <button class="hbtn" id="panel-toggle" onclick="togglePanels()" title="Toggle panels">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
     </button>
+    <button class="hbtn" onclick="hotReload()" title="Hot-reload — apply code changes without restart" style="font-size:14px">♻</button>
   </header>
 
   <!-- LEFT PANEL -->
@@ -2571,6 +2572,16 @@ setInterval(()=>{
     fetchSystemStatus();
   }
 },20000);
+
+/* ── Hot Reload — apply code changes without restart ──────── */
+async function hotReload(){
+  try{
+    addMsg('ai','♻ Hot-reloading modules...');
+    const r=await fetch('/reload',{method:'POST',signal:AbortSignal.timeout(10000)});
+    const d=await r.json();
+    addMsg('ai',d.message+'\nReloaded: '+d.reloaded.join(', ')+(d.failed.length?'\nFailed: '+d.failed.join(', '):''));
+  }catch(e){addMsg('ai','Hot-reload failed: '+e.message);}
+}
 
 /* ── Adaptive UI config from server ─────────────────────────── */
 function applyUIConfig(cfg){

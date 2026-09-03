@@ -908,6 +908,55 @@ def _check_p2p_health() -> bool:
         return False
 
 
+@app.post("/reload")
+async def hot_reload():
+    """
+    Hot-reload all Python modules without restarting the server.
+    Called automatically when uvicorn --reload detects file changes.
+    Also callable from chat: 'reload' command.
+    """
+    import importlib, sys as _sys
+
+    reloaded = []
+    failed   = []
+
+    # Modules to hot-reload in dependency order
+    reload_targets = [
+        "python.interface.tts_engine",
+        "python.interface.action_engine",
+        "python.interface.real_brain",
+        "python.interface.llm_brain",
+        "python.interface.world_intelligence",
+    ]
+
+    for mod_name in reload_targets:
+        if mod_name in _sys.modules:
+            try:
+                importlib.reload(_sys.modules[mod_name])
+                reloaded.append(mod_name.split(".")[-1])
+            except Exception as e:
+                failed.append(f"{mod_name.split('.')[-1]}: {e}")
+
+    # Clear voice cache so new TTS settings take effect
+    tts_mod = _sys.modules.get("python.interface.tts_engine")
+    if tts_mod and hasattr(tts_mod, "_piper_voice"):
+        tts_mod._piper_voice = None
+
+    # Re-read .env in case env vars changed
+    env_path = _pathlib.Path(__file__).parent.parent.parent / ".env"
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                os.environ[k.strip()] = v.strip()  # overwrite, not setdefault
+
+    return {
+        "reloaded": reloaded,
+        "failed":   failed,
+        "message":  f"Hot-reloaded {len(reloaded)} modules. No restart needed."
+    }
+
+
 @app.get("/health")
 async def health():
     """Liveness check — includes all module statuses for UI."""
@@ -1763,6 +1812,11 @@ async def execute_command(body: dict):
     # ── CLEAR ───────────────────────────────────────────────────
     elif action == "clear":
         return {"response": "__CLEAR__"}
+
+    # ── RELOAD — hot-reload modules without restart ───────────────
+    elif action in ("reload", "hotreload", "hot-reload"):
+        result = await hot_reload()
+        return {"response": f"♻ {result['message']}\nReloaded: {', '.join(result['reloaded'])}" + (f"\nFailed: {', '.join(result['failed'])}" if result['failed'] else "")}
 
     # ── DEFAULT: pass to LLM ─────────────────────────────────────
     else:
