@@ -252,6 +252,7 @@ button,textarea,input{font-family:inherit}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
     </button>
     <button class="hbtn" onclick="hotReload()" title="Hot-reload — apply code changes without restart" style="font-size:14px">♻</button>
+    <button class="hbtn" onclick="toggleLiveVision()" title="Toggle live camera vision" style="font-size:14px" id="live-vision-btn">👁</button>
   </header>
 
   <!-- LEFT PANEL -->
@@ -2581,6 +2582,62 @@ async function hotReload(){
     const d=await r.json();
     addMsg('ai',d.message+'\nReloaded: '+d.reloaded.join(', ')+(d.failed.length?'\nFailed: '+d.failed.join(', '):''));
   }catch(e){addMsg('ai','Hot-reload failed: '+e.message);}
+}
+
+/* ── Live Camera WebSocket — stream frames to Ultron's vision ── */
+let _camWS = null;
+let _camStream = null;
+let _camCanvas = null;
+let _camInterval = null;
+
+function startLiveVision(){
+  if(_camWS) return;
+  const p = location.protocol === 'https:' ? 'wss' : 'ws';
+  _camWS = new WebSocket(`${p}://${location.host}/ws/camera`);
+
+  _camWS.onopen = () => {
+    addMsg('ai', '👁 Live vision active — Ultron is watching');
+    // Start capturing frames
+    navigator.mediaDevices.getUserMedia({video: {width:640, height:480}})
+      .then(stream => {
+        _camStream = stream;
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+        _camCanvas = document.createElement('canvas');
+        _camCanvas.width = 640; _camCanvas.height = 480;
+        _camInterval = setInterval(() => {
+          if(!_camWS || _camWS.readyState !== WebSocket.OPEN) return;
+          const ctx = _camCanvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, 640, 480);
+          _camCanvas.toBlob(blob => blob && blob.arrayBuffer().then(buf => _camWS.send(buf)), 'image/jpeg', 0.6);
+        }, 2000); // send frame every 2s
+      })
+      .catch(e => addMsg('ai', 'Camera access denied: ' + e.message));
+  };
+
+  _camWS.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      if(d.type === 'vision' && d.description) {
+        addMsg('ai', `👁 [Frame ${d.frame}] ${d.description}`);
+      }
+    } catch(err){}
+  };
+
+  _camWS.onclose = () => { _camWS = null; stopLiveVision(); };
+}
+
+function stopLiveVision(){
+  if(_camInterval){ clearInterval(_camInterval); _camInterval = null; }
+  if(_camStream){ _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
+  if(_camWS && _camWS.readyState === WebSocket.OPEN){ _camWS.close(); }
+  _camWS = null;
+  addMsg('ai', '👁 Live vision stopped');
+}
+
+function toggleLiveVision(){
+  if(_camWS) stopLiveVision(); else startLiveVision();
 }
 
 /* ── Adaptive UI config from server ─────────────────────────── */

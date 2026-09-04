@@ -1004,6 +1004,37 @@ def dispatch(user_input: str) -> Optional[Dict]:
     if m:
         return edit_own_code(m.group(1), m.group(2), m.group(3))
 
+    # ── Remote machine control (SSH) ───────────────────────────────
+    m = re.match(r'ssh\s+(?:connect\s+)?(\S+)(?:\s+as\s+(\S+))?(?:\s+password\s+(\S+))?', ql)
+    if m:
+        host = m.group(1); user = m.group(2) or "root"; pwd = m.group(3)
+        return ssh_connect(host, user, pwd)
+
+    m = re.match(r'ssh\s+run\s+on\s+(\S+)\s+(.+)', ql)
+    if m:
+        return ssh_run(m.group(1), m.group(2))
+
+    # ── Hacking / network recon ─────────────────────────────────────
+    m = re.match(r'(nmap|scan|hack)\s+(\S+)', ql)
+    if m and m.group(2) not in ("network", "lan", "local"):
+        flags = "-sV --open"
+        if "aggressive" in ql or " -a" in ql:  flags = "-A"
+        if "all ports"  in ql or " -p-" in ql: flags = "-sV -p-"
+        return nmap_scan(m.group(2), flags)
+
+    m = re.match(r'(banner|fingerprint|service)\s+(\S+)(?:\s+(\d+))?', ql)
+    if m:
+        host = m.group(2); port = int(m.group(3)) if m.group(3) else 80
+        return service_fingerprint(host, port)
+
+    m = re.match(r'(cve|vuln|vulnerability|exploit)\s+(lookup|check|scan|for)?\s*(\S+)', ql)
+    if m:
+        return cve_lookup(m.group(3))
+
+    m = re.match(r'vuln\s+scan\s+(\S+)', ql)
+    if m:
+        return vuln_scan(m.group(1))
+
     # ── Browser / Web — search commands (URL dispatch already handled above) ──
     # "search for X", "google X", "look up X", "find X online"
     m = re.match(r'(search\s+for|google|bing|look\s+up|find\s+online|search\s+the\s+web\s+for|web\s+search|search)\s+(.+)', ql)
@@ -1439,6 +1470,7 @@ TOOL_REGISTRY: Dict[str, Any] = {
     "browser_js":          browser_js,
     "browser_get_text":    browser_get_text,
     "browser_close":       browser_close,
+    # REMOTE MACHINE CONTROL + HACKING — populated below after function defs
 }
 
 
@@ -1453,3 +1485,321 @@ def call_tool(name: str, **kwargs) -> Dict:
         return _err(f"Tool {name} bad args: {e}")
     except Exception as e:
         return _err(f"Tool {name} error: {e}\n{traceback.format_exc()[-500:]}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 15. REMOTE MACHINE CONTROL — SSH client
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Active SSH sessions keyed by "user@host:port"
+_ssh_sessions: Dict[str, Any] = {}
+
+
+def _get_paramiko():
+    try:
+        import paramiko
+        return paramiko
+    except ImportError:
+        return None
+
+
+def ssh_connect(host: str, user: str = "root", password: str = None,
+                key_path: str = None, port: int = 22) -> Dict:
+    """
+    Open a persistent SSH connection to a remote machine.
+    Supports both password and key-based auth.
+    Key is stored in _ssh_sessions for reuse.
+    """
+    pm = _get_paramiko()
+    if pm is None:
+        # Try installing paramiko via pip
+        r = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet", "paramiko"],
+            capture_output=True, text=True, timeout=30,
+        )
+        pm = _get_paramiko()
+        if pm is None:
+            return _err("paramiko not installed — run: pip install paramiko")
+
+    session_key = f"{user}@{host}:{port}"
+    try:
+        client = pm.SSHClient()
+        client.set_missing_host_key_policy(pm.AutoAddPolicy())
+
+        connect_kwargs: Dict[str, Any] = {
+            "hostname": host,
+            "port": port,
+            "username": user,
+            "timeout": 10,
+        }
+        if key_path:
+            connect_kwargs["key_filename"] = os.path.expanduser(key_path)
+        elif password:
+            connect_kwargs["password"] = password
+
+        client.connect(**connect_kwargs)
+        _ssh_sessions[session_key] = client
+        return _ok(f"SSH connected to {session_key}", f"ssh_connect:{session_key}")
+    except Exception as e:
+        return _err(f"SSH connection failed: {e}")
+
+
+def ssh_run(host: str, command: str, user: str = "root", port: int = 22,
+            password: str = None, key_path: str = None) -> Dict:
+    """
+    Run a command on a remote machine via SSH.
+    Reuses existing session if available, otherwise connects first.
+    """
+    session_key = f"{user}@{host}:{port}"
+
+    # Reuse or create session
+    client = _ssh_sessions.get(session_key)
+    if client is None:
+        result = ssh_connect(host, user, password, key_path, port)
+        if not result.get("success"):
+            return result
+        client = _ssh_sessions.get(session_key)
+        if client is None:
+            return _err("Failed to create SSH session")
+
+    try:
+        stdin, stdout, stderr = client.exec_command(command, timeout=30)
+        out = stdout.read().decode("utf-8", errors="replace").strip()
+        err = stderr.read().decode("utf-8", errors="replace").strip()
+        combined = out + ("\n[stderr]: " + err if err else "")
+        return _ok(combined[:5000] or "[no output]", f"ssh_run:{session_key}")
+    except Exception as e:
+        # Session may have died — remove it
+        _ssh_sessions.pop(session_key, None)
+        return _err(f"SSH command failed: {e}")
+
+
+def ssh_upload(host: str, local_path: str, remote_path: str,
+               user: str = "root", port: int = 22,
+               password: str = None, key_path: str = None) -> Dict:
+    """Upload a file to a remote machine via SFTP."""
+    session_key = f"{user}@{host}:{port}"
+    client = _ssh_sessions.get(session_key)
+    if client is None:
+        result = ssh_connect(host, user, password, key_path, port)
+        if not result.get("success"):
+            return result
+        client = _ssh_sessions.get(session_key)
+
+    try:
+        sftp = client.open_sftp()
+        sftp.put(local_path, remote_path)
+        sftp.close()
+        return _ok(f"Uploaded {local_path} → {remote_path} on {host}", f"sftp:{session_key}")
+    except Exception as e:
+        return _err(f"SFTP upload failed: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 16. HACKING / NETWORK INTELLIGENCE — nmap, CVE, banners, service fingerprinting
+# ─────────────────────────────────────────────────────────────────────────────
+
+def nmap_scan(target: str, flags: str = "-sV --open") -> Dict:
+    """
+    Run nmap against a target with full service version detection.
+    Falls back to built-in port_scan if nmap is not installed.
+    Flags default: -sV (version detection) --open (only show open ports).
+    Common flags: -O (OS detection), -sC (default scripts), -A (aggressive),
+                  -p 22,80,443 (specific ports), -p- (all ports).
+    """
+    # Try nmap first (much better than raw sockets)
+    nmap_bin = subprocess.run(["which", "nmap"], capture_output=True, text=True).stdout.strip()
+    if nmap_bin:
+        try:
+            cmd = f"nmap {flags} {target}"
+            r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
+            output = r.stdout.strip()
+            if output:
+                return _ok(output, f"nmap:{target}")
+        except subprocess.TimeoutExpired:
+            return _err("nmap timed out after 120s — try narrowing the port range")
+    else:
+        # Install nmap hint + use built-in scanner
+        basic = port_scan(target, "1-1024")
+        if basic.get("success"):
+            open_ports = basic["result"].get("open_ports", [])
+            return _ok(
+                f"[No nmap — using built-in scanner]\n"
+                f"Host: {target}\n"
+                f"Open ports (1-1024): {open_ports}\n"
+                f"Install nmap for full version detection: brew install nmap",
+                f"portscan:{target}"
+            )
+    return _err(f"nmap not found. Install: brew install nmap")
+
+
+def service_fingerprint(host: str, port: int) -> Dict:
+    """
+    Grab the service banner and fingerprint what's running on a port.
+    Works without nmap — pure Python socket.
+    """
+    import socket as _s
+    results = {}
+    try:
+        sock = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect((host, port))
+
+        # Send probes for common protocols
+        probe_map = {
+            80:   b"GET / HTTP/1.0\r\nHost: {host}\r\n\r\n".replace(b"{host}", host.encode()),
+            443:  b"",  # TLS — will get alert
+            21:   b"",  # FTP sends banner on connect
+            22:   b"",  # SSH sends banner on connect
+            25:   b"",  # SMTP sends banner
+            3306: b"\x0a",  # MySQL probe
+            5432: b"",  # Postgres
+        }
+        probe = probe_map.get(port, b"\r\n")
+        if probe:
+            sock.send(probe)
+
+        banner = sock.recv(2048).decode("utf-8", errors="replace").strip()
+        sock.close()
+
+        # Identify service from banner
+        service = "unknown"
+        if "SSH" in banner:    service = "SSH"
+        elif "HTTP" in banner or "html" in banner.lower(): service = "HTTP"
+        elif "FTP" in banner:  service = "FTP"
+        elif "SMTP" in banner or "220" in banner: service = "SMTP"
+        elif "MySQL" in banner: service = "MySQL"
+        elif "220" in banner:   service = "FTP/SMTP"
+
+        results = {"host": host, "port": port, "service": service, "banner": banner[:500]}
+        return _ok(results, f"fingerprint:{host}:{port}")
+    except Exception as e:
+        return _err(f"Could not connect to {host}:{port} — {e}")
+
+
+def cve_lookup(service: str, version: str = "") -> Dict:
+    """
+    Look up known CVEs for a service/version using NIST NVD API.
+    No API key needed for basic queries.
+    Example: cve_lookup("openssh", "8.9")
+    """
+    try:
+        import urllib.parse as _up
+        query = f"{service} {version}".strip()
+        encoded = _up.quote(query)
+        url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch={encoded}&resultsPerPage=5"
+        req = urllib.request.Request(url, headers={"User-Agent": "Ultron/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+
+        vulns = data.get("vulnerabilities", [])
+        if not vulns:
+            return _ok(f"No CVEs found for: {query}", f"cve_lookup:{query}")
+
+        results = []
+        for v in vulns[:5]:
+            cve = v.get("cve", {})
+            cve_id = cve.get("id", "?")
+            desc = cve.get("descriptions", [{}])[0].get("value", "")[:200]
+            metrics = cve.get("metrics", {})
+            # Get CVSS score
+            cvss_score = "N/A"
+            for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+                if key in metrics:
+                    cvss_score = metrics[key][0].get("cvssData", {}).get("baseScore", "N/A")
+                    break
+            results.append(f"[{cve_id}] CVSS:{cvss_score} — {desc}")
+
+        return _ok("\n".join(results), f"cve_lookup:{query}")
+    except Exception as e:
+        return _err(f"CVE lookup failed: {e}")
+
+
+def banner_grab(host: str, ports: str = "21,22,23,25,80,110,143,443,3306,5432,6379,8080,8443,27017") -> Dict:
+    """
+    Grab banners from multiple ports at once.
+    Useful for quick reconnaissance of a host.
+    """
+    import socket as _s
+    from concurrent.futures import ThreadPoolExecutor, as_completed as _ac
+
+    port_list = [int(p.strip()) for p in ports.split(",") if p.strip().isdigit()]
+    banners = {}
+
+    def _grab(port):
+        try:
+            sock = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
+            sock.settimeout(2)
+            sock.connect((host, port))
+            sock.send(b"\r\n")
+            banner = sock.recv(1024).decode("utf-8", errors="replace").strip()
+            sock.close()
+            return port, banner[:200] if banner else "(open, no banner)"
+        except Exception:
+            return port, None
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        futs = {pool.submit(_grab, p): p for p in port_list}
+        for fut in _ac(futs, timeout=15):
+            port, banner = fut.result()
+            if banner:
+                banners[port] = banner
+
+    if not banners:
+        return _ok(f"No open ports with banners found on {host}", f"banner_grab:{host}")
+
+    lines = [f"Port {p}: {b}" for p, b in sorted(banners.items())]
+    return _ok({"host": host, "open_services": banners, "summary": "\n".join(lines)},
+               f"banner_grab:{host}")
+
+
+def vuln_scan(target: str) -> Dict:
+    """
+    Full vulnerability scan: port scan → banner grab → CVE lookup per service.
+    This chains the tools together for a complete picture.
+    """
+    output = [f"=== Vulnerability Scan: {target} ==="]
+
+    # Step 1: quick port scan
+    ps = port_scan(target, "1-1024")
+    open_ports = []
+    if ps.get("success"):
+        open_ports = ps["result"].get("open_ports", [])
+        output.append(f"\n[OPEN PORTS] {open_ports}")
+
+    # Step 2: banner grab
+    if open_ports:
+        bg = banner_grab(target, ",".join(map(str, open_ports[:20])))
+        if bg.get("success"):
+            services = bg["result"].get("open_services", {})
+            output.append(f"\n[BANNERS]")
+            for port, banner in services.items():
+                output.append(f"  :{port} → {banner[:100]}")
+
+                # Step 3: CVE lookup per service
+                service_name = "unknown"
+                for kw in ["SSH", "HTTP", "FTP", "SMTP", "MySQL", "nginx",
+                           "Apache", "OpenSSH", "vsftpd", "Postfix"]:
+                    if kw.lower() in banner.lower():
+                        service_name = kw
+                        break
+
+                if service_name != "unknown":
+                    cve = cve_lookup(service_name)
+                    if cve.get("success") and "No CVEs" not in str(cve.get("result", "")):
+                        output.append(f"    CVEs: {str(cve['result'])[:300]}")
+
+    return _ok("\n".join(output), f"vuln_scan:{target}")
+
+
+# ── Register SSH + hacking tools into TOOL_REGISTRY (after function defs) ───
+TOOL_REGISTRY.update({
+    "ssh_connect":         ssh_connect,
+    "ssh_run":             ssh_run,
+    "ssh_upload":          ssh_upload,
+    "nmap_scan":           nmap_scan,
+    "service_fingerprint": service_fingerprint,
+    "cve_lookup":          cve_lookup,
+    "banner_grab":         banner_grab,
+    "vuln_scan":           vuln_scan,
+})

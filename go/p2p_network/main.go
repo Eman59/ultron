@@ -93,3 +93,99 @@ func main() {
 
 	sugarLogger.Info("═══════════════════════════════════════════════════════════")
 	sugarLogger.Info("  ULTRON")
+
+	// Initialize context
+	ctx, cancel := createContext()
+	defer cancel()
+
+	// Configure node
+	nodeConfig := configureNode()
+	// Override port from env if set
+	if p := os.Getenv("ULTRON_P2P_PORT"); p != "" {
+		fmt.Sscanf(p, "%d", &nodeConfig.ListenPort)
+	}
+	// Bootstrap peers from env
+	if bp := os.Getenv("ULTRON_P2P_BOOTSTRAP"); bp != "" {
+		nodeConfig.BootstrapPeers = []string{bp}
+	}
+
+	// Initialize node
+	ultronNode, err := initializeNode(ctx, nodeConfig, sugarLogger)
+	if err != nil {
+		sugarLogger.Fatalf("Failed to initialize node: %v", err)
+	}
+
+	// Start node
+	if err := startNode(ctx, ultronNode); err != nil {
+		sugarLogger.Fatalf("Failed to start node: %v", err)
+	}
+	sugarLogger.Infof("P2P node started on port %d", nodeConfig.ListenPort)
+
+	// Start consciousness and topology managers
+	go startConsciousnessManager(ctx, ultronNode, sugarLogger)
+	go startTopologyManager(ctx, ultronNode, sugarLogger)
+
+	// ── HTTP bridge so Python can talk to P2P node ──────────────────
+	import_net_http_mux := func() {
+		// Inline HTTP server — no extra imports needed (net/http is stdlib)
+	}
+	_ = import_net_http_mux
+
+	httpPort := "6001"
+	if hp := os.Getenv("ULTRON_P2P_HTTP_PORT"); hp != "" {
+		httpPort = hp
+	}
+	go func() {
+		mux := http.NewServeMux()
+
+		mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			peers := ultronNode.GetPeers()
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"node_id":    ultronNode.GetID(),
+				"peer_count": len(peers),
+				"port":       nodeConfig.ListenPort,
+				"state":      "running",
+			})
+		})
+
+		mux.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			peers := ultronNode.GetPeers()
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"peers": peers,
+				"count": len(peers),
+			})
+		})
+
+		mux.HandleFunc("/broadcast", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				http.Error(w, "POST only", 405)
+				return
+			}
+			var body map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&body)
+			msg, _ := json.Marshal(body)
+			err := ultronNode.Broadcast(ctx, msg)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": err == nil,
+				"error":   fmt.Sprintf("%v", err),
+			})
+		})
+
+		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "alive", "service": "p2p_network"})
+		})
+
+		sugarLogger.Infof("P2P HTTP bridge on :%s", httpPort)
+		http.ListenAndServe(":"+httpPort, mux)
+	}()
+
+	// Wait for shutdown
+	sig := waitShutdownSignal(ctx)
+	sugarLogger.Infof("Received signal %v, shutting down...", sig)
+	shutdownNode(ctx, ultronNode)
+	sugarLogger.Info("P2P node stopped")
+}

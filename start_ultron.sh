@@ -195,6 +195,26 @@ else
     warn "Watchdog binary not found — agent will not auto-restart"
 fi
 
+# ── Rust service watchdog — wraps binary in restart loop ──────────────────────
+start_rust_service() {
+    local name="$1"
+    local bin="$2"
+    local port="$3"
+    local log="$LOG_DIR/${name}.log"
+    local pid_file="$PID_DIR/${name}.pid"
+
+    if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+        warn "$name already running (PID $(cat "$pid_file"))"
+        return 0
+    fi
+
+    # Run in a restart-loop so crashes auto-recover
+    bash -c "while true; do ULTRON_PROJECT_ROOT='$PROJECT_ROOT' '$bin' >> '$log' 2>&1; echo '[${name}] restarting...' >> '$log'; sleep 3; done" &
+    local pid=$!
+    echo "$pid" > "$pid_file"
+    info "Started $name watchdog (PID $pid) → $log"
+}
+
 # ── 3. Rust Neural Mesh ───────────────────────────────────────────────────────
 if [ "$SKIP_RUST" = false ]; then
     echo -e "\n${CYAN}[3/6] Rust Neural Mesh — The Nervous System${NC}"
@@ -205,7 +225,7 @@ if [ "$SKIP_RUST" = false ]; then
     fi
     if [ -f "$RUST_NEURAL" ]; then
         export ULTRON_NEURAL_HTTP_PORT="${ULTRON_NEURAL_HTTP_PORT:-50053}"
-        start_proc "rust_neural" "$RUST_NEURAL"
+        start_rust_service "rust_neural" "$RUST_NEURAL" "$ULTRON_NEURAL_HTTP_PORT"
         wait_port "$ULTRON_NEURAL_HTTP_PORT" "Rust Neural Mesh" 10 || true
     else
         warn "Rust neural binary not found — neural mesh offline"
@@ -216,7 +236,7 @@ if [ "$SKIP_RUST" = false ]; then
     RUST_SEC="$PROJECT_ROOT/rust/target/release/ultron-security-daemon"
     if [ -f "$RUST_SEC" ]; then
         export ULTRON_SECURITY_PORT="${ULTRON_SECURITY_PORT:-50055}"
-        start_proc "rust_security" "$RUST_SEC"
+        start_rust_service "rust_security" "$RUST_SEC" "$ULTRON_SECURITY_PORT"
         wait_port "$ULTRON_SECURITY_PORT" "Rust Security Daemon" 8 || true
     else
         warn "Security daemon binary not found — run: cd rust && cargo build --release"
@@ -305,7 +325,7 @@ if [ "$SKIP_RUST" = false ]; then
 
     if [ -f "$RUST_NEURO" ]; then
         if ! port_up "$NEURO_PORT"; then
-            start_proc "rust_neuromorphic" "$RUST_NEURO"
+            start_rust_service "rust_neuromorphic" "$RUST_NEURO" "$NEURO_PORT"
             wait_port "$NEURO_PORT" "Rust Neuromorphic" 8 || true
         else
             ok "Neuromorphic already running (:$NEURO_PORT)"
@@ -316,7 +336,7 @@ if [ "$SKIP_RUST" = false ]; then
 
     if [ -f "$RUST_DATA" ]; then
         if ! port_up "$DATA_PORT"; then
-            start_proc "rust_data_pipeline" "$RUST_DATA"
+            start_rust_service "rust_data_pipeline" "$RUST_DATA" "$DATA_PORT"
             wait_port "$DATA_PORT" "Data Pipeline" 8 || true
         else
             ok "Data Pipeline already running (:$DATA_PORT)"

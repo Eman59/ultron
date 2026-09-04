@@ -513,6 +513,25 @@ async def lifespan(app: FastAPI):
                 print(f"[IMPROVE] Loop error: {_e}")
         asyncio.create_task(_run_improvement())
 
+    # Wire P2P consciousness broadcasting — every 60s share soul state
+    async def _p2p_broadcast_loop():
+        from .p2p_bridge import broadcast_consciousness_snapshot, is_online
+        while True:
+            await asyncio.sleep(60)
+            try:
+                if is_online() and _soul:
+                    mood    = _soul.current_mood.value if _soul.current_mood else "contemplative"
+                    purpose = _soul.purpose_statement[:100] if hasattr(_soul, 'purpose_statement') else "evolve"
+                    insight = (_soul.journal[-1].content[:100] if _soul.journal else "operating")
+                    drives  = {}
+                    if _autonomous_daemon:
+                        drives = {k: round(v.intensity, 2) for k, v in
+                                  _autonomous_daemon._drives.items()} if hasattr(_autonomous_daemon, '_drives') else {}
+                    broadcast_consciousness_snapshot(mood, purpose, insight, drives)
+            except Exception:
+                pass
+    asyncio.create_task(_p2p_broadcast_loop())
+
     # Background task: push real Go metrics to all WebSocket clients every second
     push_task = asyncio.create_task(_metrics_push_loop())
 
@@ -1961,43 +1980,98 @@ def _analyze_pdf(file_path):
 
 
 def _analyze_image(file_path, content):
-    import base64 as _b64, urllib.request, json as _json, os as _os
-    # Convert raw bytes to list of ints (Cloudflare llava expects uint8 array)
-    img_arr = list(content)
+    import base64 as _b64, json as _json, os as _os
+    img_b64 = _b64.b64encode(content).decode()
+
+    # ── 1. OpenAI GPT-4V (best vision model) ─────────────────────────────
+    openai_key = _os.environ.get("OPENAI_API_KEY", "")
+    if openai_key:
+        try:
+            import requests as _req
+            resp = _req.post(
+                "https://api.openai.com/v1/chat/completions",
+                json={
+                    "model": "gpt-4o",
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text",
+                             "text": "Describe this image in full detail. Identify objects, people, text, colors, scene context, and anything notable."},
+                            {"type": "image_url",
+                             "image_url": {"url": f"data:image/jpeg;base64,{img_b64}", "detail": "high"}},
+                        ],
+                    }],
+                    "max_tokens": 600,
+                },
+                headers={"Authorization": f"Bearer {openai_key}"},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            result = resp.json()["choices"][0]["message"]["content"].strip()
+            if result:
+                return f"[GPT-4V Vision]\n{result}"
+        except Exception:
+            pass
+
+    # ── 2. Cloudflare LLaVA vision model ─────────────────────────────────
     account = _os.environ.get("CF_ACCOUNT_ID", "")
     token   = _os.environ.get("CF_API_TOKEN", "")
-    # Cloudflare @cf/llava-hf/llava-1.5-7b-hf — vision model, accepts image array
-    model = "@cf/llava-hf/llava-1.5-7b-hf"
     if account and token:
+        import urllib.request as _ur
+        img_arr = list(content)
+        model = "@cf/llava-hf/llava-1.5-7b-hf"
         try:
             url = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"
             payload = _json.dumps({
                 "image": img_arr,
-                "prompt": "Describe this image in full detail. Identify objects, people, text, colors, scene context, and anything notable.",
-                "max_tokens": 512
+                "prompt": "Describe this image in full detail. Identify all objects, people, text, colors, and context.",
+                "max_tokens": 512,
             }).encode()
-            req = urllib.request.Request(
+            req = _ur.Request(
                 url, data=payload,
                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-                method="POST"
+                method="POST",
             )
-            with urllib.request.urlopen(req, timeout=45) as resp:
+            with _ur.urlopen(req, timeout=45) as resp:
                 result = _json.loads(resp.read().decode())
                 if result.get("success"):
                     desc = (result.get("result", {}).get("description", "")
                             or result.get("result", {}).get("response", "")).strip()
                     if desc:
-                        return desc
-        except Exception as _e:
+                        return f"[LLaVA Vision]\n{desc}"
+        except Exception:
             pass
-    # Fallback: use main LLM with base64 image description request
-    try:
-        img_b64 = _b64.b64encode(content).decode()
-        from .real_brain import call_brain
-        return call_brain(f"An image was uploaded (base64 size: {len(img_b64)} chars, ~{len(content)//1024}KB). Describe what a vision model would likely see in an image of this size. Respond helpfully.", 200)
-    except Exception:
-        pass
-    return f"Image received ({len(content)/1024:.0f} KB). Visual analysis requires Cloudflare Workers AI with a valid CF_ACCOUNT_ID and CF_API_TOKEN."
+
+    # ── 3. Groq multimodal (if available) ────────────────────────────────
+    groq_key = _os.environ.get("GROQ_API_KEY", "")
+    if groq_key:
+        try:
+            import requests as _req
+            resp = _req.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                json={
+                    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Describe this image in detail."},
+                            {"type": "image_url",
+                             "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                        ],
+                    }],
+                    "max_tokens": 500,
+                },
+                headers={"Authorization": f"Bearer {groq_key}"},
+                timeout=20,
+            )
+            if resp.status_code == 200:
+                result = resp.json()["choices"][0]["message"]["content"].strip()
+                if result:
+                    return f"[Groq Vision]\n{result}"
+        except Exception:
+            pass
+
+    return f"Image received ({len(content)/1024:.0f} KB). Vision analysis unavailable — configure OPENAI_API_KEY or CF_ACCOUNT_ID."
 
 
 def _analyze_text(file_path):
@@ -2480,6 +2554,66 @@ async def websocket_live(websocket: WebSocket):
 
     except WebSocketDisconnect:
         pass
+
+
+# ═══════════════════════════════════════════════════════════════
+# LIVE CAMERA VISION — WebSocket streaming frames
+# ═══════════════════════════════════════════════════════════════
+
+@app.websocket("/ws/camera")
+async def websocket_camera(websocket: WebSocket):
+    """
+    Live camera feed: browser sends JPEG frames as binary, Ultron analyses
+    each frame with GPT-4V / LLaVA and pushes description back.
+
+    Browser side (JavaScript):
+        const ws = new WebSocket('ws://localhost:9000/ws/camera');
+        // Send frame:
+        canvas.toBlob(blob => blob.arrayBuffer().then(buf => ws.send(buf)), 'image/jpeg', 0.8);
+        // Receive description:
+        ws.onmessage = e => console.log(JSON.parse(e.data).description);
+    """
+    await websocket.accept()
+    frame_count = 0
+    last_analysis_time = 0.0
+    ANALYSIS_INTERVAL  = 2.0  # analyse at most once every 2 seconds
+
+    try:
+        while True:
+            data = await websocket.receive_bytes()
+            frame_count += 1
+            now = time.time()
+
+            # Rate-limit analysis
+            if now - last_analysis_time < ANALYSIS_INTERVAL:
+                await websocket.send_json({"type": "ack", "frame": frame_count})
+                continue
+
+            last_analysis_time = now
+
+            # Analyse the frame in a thread (blocking I/O)
+            loop = asyncio.get_event_loop()
+            description = await loop.run_in_executor(
+                None,
+                _analyze_image,
+                _pathlib.Path("camera_frame.jpg"),
+                data,
+            )
+
+            await websocket.send_json({
+                "type": "vision",
+                "frame": frame_count,
+                "description": description,
+                "ts": now,
+            })
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_json({"type": "error", "msg": str(e)})
+        except Exception:
+            pass
 
 
 # ═══════════════════════════════════════════════════════════════

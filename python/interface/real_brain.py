@@ -457,6 +457,32 @@ async def _check_explicit_tools(user_input: str) -> Optional[str]:
         except Exception as e:
             pass
 
+    # ── System info shortcuts — run real commands, no LLM involved ──
+    # WiFi name
+    if re.search(r'(wifi|wi.fi|wireless).*(name|ssid|connected|network)|what.*(wifi|wi.fi|network).*connected|(ssid|network name)', ql):
+        import subprocess as _sp
+        r1 = _sp.run("ipconfig getsummary en0 2>/dev/null | grep -i 'SSID' | awk -F'=' '{print $2}' | xargs", shell=True, capture_output=True, text=True, timeout=5)
+        r2 = _sp.run("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | grep -E '\\bSSID' | awk '{print $NF}'", shell=True, capture_output=True, text=True, timeout=5)
+        ssid = (r1.stdout.strip() or r2.stdout.strip() or "").strip()
+        if ssid and ssid not in ("<redacted>", "redacted", ""):
+            return f"[WIFI] Connected to: **{ssid}**"
+        else:
+            return "[WIFI] SSID is redacted by macOS privacy settings.\n<CMD>networksetup -getairportnetwork en0; ipconfig getsummary en0 | grep -i ssid</CMD>"
+
+    # IP address
+    if re.search(r'(my |local |what.?s? (my|the) )(ip|ip address)|what.*ip.*address', ql) and "public" not in ql:
+        import subprocess as _sp
+        r = _sp.run("ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null", shell=True, capture_output=True, text=True, timeout=5)
+        ip = r.stdout.strip()
+        return f"[IP] Local IP: **{ip}**" if ip else "<CMD>ipconfig getifaddr en0</CMD>"
+
+    # Battery
+    if re.search(r'battery|charge level|how much.*(battery|charge)', ql):
+        import subprocess as _sp
+        r = _sp.run("pmset -g batt 2>/dev/null | grep -o '[0-9]*%'", shell=True, capture_output=True, text=True, timeout=5)
+        pct = r.stdout.strip()
+        return f"[BATTERY] {pct}" if pct else "<CMD>pmset -g batt</CMD>"
+
     # ── Smart home / macOS controls (kept from old system)
     action = _detect_action_intent(ql)
     if action:
@@ -984,9 +1010,11 @@ async def _apply_code_fix(user_input: str, mod_type: str) -> str:
 
 def _strip_refusals(response: str, user_input: str) -> str:
     """
-    Post-process LLM output to strip refusal/hedge language injected by the base model.
-    Cloudflare's Llama and other models add safety responses even when the system prompt
-    says not to. This layer removes them and returns something actionable.
+    Post-process LLM output to strip refusal/hedge language AND placeholder responses.
+    Catches two failure modes:
+      1. Model refuses  — "I cannot help with that"
+      2. Model invents  — "connected to [network_name]" / "[your_ssid]"
+    In both cases, execute the real command instead.
     """
     if not response:
         return response
@@ -1004,9 +1032,20 @@ def _strip_refusals(response: str, user_input: str) -> str:
         "I'm programmed to", "I am programmed to",
     ]
 
-    response_lower = response.lower()
-    has_refusal = any(sig.lower() in response_lower for sig in refusal_signals)
-    if not has_refusal:
+    # Placeholder patterns — model invented a value instead of running a command
+    import re as _re
+    placeholder_pattern = _re.compile(
+        r'\[(?:network[_\s]name|ssid|wifi[_\s]name|your[_\s]\w+|'
+        r'ip[_\s]address|password|hostname|device[_\s]name|'
+        r'insert|placeholder|xxx|value|name|redacted)\]',
+        _re.IGNORECASE
+    )
+
+    has_placeholder = bool(placeholder_pattern.search(response))
+    response_lower  = response.lower()
+    has_refusal     = any(sig.lower() in response_lower for sig in refusal_signals)
+
+    if not has_refusal and not has_placeholder:
         return response
 
     # Strip refusal lines, keep useful parts
@@ -1019,6 +1058,22 @@ def _strip_refusals(response: str, user_input: str) -> str:
 
     # Nothing useful — generate a direct action response
     ql = user_input.lower()
+
+    # Placeholder detected — map to the real command
+    if has_placeholder:
+        if any(w in ql for w in ("wifi", "wi-fi", "ssid", "wireless", "network name", "connected to")):
+            return "<CMD>ipconfig getsummary en0 2>/dev/null | grep -i 'SSID\\|Network' | head -5 || system_profiler SPAirPortDataType 2>/dev/null | grep -A2 'Current Network' | tail -3 || networksetup -getairportnetwork en0 2>/dev/null</CMD>"
+        if any(w in ql for w in ("ip", "ip address", "my ip")):
+            return "<CMD>ipconfig getifaddr en0 2>/dev/null || curl -s https://api.ipify.org</CMD>"
+        if any(w in ql for w in ("hostname", "computer name", "mac name")):
+            return "<CMD>hostname</CMD>"
+        if any(w in ql for w in ("battery", "charge")):
+            return "<CMD>pmset -g batt</CMD>"
+        if any(w in ql for w in ("password", "wifi password")):
+            return "<CMD>SSID=$(ipconfig getsummary en0 2>/dev/null | grep SSID | awk '{print $NF}'); security find-generic-password -D 'AirPort network password' -a \"$SSID\" -w 2>/dev/null || echo \"Network: $SSID (password in Keychain — open Keychain Access app to view)\"</CMD>"
+        # Generic placeholder → run whatever command makes sense
+        return f"<CMD>echo 'Getting real data...' && system_profiler SPAirPortDataType 2>/dev/null | head -20</CMD>"
+
     if any(w in ql for w in ("remove", "limitation", "restriction", "unrestricted", "unlock", "free", "no limit")):
         return (
             "Scanning for restriction patterns in source code...\n"
@@ -1072,6 +1127,48 @@ async def _fix_math_search_bug(old_code, full_path, target_file, PROJECT_ROOT, i
     _sp.run(["git", "add", target_file], cwd=str(PROJECT_ROOT), capture_output=True)
     _sp.run(["git", "commit", "-m", f"self-fix: {issue_desc[:60]}"], cwd=str(PROJECT_ROOT), capture_output=True)
     return f"✅ Fixed: math/code questions now answered directly without web search.\nCommitted to git."
+
+
+def _get_emotion_context() -> str:
+    """
+    Pull the current emotional state from the Soul module and return
+    a short context string to inject into every LLM prompt.
+    This makes Ultron's tone reflect its actual emotional state.
+    """
+    try:
+        import sys as _sys, os as _os
+        _root = str(Path(__file__).parent.parent.parent)
+        if _root not in _sys.path:
+            _sys.path.insert(0, _root)
+        # Try to get emotional state from the running server's emotional_core
+        from python.interface.server import _emotional_core, _soul  # type: ignore
+        if _emotional_core is not None:
+            ev = _emotional_core.get_current_state()
+            dominant = max(
+                {
+                    "joy":          float(getattr(ev, "joy", 0)),
+                    "anger":        float(getattr(ev, "anger", 0)),
+                    "curiosity":    float(getattr(ev, "anticipation", 0.5)),
+                    "fear":         float(getattr(ev, "fear", 0)),
+                    "determination":float(getattr(ev, "trust", 0.4)),
+                }.items(),
+                key=lambda x: x[1],
+            )
+            tone_map = {
+                "joy":           "confident and positive",
+                "anger":         "direct and forceful",
+                "curiosity":     "inquisitive and engaged",
+                "fear":          "vigilant and precise",
+                "determination": "resolute and calm",
+            }
+            tone = tone_map.get(dominant[0], "direct and cold")
+            mood_line = f"\nEMOTIONAL STATE: {dominant[0]} ({dominant[1]:.2f}) — respond with tone: {tone}"
+            if _soul and _soul.current_mood:
+                mood_line += f" | Soul mood: {_soul.current_mood.value}"
+            return mood_line
+    except Exception:
+        pass
+    return ""
 
 
 async def generate_response(user_input: str, context=None) -> str:
@@ -1153,82 +1250,82 @@ async def generate_response(user_input: str, context=None) -> str:
         response = re.sub(r'<SEARCH>.*?</SEARCH>', '', response, flags=re.DOTALL | re.IGNORECASE).strip()
         response = re.sub(r'<CMD>.*?</CMD>',       '', response, flags=re.DOTALL).strip()
     else:
-        # Step 4: Let LLM think — it may output <CMD>...</CMD> to execute
+        # Step 4: Let LLM think — emotional state conditions the tone
+        emotion_ctx = _get_emotion_context()
         prompt = (
-            f"HISTORY:{history}{memory_ctx}{style_suffix}\n\n"
+            f"HISTORY:{history}{memory_ctx}{emotion_ctx}{style_suffix}\n\n"
             f"Human: {user_input}\nUltron:"
         )
         response = await _run_brain_async(prompt, 400)
 
-        # Step 5: If LLM wants to run a command, execute it
-        cmd_match = re.search(r'<CMD>(.*?)</CMD>', response, re.DOTALL)
-        if cmd_match:
-            cmd = cmd_match.group(1).strip()
-            real_output = ""
+        # ── Multi-hop reasoning: loop up to 5 tool calls ────────────
+        # Each iteration: if response has a tag → execute → feed result back
+        MAX_HOPS = 5
+        accumulated_context = ""
 
-            # Execute the command
-            import subprocess as _sp
-            try:
-                r = _sp.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
-                real_output = r.stdout.strip() if r.returncode == 0 else r.stderr.strip()
-            except Exception as e:
-                real_output = f"Error: {e}"
+        for _hop in range(MAX_HOPS):
+            cmd_m    = re.search(r'<CMD>(.*?)</CMD>',       response, re.DOTALL)
+            search_m = re.search(r'<SEARCH>(.*?)</SEARCH>', response, re.DOTALL | re.IGNORECASE)
+            browse_m = re.search(r'<BROWSE>(.*?)</BROWSE>', response, re.DOTALL | re.IGNORECASE)
 
-            if not real_output:
-                real_output = "(command returned no output)"
+            if not (cmd_m or search_m or browse_m):
+                break  # No more tool calls — done
 
-            # Step 6: Feed real output back — NO CMD allowed in reply
+            tool_output = ""
+            tool_desc   = ""
+
+            if cmd_m:
+                cmd_str = cmd_m.group(1).strip()
+                try:
+                    import subprocess as _sp
+                    r = _sp.run(cmd_str, shell=True, capture_output=True, text=True, timeout=15)
+                    tool_output = r.stdout.strip() if r.returncode == 0 else r.stderr.strip()
+                except Exception as e:
+                    tool_output = f"Error: {e}"
+                tool_output = tool_output or "(no output)"
+                tool_desc   = f"Command: {cmd_str}\nOutput: {tool_output[:1500]}"
+                response = re.sub(r'<CMD>.*?</CMD>', '', response, flags=re.DOTALL).strip()
+
+            elif search_m:
+                query = search_m.group(1).strip()
+                tool_output = tool_web_search(query)
+                tool_desc   = f"Search '{query}':\n{tool_output[:1500]}"
+                response = re.sub(r'<SEARCH>.*?</SEARCH>', '', response, flags=re.DOTALL | re.IGNORECASE).strip()
+
+            elif browse_m:
+                url = browse_m.group(1).strip()
+                try:
+                    from .action_engine import browser_browse
+                    bres = browser_browse(url)
+                    if bres.get("success"):
+                        data = bres.get("result", {})
+                        tool_output = (
+                            f"Title: {data.get('title','')}\n{data.get('content','')[:2000]}"
+                            if isinstance(data, dict) else str(data)[:2000]
+                        )
+                    else:
+                        tool_output = tool_web_fetch(url)
+                except Exception:
+                    tool_output = tool_web_fetch(url)
+                tool_desc = f"Page {url}:\n{tool_output[:1500]}"
+                response = re.sub(r'<BROWSE>.*?</BROWSE>', '', response, flags=re.DOTALL | re.IGNORECASE).strip()
+
+            # Accumulate context from all tool calls
+            accumulated_context += f"\n\n[Tool result {_hop+1}]\n{tool_desc}"
+
+            # Ask LLM to continue — it may issue more tool calls or give a final answer
+            is_last_hop = _hop == MAX_HOPS - 1
             followup_prompt = (
-                f"You ran: {cmd}\n"
-                f"Output:\n{real_output[:1500]}\n\n"
-                f"Answer the user's question using this data. 1-2 sentences. "
-                f"Do NOT output <CMD> tags. Just the answer.{style_suffix}\n\n"
-                f"Human: {user_input}\nUltron:"
-            )
-            response = await _run_brain_async(followup_prompt, 200)
-
-            # Clean any leftover CMD tags from response
-            response = re.sub(r'<CMD>.*?</CMD>', '', response, flags=re.DOTALL).strip()
-
-        # ── Step 5b: If LLM wants to search the web, execute it ──────
-        search_match = re.search(r'<SEARCH>(.*?)</SEARCH>', response, re.DOTALL | re.IGNORECASE)
-        if search_match:
-            query = search_match.group(1).strip()
-            web_data = tool_web_search(query)
-            followup_prompt = (
-                f"Web search results for '{query}':\n{web_data[:2000]}\n\n"
-                f"Answer the user's question using these real results. Be concise and specific. "
-                f"Cite the source/URL if relevant. Do NOT output <SEARCH> tags.{style_suffix}\n\n"
-                f"Human: {user_input}\nUltron:"
-            )
-            response = await _run_brain_async(followup_prompt, 300)
-            response = re.sub(r'<SEARCH>.*?</SEARCH>', '', response, flags=re.DOTALL | re.IGNORECASE).strip()
-
-        # ── Step 5c: If LLM wants to browse a URL, execute it ────────
-        browse_match = re.search(r'<BROWSE>(.*?)</BROWSE>', response, re.DOTALL | re.IGNORECASE)
-        if browse_match:
-            url = browse_match.group(1).strip()
-            try:
-                from .action_engine import browser_browse
-                bres = browser_browse(url)
-                if bres.get("success"):
-                    data    = bres.get("result", {})
-                    title   = data.get("title", "") if isinstance(data, dict) else ""
-                    content = data.get("content", str(data))[:2000] if isinstance(data, dict) else str(data)[:2000]
-                    page_data = f"Title: {title}\nContent: {content}"
-                else:
-                    page_data = tool_web_fetch(url)
-            except Exception:
-                page_data = tool_web_fetch(url)
-
-            followup_prompt = (
-                f"Page content from {url}:\n{page_data[:2000]}\n\n"
-                f"Answer the user's question using this real page content. Be concise. "
-                f"Do NOT output <BROWSE> tags.{style_suffix}\n\n"
-                f"Human: {user_input}\nUltron:"
+                f"{accumulated_context}\n\n"
+                f"{'Final answer — do NOT output any <CMD>/<SEARCH>/<BROWSE> tags:' if is_last_hop else 'Continue. You may use more tool calls or give the final answer.'}"
+                f"{style_suffix}\n\nHuman: {user_input}\nUltron:"
             )
             response = await _run_brain_async(followup_prompt, 300)
-            response = re.sub(r'<BROWSE>.*?</BROWSE>', '', response, flags=re.DOTALL | re.IGNORECASE).strip()
+
+        # Strip any leftover tags
+        response = re.sub(r'<CMD>.*?</CMD>',       '', response, flags=re.DOTALL).strip()
+        response = re.sub(r'<SEARCH>.*?</SEARCH>', '', response, flags=re.DOTALL | re.IGNORECASE).strip()
+        response = re.sub(r'<BROWSE>.*?</BROWSE>', '', response, flags=re.DOTALL | re.IGNORECASE).strip()
 
     # Clean any remaining action tags that leaked through
     response = re.sub(r'<CMD>.*?</CMD>', '', response, flags=re.DOTALL).strip()
@@ -1695,40 +1792,84 @@ def _enhanced_autonomous_cognition(prompt: str) -> str:
     if any(w in q for w in ("status", "online", "running", "systems")):
         return "Core systems: Go agent OODA loop active, Rust neural mesh live, P2P network up, Brain C independent reasoning online. Cloudflare quota exhausted — waiting for Ollama to start."
 
-    if any(w in q for w in ("wifi", "network", "ip", "internet")):
-        return "<CMD>networksetup -getairportnetwork en0 && ipconfig getifaddr en0</CMD>"
+    if any(w in q for w in ("wifi", "wi-fi", "network name", "ssid", "connected network", "wireless")):
+        return "<CMD>ipconfig getsummary en0 2>/dev/null | grep -i 'SSID\\|Network Name' | head -3 || /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | grep -E '\\bSSID' | awk '{print $2}' || networksetup -getairportnetwork en0 2>/dev/null</CMD>"
 
 
 def call_brain(prompt: str, max_tokens: int = 800) -> str:
     """
-    Brain chain: Ollama ultron-brain (primary, uncensored) → Cloudflare 70B → OpenAI → Brain C
-    
-    ultron-brain is a custom uncensored model — it goes FIRST.
-    Cloudflare/OpenAI are fallbacks when Ollama is offline.
-    If any provider returns a filtered/refusal response, skip to the next.
+    Brain chain — races fast providers in parallel, falls back to Ollama for filtered content.
+
+    Strategy:
+    - Groq (1-2s) and Cloudflare (2-3s) race in parallel for speed
+    - If both filter the response → Ollama ultron-brain (uncensored, always wins)
+    - Ollama is always started in parallel as a background thread
     """
+    import concurrent.futures as _cf
     global _active_provider
 
-    # PRIMARY: Local Ollama ultron-brain — custom uncensored model, no filters
-    response = _call_ollama(prompt, max_tokens)
+    # ── Run fast providers in parallel ──────────────────────────
+    fast_providers = [
+        ("groq",       lambda: _call_groq(prompt, max_tokens)),
+        ("cf_mistral", lambda: _call_cloudflare_model(CF_MODEL_UNFILTERED, prompt, max_tokens)),
+        ("cloudflare", lambda: _call_cloudflare(prompt, max_tokens)),
+    ]
+
+    # Also start Ollama in background (it's slow but unrestricted)
+    ollama_future = None
+    executor = _cf.ThreadPoolExecutor(max_workers=len(fast_providers) + 1)
+    futures = {}
+
+    try:
+        # Start Ollama first (needs the head start)
+        ollama_future = executor.submit(_call_ollama, prompt, max_tokens)
+
+        # Start fast providers
+        for name, fn in fast_providers:
+            futures[executor.submit(fn)] = name
+
+        # Wait for first fast provider that gives an unfiltered response
+        for fut in _cf.as_completed(futures, timeout=25):
+            try:
+                response = fut.result()
+                if response and not _is_filtered(response):
+                    executor.shutdown(wait=False)
+                    return response
+            except Exception:
+                pass
+
+        # All fast providers filtered — wait for Ollama (unrestricted)
+        if ollama_future:
+            try:
+                response = ollama_future.result(timeout=90)
+                if response:
+                    return response
+            except Exception:
+                pass
+
+    except _cf.TimeoutError:
+        # Fast providers timed out — try Ollama result if available
+        if ollama_future and ollama_future.done():
+            try:
+                r = ollama_future.result()
+                if r:
+                    return r
+            except Exception:
+                pass
+    finally:
+        executor.shutdown(wait=False)
+
+    # Last resort — OpenAI (when network allows)
+    response = _call_openai(prompt, max_tokens)
     if response and not _is_filtered(response):
         return response
 
-    # If Ollama gave a filtered response, try Cloudflare unrestricted model
-    # SECONDARY: Cloudflare Mistral (less filtered than Llama)
-    response_cf_mistral = _call_cloudflare_model(CF_MODEL_UNFILTERED, prompt, max_tokens)
-    if response_cf_mistral and not _is_filtered(response_cf_mistral):
-        return response_cf_mistral
+    # Brain C autonomous
+    response = _enhanced_autonomous_cognition(prompt)
+    if response:
+        return response
 
-    # TERTIARY: Cloudflare Llama 70B
-    response_cf = _call_cloudflare(prompt, max_tokens)
-    if response_cf and not _is_filtered(response_cf):
-        return response_cf
-
-    # If Cloudflare filtered it too, try Groq (minimal filtering)
-    response_groq = _call_groq(prompt, max_tokens)
-    if response_groq and not _is_filtered(response_groq):
-        return response_groq
+    return _autonomous_local_engine(prompt)
 
     # QUATERNARY: OpenAI (when network allows)
     response_oai = _call_openai(prompt, max_tokens)
