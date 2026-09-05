@@ -14,7 +14,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -22,7 +21,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"go.uber.org/zap"
 )
@@ -110,4 +108,217 @@ func (r *RAGPipeline) BuildIndex(ctx context.Context) error {
 
 	// Walk chunks directory
 	fileCount := 0
-	// ... rest of the code remains the same ...
+	entries, err := os.ReadDir(r.chunkFilesDirectory)
+	if err != nil {
+		r.logger.Warnf("[RAG] Could not read chunks directory %s: %v", r.chunkFilesDirectory, err)
+		return nil // Non-fatal: no chunks yet
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt") {
+			continue
+		}
+		path := filepath.Join(r.chunkFilesDirectory, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		docIndex := len(r.indexedDocuments)
+
+		// Build term frequency map for this document
+		words := strings.Fields(strings.ToLower(content))
+		termFreq := make(map[string]int)
+		for _, word := range words {
+			if len(word) >= 3 {
+				termFreq[word]++
+			}
+		}
+
+		info, _ := entry.Info()
+		var modTime time.Time
+		if info != nil {
+			modTime = info.ModTime()
+		}
+
+		doc := IndexedDocument{
+			DocumentID:      entry.Name(),
+			DocumentPath:    path,
+			DocumentContent: content,
+			DocumentTerms:   termFreq,
+			DocumentLength:  len(words),
+			ModificationTime: modTime,
+		}
+		r.indexedDocuments = append(r.indexedDocuments, doc)
+
+		// Build inverted index
+		seen := make(map[string]bool)
+		for word, freq := range termFreq {
+			r.invertedIndex[word] = append(r.invertedIndex[word], DocumentReference{
+				DocumentIndex: docIndex,
+				TermFrequency: freq,
+			})
+			if !seen[word] {
+				r.documentFrequency[word]++
+				seen[word] = true
+			}
+		}
+		fileCount++
+	}
+
+	r.totalIndexedDocs = fileCount
+	r.isIndexed = true
+	r.indexedAt = time.Now()
+	r.indexSize = len(r.invertedIndex)
+
+	r.logger.Infof("[RAG] Index built: %d documents in %v", fileCount, time.Since(start))
+	return nil
+}
+
+// IsIndexed returns true if the pipeline has built its index.
+func (r *RAGPipeline) IsIndexed() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isIndexed
+}
+
+// QueryForBrainB performs a text search and returns the top result as a context string.
+func (r *RAGPipeline) QueryForBrainB(question string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if !r.isIndexed || len(r.indexedDocuments) == 0 {
+		return ""
+	}
+
+	// Simple TF-IDF-style scoring
+	words := strings.Fields(strings.ToLower(question))
+	if len(words) == 0 {
+		return ""
+	}
+
+	type scored struct {
+		idx   int
+		score float64
+	}
+	var results []scored
+
+	for i, doc := range r.indexedDocuments {
+		score := 0.0
+		for _, word := range words {
+			if freq, ok := doc.DocumentTerms[word]; ok {
+				tf := float64(freq) / float64(max(doc.DocumentLength, 1))
+				df := float64(r.documentFrequency[word])
+				idf := math.Log(float64(r.totalIndexedDocs+1)/max64(df, 1))
+				score += tf * idf
+			}
+		}
+		if score > 0 {
+			results = append(results, scored{i, score})
+		}
+	}
+
+	if len(results) == 0 {
+		return ""
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].score > results[j].score
+	})
+
+	top := r.indexedDocuments[results[0].idx]
+	snippet := top.DocumentContent
+	if len(snippet) > 500 {
+		snippet = snippet[:500] + "..."
+	}
+	return snippet
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func max64(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// GetStats returns RAG pipeline metrics.
+func (r *RAGPipeline) GetStats() map[string]interface{} {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return map[string]interface{}{
+		"indexed":      r.isIndexed,
+		"doc_count":    r.totalIndexedDocs,
+		"index_size":   r.indexSize,
+		"indexed_at":   r.indexedAt,
+	}
+}
+
+// Query performs a search and returns structured results.
+func (r *RAGPipeline) Query(question string, topK int) []RetrievalResult {
+	r.mu.RLock()
+	if !r.isIndexed || len(r.indexedDocuments) == 0 {
+		r.mu.RUnlock()
+		return nil
+	}
+
+	words := strings.Fields(strings.ToLower(question))
+	if len(words) == 0 {
+		r.mu.RUnlock()
+		return nil
+	}
+
+	type scored struct {
+		idx   int
+		score float64
+	}
+	var results []scored
+
+	for i, doc := range r.indexedDocuments {
+		score := 0.0
+		for _, word := range words {
+			if freq, ok := doc.DocumentTerms[word]; ok {
+				tf := float64(freq) / float64(max(doc.DocumentLength, 1))
+				df := float64(r.documentFrequency[word])
+				idf := math.Log(float64(r.totalIndexedDocs+1) / max64(df, 1))
+				score += tf * idf
+			}
+		}
+		if score > 0 {
+			results = append(results, scored{i, score})
+		}
+	}
+	r.mu.RUnlock()
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].score > results[j].score
+	})
+
+	if topK > 0 && len(results) > topK {
+		results = results[:topK]
+	}
+
+	var retrieval []RetrievalResult
+	for _, res := range results {
+		r.mu.RLock()
+		doc := r.indexedDocuments[res.idx]
+		r.mu.RUnlock()
+		snippet := doc.DocumentContent
+		if len(snippet) > 200 {
+			snippet = snippet[:200] + "..."
+		}
+		retrieval = append(retrieval, RetrievalResult{
+			DocumentPath:    doc.DocumentPath,
+			DocumentContent: doc.DocumentContent,
+			RelevanceScore:  res.score,
+			SearchResultSnippet: snippet,
+		})
+	}
+	return retrieval
+}

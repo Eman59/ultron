@@ -172,3 +172,17 @@ class MetaController:
 
     def get_system_state(self):
         return self.system_state
+
+
+def create_ultron_meta_learner(data_dir = ".ultron/meta") -> MetaController:
+    if isinstance(data_dir, dict): data_dir = data_dir.get("project_root", ".") + "/.ultron/meta"
+    """Factory function — creates and returns a configured MetaController."""
+    import os
+    os.makedirs(data_dir, exist_ok=True)
+    controller = MetaController(
+        population_size=50,
+        exploration_budget=0.3,
+        adaptation_threshold=0.1,
+        evolution_interval=100,
+    )
+    return controller

@@ -122,9 +122,80 @@ type ActionInterface struct {
 
 // WebHandler defines web interaction capabilities.
 type WebHandler interface {
-	// HTTP operations
-	Get(ctx context.Context, url string) (*http.Response, error)
-	Post(ctx context.Context, url string, data interface{}) (*http.Response, error)
+	Execute(ctx context.Context, req *ActionRequest) (*ActionResponse, error)
+}
+
+// CloudHandler defines cloud resource management capabilities.
+type CloudHandler interface {
+	Execute(ctx context.Context, req *ActionRequest) (*ActionResponse, error)
+}
+
+// IoTHandler defines IoT device control capabilities.
+type IoTHandler interface {
+	Execute(ctx context.Context, req *ActionRequest) (*ActionResponse, error)
+}
+
+// FilesystemHandler defines filesystem operation capabilities.
+type FilesystemHandler interface {
+	Execute(ctx context.Context, req *ActionRequest) (*ActionResponse, error)
+}
+
+// RateLimiter enforces per-request rate limits.
+type RateLimiter struct {
+	mu       sync.Mutex
+	counters map[string]int
+	limit    int
+}
+
+// Allow returns true if the given ID is within its rate limit.
+func (r *RateLimiter) Allow(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.counters[id]++
+	return r.counters[id] <= r.limit
+}
+
+// ━━━━━━━━━━ Shared domain types used by sub-packages ━━━━━━━━━━
+
+// SearchResult is a single web search result.
+type SearchResult struct {
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Snippet string `json:"snippet"`
+	Rank    int    `json:"rank"`
+}
+
+// DeviceInfo describes an IoT device.
+type DeviceInfo struct {
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	Type     string    `json:"type"`
+	Online   bool      `json:"online"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
+// InstanceSpec describes a cloud instance to launch.
+type InstanceSpec struct {
+	Type     string            `json:"type"`    // e.g. "t3.micro"
+	Image    string            `json:"image"`   // AMI ID
+	Tags     map[string]string `json:"tags"`
+	MaxCost  float64           `json:"max_cost"` // $/hr budget cap
+}
+
+// InstanceInfo describes a running cloud instance.
+type InstanceInfo struct {
+	ID     string        `json:"id"`
+	Type   string        `json:"type"`
+	State  string        `json:"state"`
+	IP     string        `json:"ip"`
+	Uptime time.Duration `json:"uptime"`
+}
+
+// AutoScalePolicy defines auto-scaling parameters.
+type AutoScalePolicy struct {
+	MinInstances int     `json:"min_instances"`
+	MaxInstances int     `json:"max_instances"`
+	TargetCPU    float64 `json:"target_cpu"` // 0-1
 }
 
 // ExecuteAction performs an external action based on the request.
@@ -242,4 +313,40 @@ func (a *ActionInterface) ExecuteActionWithTimeout(ctx context.Context, req *Act
 	defer cancel()
 
 	return a.ExecuteAction(ctx, req)
+}
+
+// NewActionInterface creates and returns a new ActionInterface.
+func NewActionInterface(logger interface{}) *ActionInterface {
+	return &ActionInterface{
+		permissions: make([]Permission, 0),
+		auditLog:    make([]ActionAuditEntry, 0),
+	}
+}
+
+// SetWebHandler wires the web handler.
+func (a *ActionInterface) SetWebHandler(h WebHandler) {
+	a.mu.Lock()
+	a.webHandler = h
+	a.mu.Unlock()
+}
+
+// SetCloudHandler wires the cloud handler.
+func (a *ActionInterface) SetCloudHandler(h CloudHandler) {
+	a.mu.Lock()
+	a.cloudHandler = h
+	a.mu.Unlock()
+}
+
+// SetIoTHandler wires the IoT handler.
+func (a *ActionInterface) SetIoTHandler(h IoTHandler) {
+	a.mu.Lock()
+	a.iotHandler = h
+	a.mu.Unlock()
+}
+
+// SetFilesystemHandler wires the filesystem handler.
+func (a *ActionInterface) SetFilesystemHandler(h FilesystemHandler) {
+	a.mu.Lock()
+	a.fsHandler = h
+	a.mu.Unlock()
 }

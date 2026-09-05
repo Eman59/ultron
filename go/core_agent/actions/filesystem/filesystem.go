@@ -13,12 +13,13 @@ package filesystem
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"ultron/core_agent/actions"
 
 	"go.uber.org/zap"
 )
@@ -128,4 +129,128 @@ func (fd *FilesystemDriver) Write(ctx context.Context, filePath string, data []b
 	}
 
 	return nil
+}
+
+// resolvePath converts a relative path to an absolute path under the project root.
+func (fd *FilesystemDriver) resolvePath(p string) string {
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	return filepath.Clean(filepath.Join(fd.projectRootPath, p))
+}
+
+// checkAccess enforces path access controls.
+func (fd *FilesystemDriver) checkAccess(fullPath string, write bool) error {
+	for _, blocked := range fd.blockedPaths {
+		if strings.HasPrefix(fullPath, blocked) {
+			return fmt.Errorf("access denied: %s is blocked", fullPath)
+		}
+	}
+	if write && fd.isReadOnly {
+		return fmt.Errorf("filesystem is read-only")
+	}
+	for _, allowed := range fd.allowedPaths {
+		if strings.HasPrefix(fullPath, allowed) {
+			return nil
+		}
+	}
+	return fmt.Errorf("access denied: %s is not in allowed paths", fullPath)
+}
+
+// List returns information about files in a directory.
+func (fd *FilesystemDriver) List(ctx context.Context, dirPath string) ([]FileInfo, error) {
+	fullPath := fd.resolvePath(dirPath)
+	if err := fd.checkAccess(fullPath, false); err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []FileInfo
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, FileInfo{
+			Name:    entry.Name(),
+			Path:    filepath.Join(fullPath, entry.Name()),
+			Size:    info.Size(),
+			IsDir:   entry.IsDir(),
+			ModTime: info.ModTime(),
+			Mode:    info.Mode().String(),
+		})
+	}
+	return files, nil
+}
+
+// Delete removes a file (with audit logging).
+func (fd *FilesystemDriver) Delete(ctx context.Context, filePath string) error {
+	if fd.isReadOnly {
+		return fmt.Errorf("filesystem is in read-only mode")
+	}
+
+	fullPath := fd.resolvePath(filePath)
+	if err := fd.checkAccess(fullPath, true); err != nil {
+		return err
+	}
+
+	fd.mu.Lock()
+	fd.deleteOperations++
+	fd.mu.Unlock()
+
+	fd.logger.Infow("Deleting file", "path", fullPath)
+	return os.Remove(fullPath)
+}
+
+// Execute routes an ActionRequest to the appropriate filesystem method.
+func (fd *FilesystemDriver) Execute(ctx context.Context, req *actions.ActionRequest) (*actions.ActionResponse, error) {
+	start := time.Now()
+	if req == nil {
+		return nil, fmt.Errorf("nil action request")
+	}
+	var data interface{}
+	var err error
+	switch req.Operation {
+	case "read":
+		var content []byte
+		content, err = fd.Read(ctx, req.Target)
+		data = content
+	case "write":
+		if payload, ok := req.Parameters["data"].([]byte); ok {
+			err = fd.Write(ctx, req.Target, payload)
+		} else if s, ok := req.Parameters["data"].(string); ok {
+			err = fd.Write(ctx, req.Target, []byte(s))
+		}
+	case "delete":
+		err = fd.Delete(ctx, req.Target)
+	case "list":
+		var files []FileInfo
+		files, err = fd.List(ctx, req.Target)
+		data = files
+	default:
+		err = fmt.Errorf("unknown filesystem operation: %s", req.Operation)
+	}
+	return &actions.ActionResponse{
+		RequestID: req.RequestID,
+		Success:   err == nil,
+		Data:      data,
+		Error:     err,
+		Duration:  time.Since(start),
+	}, nil
+}
+
+// Stats returns filesystem driver metrics.
+func (fd *FilesystemDriver) Stats() map[string]interface{} {
+	fd.mu.RLock()
+	defer fd.mu.RUnlock()
+	return map[string]interface{}{
+		"reads":   fd.readOperations,
+		"writes":  fd.writeOperations,
+		"deletes": fd.deleteOperations,
+		"root":    fd.projectRootPath,
+	}
 }

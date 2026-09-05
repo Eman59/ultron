@@ -73,6 +73,12 @@ type OwnershipGuard struct {
 	// Genesis block (immutable)
 	immutableGenesisBlock *GenesisBlock
 
+	// Path to genesis file
+	genesisPath string
+
+	// Hash of genesis file contents
+	genesisHash string
+
 	// Current state
 	currentState OwnershipState
 
@@ -95,10 +101,11 @@ type OwnershipGuard struct {
 // NewOwnershipGuard creates the ownership enforcement system.
 func NewOwnershipGuard(logger *zap.SugaredLogger, genesisPath string) (*OwnershipGuard, error) {
 	guard := &OwnershipGuard{
-		logger:         logger,
-		currentState:   StateUnverified,
-		usedNonceMap:   make(map[string]time.Time),
-		maxCommandAge:  5 * time.Minute,
+		logger:           logger,
+		genesisPath:      genesisPath,
+		currentState:     StateUnverified,
+		usedNonceMap:     make(map[string]time.Time),
+		maxCommandAge:    5 * time.Minute,
 		protectedFileMap: make(map[string]string),
 	}
 
@@ -108,4 +115,93 @@ func NewOwnershipGuard(logger *zap.SugaredLogger, genesisPath string) (*Ownershi
 	}
 
 	return guard, nil
+}
+
+// loadGenesis reads the genesis file and loads the owner's public key.
+func (g *OwnershipGuard) loadGenesis(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("genesis not found at %s: %w", path, err)
+	}
+
+	var gen struct {
+		OwnerPublicKey string `json:"owner_public_key"`
+		CreatedAt      string `json:"created_at"`
+		NodeID         string `json:"node_id"`
+	}
+	if err := json.Unmarshal(data, &gen); err != nil {
+		return fmt.Errorf("invalid genesis: %w", err)
+	}
+
+	keyBytes, err := hex.DecodeString(gen.OwnerPublicKey)
+	if err != nil {
+		return fmt.Errorf("invalid public key encoding: %w", err)
+	}
+
+	g.ownerPublicKey = ed25519.PublicKey(keyBytes)
+	h := sha256.Sum256(data)
+	g.genesisHash = hex.EncodeToString(h[:])
+	return nil
+}
+
+// RegisterProtectedFile registers a file path for integrity monitoring.
+func (g *OwnershipGuard) RegisterProtectedFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("cannot register %s: %w", path, err)
+	}
+	h := sha256.Sum256(data)
+	g.mu.Lock()
+	g.protectedFileMap[path] = hex.EncodeToString(h[:])
+	g.mu.Unlock()
+	return nil
+}
+
+// GetOwner returns a human-readable description of the owner.
+func (g *OwnershipGuard) GetOwner() string {
+	if g.immutableGenesisBlock != nil {
+		return g.immutableGenesisBlock.Owner
+	}
+	return "unknown"
+}
+
+// GetState returns the current ownership state.
+func (g *OwnershipGuard) GetState() OwnershipState {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.currentState
+}
+
+// CheckIntegrity verifies all registered files against stored checksums.
+// Returns a list of any files that have changed.
+func (g *OwnershipGuard) CheckIntegrity() []string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	var tampered []string
+	for path, expectedHash := range g.protectedFileMap {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			tampered = append(tampered, path)
+			continue
+		}
+		h := sha256.Sum256(data)
+		actualHash := hex.EncodeToString(h[:])
+		if actualHash != expectedHash {
+			tampered = append(tampered, path)
+		}
+	}
+	return tampered
+}
+
+// GetStatus returns a status map for the ownership guard.
+func (g *OwnershipGuard) GetStatus() map[string]interface{} {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return map[string]interface{}{
+		"state":            g.currentState.String(),
+		"tamper_events":    g.tamperEventCount,
+		"protected_files":  len(g.protectedFileMap),
+		"genesis_hash":     g.genesisHash,
+	}
 }

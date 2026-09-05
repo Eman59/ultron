@@ -1166,3 +1166,11 @@ class PatternRecognizer:
         desc += f" [outcome: {outcome:.2f}]"
 
         return desc
+
+
+# ── Stub: recognize_patterns expected by __init__.py decorator ────────────────
+def _pr_recognize_patterns(self, *args, **kwargs) -> list:
+    """Stub: run a pattern recognition pass."""
+    return []
+
+PatternRecognizer.recognize_patterns = _pr_recognize_patterns

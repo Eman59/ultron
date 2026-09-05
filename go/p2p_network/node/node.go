@@ -388,6 +388,18 @@ func (n *UltronNode) GetMetrics() map[string]interface{} {
 	}
 }
 
+// Broadcast sends a raw payload to all connected peers.
+func (n *UltronNode) Broadcast(ctx context.Context, payload []byte) error {
+	msg := &Message{
+		Type:      MsgQuery,
+		From:      n.id,
+		Payload:   payload,
+		Timestamp: time.Now(),
+	}
+	n.broadcastMessage(msg)
+	return nil
+}
+
 // ─────────────────────────── Private Methods ───────────────────────────
 
 func (n *UltronNode) handleMessages(ctx context.Context) {

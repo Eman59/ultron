@@ -5,10 +5,6 @@ package consciousness
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
-	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -116,5 +112,103 @@ type ProcessingMetrics struct {
 
 // NewDistributedConsciousnessManager returns a new instance of DistributedConsciousnessManager.
 func NewDistributedConsciousnessManager(currentNode *node.UltronNode, logger *zap.SugaredLogger) *DistributedConsciousnessManager {
-	// implementation remains the same
+	return &DistributedConsciousnessManager{
+		currentNode:          currentNode,
+		logger:               logger,
+		state:                StateFragmented,
+		unifiedConsciousness: 0.0,
+		thoughts:             make(map[string]*DistributedComputationFragment),
+		processingQueue:      make(chan *DistributedComputationFragment, 100),
+		attentionManager:     NewAttentionManager(),
+		memory: &MemorySystems{
+			recentMemory:   NewShortTermMemory(1000),
+			longTermMemory: NewLongTermMemory(),
+		},
+		consensusHistory: make([]ConsensusDecisionRecord, 0),
+		metrics:          &ProcessingMetrics{},
+	}
+}
+
+// AttentionManager manages the attention allocation for the consciousness.
+type AttentionManager struct {
+	mu             sync.Mutex
+	focusTarget    string
+	attentionScore map[string]float64
+}
+
+func NewAttentionManager() *AttentionManager {
+	return &AttentionManager{
+		attentionScore: make(map[string]float64),
+	}
+}
+
+func (am *AttentionManager) Focus(target string, score float64) {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	am.focusTarget = target
+	am.attentionScore[target] = score
+}
+
+// ShortTermMemory is a fixed-size ring buffer for recent experiences.
+type ShortTermMemory struct {
+	mu      sync.Mutex
+	entries []interface{}
+	maxSize int
+}
+
+func NewShortTermMemory(maxSize int) *ShortTermMemory {
+	return &ShortTermMemory{entries: make([]interface{}, 0, maxSize), maxSize: maxSize}
+}
+
+func (m *ShortTermMemory) Add(entry interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.entries) >= m.maxSize {
+		m.entries = m.entries[1:]
+	}
+	m.entries = append(m.entries, entry)
+}
+
+// LongTermMemory stores consolidated patterns and knowledge.
+type LongTermMemory struct {
+	mu       sync.Mutex
+	patterns map[string]interface{}
+}
+
+func NewLongTermMemory() *LongTermMemory {
+	return &LongTermMemory{patterns: make(map[string]interface{})}
+}
+
+func (m *LongTermMemory) Store(key string, value interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.patterns[key] = value
+}
+
+// Start begins distributed consciousness processing.
+func (m *DistributedConsciousnessManager) Start(ctx context.Context) error {
+	m.logger.Info("Distributed consciousness starting...")
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case fragment := <-m.processingQueue:
+				m.processFragment(fragment)
+			}
+		}
+	}()
+	return nil
+}
+
+// processFragment processes a single computation fragment.
+func (m *DistributedConsciousnessManager) processFragment(f *DistributedComputationFragment) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	f.ProcessingStatus = FragmentProcessing
+	m.activeThoughtsCount++
+	// Process...
+	f.ProcessingStatus = FragmentComplete
+	m.activeThoughtsCount--
+	m.metrics.processedThoughtsCount++
 }

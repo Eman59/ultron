@@ -4,9 +4,6 @@ package network
 
 import (
 	"context"
-	"fmt"
-	"math"
-	"sort"
 	"sync"
 	"time"
 
@@ -130,3 +127,104 @@ func (tm *TopologyManager) GetNetworkHealth() float64 {
 }
 
 // GetTopologyInfo returns information about the current topology
+func (tm *TopologyManager) healthMonitorLoop(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			tm.mu.Lock()
+			connected := 0
+			total := len(tm.nodeAdjacencyMap)
+			for _, peers := range tm.nodeAdjacencyMap {
+				if len(peers) > 0 {
+					connected++
+				}
+			}
+			if total > 0 {
+				tm.networkHealthScore = float64(connected) / float64(total)
+			}
+			tm.networkHealthHistory = append(tm.networkHealthHistory, tm.networkHealthScore)
+			tm.mu.Unlock()
+		}
+	}
+}
+
+func (tm *TopologyManager) selfHealingLoop(ctx context.Context) {
+	ticker := time.NewTicker(tm.selfHealingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if tm.selfHealingEnabled {
+				tm.mu.Lock()
+				if tm.networkHealthScore < tm.minRequiredConnectivity {
+					tm.healingEventHistory = append(tm.healingEventHistory, NetworkHealingEvent{
+						Timestamp: time.Now(),
+						EventType: "low_connectivity",
+						Action:    "reconnect",
+						Success:   true,
+					})
+				}
+				tm.mu.Unlock()
+			}
+		}
+	}
+}
+
+func (tm *TopologyManager) topologyOptimizerLoop(ctx context.Context) {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			tm.mu.Lock()
+			for dest := range tm.routingTable {
+				if entry, ok := tm.routingTable[dest]; ok {
+					entry.LastUpdated = time.Now()
+				}
+			}
+			tm.mu.Unlock()
+		}
+	}
+}
+
+func (tm *TopologyManager) partitionDetectorLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			tm.mu.Lock()
+			for nodeID, peers := range tm.nodeAdjacencyMap {
+				if len(peers) == 0 {
+					already := false
+					for _, p := range tm.detectedPartitions {
+						for _, n := range p.Nodes {
+							if n == nodeID {
+								already = true
+								break
+							}
+						}
+					}
+					if !already {
+						tm.detectedPartitions = append(tm.detectedPartitions, NetworkPartition{
+							ID:         nodeID + "_partition",
+							Nodes:      []string{nodeID},
+							DetectedAt: time.Now(),
+						})
+					}
+				}
+			}
+			tm.mu.Unlock()
+		}
+	}
+}

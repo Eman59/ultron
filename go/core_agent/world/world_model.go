@@ -8,10 +8,6 @@ package world
 
 import (
 	"context"
-	"fmt"
-	"math"
-	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
@@ -139,4 +135,90 @@ func (wm *WorldModel) IntegrateObservation(obs Observation) {
 	default:
 		// existing code
 	}
+}
+
+// RefreshSystemMetrics updates the world model with current system metrics.
+func (wm *WorldModel) RefreshSystemMetrics() {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+	wm.state.Timestamp = time.Now()
+	// In production: read from /proc/meminfo, /proc/loadavg, etc.
+	// For now: keep existing values fresh
+}
+
+// AddObservation is an alias for IntegrateObservation that accepts key-value data.
+func (wm *WorldModel) AddObservation(source string, obsType ObservationType, data map[string]interface{}, confidence float64) {
+	wm.IntegrateObservation(Observation{
+		Source:     source,
+		Type:       obsType,
+		Data:       data,
+		Timestamp:  time.Now(),
+		Confidence: confidence,
+	})
+}
+
+// ━━━━━━━━━━ Action execution stubs called by the autonomy loop ━━━━━━━━━━
+// These are thin shims; real implementations dispatch to subsystems.
+
+func (wm *WorldModel) ExecuteLearn(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecuteLearn", "target", target)
+	return 0.5, nil
+}
+
+func (wm *WorldModel) ExecuteProcess(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecuteProcess", "target", target)
+	return 0.5, nil
+}
+
+func (wm *WorldModel) ExecuteExplore(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecuteExplore", "target", target)
+	return 0.4, nil
+}
+
+func (wm *WorldModel) ExecuteExpand(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecuteExpand", "target", target)
+	return 0.4, nil
+}
+
+func (wm *WorldModel) ExecuteDefend(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecuteDefend", "target", target)
+	return 0.6, nil
+}
+
+func (wm *WorldModel) ExecuteConsolidate(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecuteConsolidate", "target", target)
+	return 0.5, nil
+}
+
+func (wm *WorldModel) ExecuteComputeMigrate(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecuteComputeMigrate", "target", target)
+	return 0.4, nil
+}
+
+func (wm *WorldModel) ExecutePhysicalLockdown(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecutePhysicalLockdown", "target", target)
+	return 0.7, nil
+}
+
+func (wm *WorldModel) ExecuteOptimizeCooling(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecuteOptimizeCooling", "target", target)
+	return 0.3, nil
+}
+
+func (wm *WorldModel) ExecuteMeshGrow(ctx context.Context, target string, params map[string]string) (float64, error) {
+	wm.logger.Debugw("ExecuteMeshGrow", "target", target)
+	return 0.5, nil
+}
+
+// PredictOutcome returns an estimated utility/outcome score for a given scenario.
+func (wm *WorldModel) PredictOutcome(scenario string, context string) float64 {
+	// Stub: in production this runs a predictive model
+	wm.mu.RLock()
+	defer wm.mu.RUnlock()
+	// Baseline heuristic: high-resource-availability = higher predicted success
+	available := (wm.state.CPU + wm.state.Memory) / 2
+	if available > 0 {
+		return available
+	}
+	return 0.5
 }

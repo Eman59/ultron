@@ -1171,3 +1171,11 @@ class CodeIntrospector:
             time.sleep(self.scan_interval)
             if self._running:
                 self.full_scan()
+
+
+# ── Stub: analyze_code expected by __init__.py decorator ──────────────────────
+def _ci_analyze_code(self, *args, **kwargs) -> dict:
+    """Stub: perform a code analysis pass."""
+    return {}
+
+CodeIntrospector.analyze_code = _ci_analyze_code

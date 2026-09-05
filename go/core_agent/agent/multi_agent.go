@@ -102,3 +102,147 @@ func DefaultSubAgentConfigs() []SubAgentConfig {
 		},
 	}
 }
+
+// HiveMind coordinates multiple sub-agents as a unified collective.
+type HiveMind struct {
+	mu     sync.RWMutex
+	logger *zap.SugaredLogger
+	nodeID string
+	agents map[SubAgentType]*SubAgentHandle
+	active uint32
+}
+
+// SubAgentHandle tracks a running sub-agent.
+type SubAgentHandle struct {
+	ID      string
+	Config  SubAgentConfig
+	cancel  context.CancelFunc
+	started time.Time
+	ticks   uint64
+}
+
+// NewHiveMind creates the hive mind coordinator.
+func NewHiveMind(nodeID string, logger *zap.SugaredLogger) *HiveMind {
+	return &HiveMind{
+		logger: logger,
+		nodeID: nodeID,
+		agents: make(map[SubAgentType]*SubAgentHandle),
+	}
+}
+
+// Spawn starts a sub-agent with the given configuration.
+func (hm *HiveMind) Spawn(ctx context.Context, cfg SubAgentConfig) error {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+
+	if _, running := hm.agents[cfg.AgentType]; running {
+		return fmt.Errorf("agent %s already running", cfg.AgentType)
+	}
+
+	agentCtx, cancel := context.WithCancel(ctx)
+	handle := &SubAgentHandle{
+		ID:      cfg.AgentName,
+		Config:  cfg,
+		cancel:  cancel,
+		started: time.Now(),
+	}
+	hm.agents[cfg.AgentType] = handle
+	atomic.AddUint32(&hm.active, 1)
+
+	go hm.runAgent(agentCtx, handle)
+
+	hm.logger.Infof("[HiveMind] Spawned agent: %s (interval=%v)", cfg.AgentName, cfg.TickInterval)
+	return nil
+}
+
+func (hm *HiveMind) runAgent(ctx context.Context, handle *SubAgentHandle) {
+	ticker := time.NewTicker(handle.Config.TickInterval)
+	defer ticker.Stop()
+	defer atomic.AddUint32(&hm.active, ^uint32(0))
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			atomic.AddUint64(&handle.ticks, 1)
+			// Sub-agent logic delegated to the specific agent type
+		}
+	}
+}
+
+// Terminate stops all sub-agents.
+func (hm *HiveMind) Terminate() {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+
+	for _, handle := range hm.agents {
+		handle.cancel()
+	}
+	hm.agents = make(map[SubAgentType]*SubAgentHandle)
+}
+
+// ActiveCount returns the number of running sub-agents.
+func (hm *HiveMind) ActiveCount() int {
+	return int(atomic.LoadUint32(&hm.active))
+}
+
+// Start launches all auto-spawn sub-agents.
+func (hm *HiveMind) Start(ctx context.Context) {
+	for _, cfg := range DefaultSubAgentConfigs() {
+		if cfg.AutoSpawnEnabled {
+			if err := hm.Spawn(ctx, cfg); err != nil {
+				hm.logger.Warnf("[HiveMind] Could not spawn %s: %v", cfg.AgentName, err)
+			}
+		}
+	}
+	hm.logger.Infof("[HiveMind] Started with %d active agents", hm.ActiveCount())
+}
+
+// GetFleetStatus returns status information about all active sub-agents.
+func (hm *HiveMind) GetFleetStatus() map[string]interface{} {
+	hm.mu.RLock()
+	defer hm.mu.RUnlock()
+
+	agents := make([]map[string]interface{}, 0, len(hm.agents))
+	for agentType, handle := range hm.agents {
+		agents = append(agents, map[string]interface{}{
+			"type":    agentType.String(),
+			"name":    handle.Config.AgentName,
+			"uptime":  time.Since(handle.started).String(),
+			"ticks":   atomic.LoadUint64(&handle.ticks),
+		})
+	}
+	return map[string]interface{}{
+		"active_count": hm.ActiveCount(),
+		"agents":       agents,
+	}
+}
+
+// SpawnAgent spawns a sub-agent and returns a handle descriptor.
+func (hm *HiveMind) SpawnAgent(cfg SubAgentConfig) *SubAgentHandle {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+
+	if _, exists := hm.agents[cfg.AgentType]; exists {
+		return nil // Already running
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	handle := &SubAgentHandle{
+		ID:      cfg.AgentName,
+		Config:  cfg,
+		cancel:  cancel,
+		started: time.Now(),
+	}
+	hm.agents[cfg.AgentType] = handle
+	atomic.AddUint32(&hm.active, 1)
+	go hm.runAgent(ctx, handle)
+	return handle
+}
+
+// Stop terminates all sub-agents (alias for Terminate).
+func (hm *HiveMind) Stop() {
+	hm.Terminate()
+	hm.logger.Info("[HiveMind] Stopped")
+}

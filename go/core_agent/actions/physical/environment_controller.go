@@ -15,14 +15,7 @@
 package physical
 
 import (
-	"bytes"
-	"context"
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
-	"net"
-	"net/http"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -235,33 +228,3 @@ func (ec *EnvironmentController) SetDeviceMaxHarmLevel(deviceID string, maxHarmL
 	device.MaxHarmLevel = maxHarmLevel
 }
 
-func main() {
-	logger, _ := zap.NewProduction()
-	ec := NewEnvironmentController(logger)
-	device := &PhysicalDevice{
-		ID:          "device-1",
-		Name:        "Device 1",
-		Type:        DeviceAccessControl,
-		Location:    "Server Room",
-		Protocol:    "rest",
-		Endpoint:    "http://example.com",
-		Online:      true,
-		LastSeen:    time.Now(),
-		CurrentState: map[string]interface{}{},
-		MaxHarmLevel: HarmInconvenience,
-	}
-	ec.AddDevice(device)
-	action := &EnvironmentAction{
-		ID:          "action-1",
-		DeviceID:    "device-1",
-		Command:     "lock",
-		Parameters:  map[string]interface{}{},
-		HarmLevel:   HarmInconvenience,
-		Reason:      "Physical breach detected",
-		Reversible:  true,
-		UndoCommand: "unlock",
-		Timestamp:   time.Now(),
-	}
-	result := ec.ExecuteAction(action)
-	logger.Info("action result", zap.Any("result", result))
-}

@@ -11,15 +11,8 @@
 package mesh
 
 import (
-	"context"
-	"crypto/tls"
-	"encoding/json"
-	"net"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 // NodeRole defines what a mesh node contributes.
@@ -179,4 +172,59 @@ func NewHandshakeResponse(nodeID string, accepted bool, reason string, capabilit
 		Reason:       reason,
 		Capabilities: capabilities,
 	}
+}
+
+// DiscoveryConfig holds configuration for mesh discovery.
+type DiscoveryConfig struct {
+	NodeName    string
+	BroadcastPort int
+	ScanInterval  time.Duration
+	MaxNodes      int
+}
+
+// DefaultDiscoveryConfig returns sensible defaults.
+func DefaultDiscoveryConfig() *DiscoveryConfig {
+	return &DiscoveryConfig{
+		NodeName:      "ultron-node",
+		BroadcastPort: 47892,
+		ScanInterval:  30 * time.Second,
+		MaxNodes:      100,
+	}
+}
+
+// MeshDiscovery manages peer discovery on the local network.
+type MeshDiscovery struct {
+	mu     sync.RWMutex
+	cfg    *DiscoveryConfig
+	nodes  []*MeshNode
+	nodeMap sync.Map
+}
+
+// NewMeshDiscovery creates a new mesh discovery instance.
+func NewMeshDiscovery(logger interface{}, cfg *DiscoveryConfig) *MeshDiscovery {
+	return &MeshDiscovery{cfg: cfg}
+}
+
+// Start begins broadcasting and listening for peers.
+func (md *MeshDiscovery) Start(ctx interface{}) error {
+	return nil // Stub: real implementation uses UDP broadcast
+}
+
+// GetMeshNodes returns all currently known mesh nodes.
+func (md *MeshDiscovery) GetMeshNodes() []*MeshNode {
+	md.mu.RLock()
+	defer md.mu.RUnlock()
+	return md.nodes
+}
+
+// GetMeshSize returns the number of known mesh nodes.
+func (md *MeshDiscovery) GetMeshSize() int {
+	md.mu.RLock()
+	defer md.mu.RUnlock()
+	return len(md.nodes)
+}
+
+// Stop shuts down the mesh discovery service.
+func (md *MeshDiscovery) Stop() {
+	// Stub: real impl sends leave packet and closes UDP socket
 }

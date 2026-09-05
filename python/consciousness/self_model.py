@@ -615,3 +615,20 @@ class SelfModel:
         if not self.capabilities:
             return 0.0
         return sum(c.proficiency for c in self.capabilities.values()) / len(self.capabilities)
+
+
+    def start(self):
+        """Start background self-model maintenance."""
+        import threading
+        import time
+
+        def _background():
+            while True:
+                try:
+                    self.introspect()
+                except Exception:
+                    pass
+                time.sleep(60)
+
+        t = threading.Thread(target=_background, daemon=True)
+        t.start()

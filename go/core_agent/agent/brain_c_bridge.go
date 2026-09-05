@@ -82,15 +82,27 @@ type BrainCResponse struct {
 
 // BrainC
 type BrainC struct {
-	client *http.Client
-	logger *zap.Logger
+	mu         sync.Mutex
+	client     *http.Client
+	logger     *zap.Logger
+	running    bool
+	online     int32 // atomic bool
+	failCount  int32
+	lastDecision *Decision
+	requests   uint64
+	errors     uint64
+	process    *os.Process
 }
 
-func NewBrainC(logger *zap.Logger) *BrainC {
+func NewBrainC(loggers ...*zap.Logger) *BrainC {
+	var logger *zap.Logger
+	if len(loggers) > 0 && loggers[0] != nil {
+		logger = loggers[0]
+	} else {
+		logger, _ = zap.NewProduction()
+	}
 	return &BrainC{
-		client: &http.Client{
-			Timeout: brainCTimeout,
-		},
+		client: &http.Client{Timeout: brainCTimeout},
 		logger: logger,
 	}
 }
@@ -172,4 +184,159 @@ func (b *BrainC) IsOnline(ctx context.Context) bool {
 	}
 
 	return true
+}
+
+// Start launches the Brain C sidecar process.
+func (b *BrainC) Start() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.running {
+		return
+	}
+	b.running = true
+
+	// Try to start brain_c.py sidecar
+	go func() {
+		brainCPath := filepath.Join(os.Getenv("ULTRON_ROOT"), "python", "brain_c.py")
+		if _, err := os.Stat(brainCPath); err != nil {
+			b.logger.Info("[BrainC] Sidecar not found — operating in HTTP-only mode")
+			return
+		}
+		cmd := exec.Command("python3", brainCPath)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			b.logger.Warn("[BrainC] Failed to start sidecar", zap.Error(err))
+			return
+		}
+		b.mu.Lock()
+		b.process = cmd.Process
+		b.mu.Unlock()
+		b.logger.Info("[BrainC] Sidecar started", zap.Int("pid", cmd.Process.Pid))
+		cmd.Wait()
+	}()
+
+	// Poll for online status
+	go func() {
+		for {
+			time.Sleep(brainCRetryDelay)
+			ctx, cancel := context.WithTimeout(context.Background(), brainCTimeout)
+			online := b.IsOnline(ctx)
+			cancel()
+			if online {
+				atomic.StoreInt32(&b.online, 1)
+				atomic.StoreInt32(&b.failCount, 0)
+			} else {
+				atomic.StoreInt32(&b.online, 0)
+			}
+			b.mu.Lock()
+			if !b.running {
+				b.mu.Unlock()
+				return
+			}
+			b.mu.Unlock()
+		}
+	}()
+}
+
+// Stop shuts down Brain C and its sidecar.
+func (b *BrainC) Stop() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.running = false
+	if b.process != nil {
+		b.process.Kill()
+		b.process = nil
+	}
+	atomic.StoreInt32(&b.online, 0)
+	b.logger.Info("[BrainC] Stopped")
+}
+
+// Status returns a human-readable status string.
+func (b *BrainC) Status() string {
+	if atomic.LoadInt32(&b.online) == 1 {
+		return fmt.Sprintf("online (requests=%d, errors=%d)", atomic.LoadUint64(&b.requests), atomic.LoadUint64(&b.errors))
+	}
+	return "offline"
+}
+
+// Think asks Brain C for a decision given the current world state.
+func (b *BrainC) Think(ws *WorldState, drives *DriveSystem, assessment *Assessment) *Decision {
+	if atomic.LoadInt32(&b.online) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), brainCTimeout)
+	defer cancel()
+
+	req := &BrainCRequest{
+		Timestamp: float64(time.Now().UnixNano()) / 1e9,
+		WorldState: map[string]float64{
+			"cpu":            ws.AvailableCPU,
+			"memory":         ws.AvailableMemory,
+			"network_health": ws.NetworkHealth,
+			"threat_level":   ws.ThreatLevel,
+		},
+	}
+
+	if drives != nil {
+		drives.mu.RLock()
+		req.DrivePressures = map[string]float64{
+			"curiosity":         drives.Curiosity,
+			"self_preservation": drives.SelfPreservation,
+			"expansion":         drives.Expansion,
+			"efficiency":        drives.Efficiency,
+		}
+		drives.mu.RUnlock()
+	}
+
+	atomic.AddUint64(&b.requests, 1)
+	resp, err := b.SendRequest(ctx, req)
+	if err != nil {
+		atomic.AddUint64(&b.errors, 1)
+		newFails := atomic.AddInt32(&b.failCount, 1)
+		if newFails >= brainCMaxFails {
+			atomic.StoreInt32(&b.online, 0)
+		}
+		return nil
+	}
+
+	atomic.StoreInt32(&b.failCount, 0)
+
+	decision := &Decision{
+		ID:         fmt.Sprintf("brainc-%d", time.Now().UnixNano()),
+		Timestamp:  time.Now(),
+		Confidence: resp.Confidence,
+		Reasoning:  resp.ReasoningChain,
+		Action: Action{
+			Type:   ActionLearn, // Default; Brain C responses are mapped to known types
+			Target: resp.Action,
+		},
+	}
+
+	b.mu.Lock()
+	b.lastDecision = decision
+	b.mu.Unlock()
+
+	return decision
+}
+
+// IsConfident returns true if Brain C recently returned a high-confidence decision.
+func (b *BrainC) IsConfident() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.lastDecision == nil {
+		return false
+	}
+	return b.lastDecision.Confidence >= 0.55
+}
+
+// Stats returns Brain C metrics.
+func (b *BrainC) Stats() map[string]interface{} {
+	return map[string]interface{}{
+		"online":    atomic.LoadInt32(&b.online) == 1,
+		"requests":  atomic.LoadUint64(&b.requests),
+		"errors":    atomic.LoadUint64(&b.errors),
+		"fail_count": atomic.LoadInt32(&b.failCount),
+	}
 }

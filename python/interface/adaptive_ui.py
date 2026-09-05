@@ -96,3 +96,53 @@ if __name__ == "__main__":
     light_pattern = LightPattern.BREATHE
     color_scheme = ColorScheme.ULTRON_RED
     logging.info(f"Personality: {personality}, Light Pattern: {light_pattern}, Color Scheme: {color_scheme}")
+
+
+class AdaptiveUIController:
+    """Adapts the UI personality and presentation based on context."""
+
+    def __init__(self, data_dir: str = ".ultron/ui"):
+        import os
+        os.makedirs(data_dir, exist_ok=True)
+        self.data_dir = data_dir
+        self.personality: UIPersonality = UIPersonality.IDLE
+        self.light_pattern: LightPattern = LightPattern.BREATHE
+        self.color_scheme: ColorScheme = ColorScheme.ULTRON_RED
+        self._lock = __import__('threading').Lock()
+        self._callbacks = []
+
+    def set_personality(self, personality: UIPersonality) -> None:
+        with self._lock:
+            self.personality = personality
+            self._notify()
+
+    def adapt_to_context(self, context: dict) -> dict:
+        """Return UI config dict based on current context."""
+        with self._lock:
+            return {
+                "personality": self.personality.value,
+                "light_pattern": self.light_pattern.value,
+                "color_scheme": self.color_scheme.value,
+                "context": context,
+            }
+
+    def register_callback(self, cb) -> None:
+        self._callbacks.append(cb)
+
+    def _notify(self):
+        for cb in self._callbacks:
+            try:
+                cb(self.personality)
+            except Exception:
+                pass
+
+    def get_status(self) -> dict:
+        return {
+            "personality": self.personality.value,
+            "light_pattern": self.light_pattern.value,
+            "color_scheme": self.color_scheme.value,
+        }
+
+    def start(self) -> None:
+        """No-op — present for interface compatibility."""
+        pass

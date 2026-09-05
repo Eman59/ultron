@@ -1064,3 +1064,11 @@ class EvolutionController:
         """Unfreeze evolution."""
         self.speed = speed
         print(f"  [UNFROZEN] Evolution resumed at {speed.value}")
+
+
+# ── Stub: evolve expected by __init__.py decorator ────────────────────────────
+def _ec_evolve(self, *args, **kwargs) -> dict:
+    """Stub: run an evolution pass."""
+    return {}
+
+EvolutionController.evolve = _ec_evolve

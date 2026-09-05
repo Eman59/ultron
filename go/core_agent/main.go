@@ -316,7 +316,7 @@ func main() {
 					case <-ctx.Done():
 						return
 					case <-ticker.C:
-						if ok, violations := ownerGuard.CheckIntegrity(); !ok {
+						if violations := ownerGuard.CheckIntegrity(); len(violations) > 0 {
 							sugar.Errorf("Integrity violations: %v", violations)
 						}
 					}
@@ -367,8 +367,8 @@ func main() {
 		ros2Addr = "localhost:9090"
 	}
 	sugar.Info("Initializing Physical Embodiment Layer...")
-	ros2 := physical.NewROS2Interface(sugar, ros2Addr)
-	if err := ros2.Start(ctx); err != nil {
+	ros2 := physical.NewROS2Interface(ros2Addr)
+	if err := ros2.Start(); err != nil {
 		sugar.Warnf("Physical layer offline: %v (operating in digital-only mode)", err)
 	} else {
 		awakening.SetPhysicalReady(true)
@@ -404,7 +404,7 @@ func main() {
 	// ━━━━━━━━━━ Start Multi-Agent Hive Mind ━━━━━━━━━━
 	sugar.Info("Initializing Multi-Agent Hive Mind...")
 	hiveMind := agent.NewHiveMind(coreAgent.GetID(), sugar)
-	hiveMind.Start()
+	hiveMind.Start(ctx)
 	coreAgent.SetHiveMind(hiveMind)
 	sugar.Info("✓ Hive Mind online (sub-agents: sentinel, scholar, oracle, janitor)")
 
@@ -416,7 +416,7 @@ func main() {
 
 	// ━━━━━━━━━━ Start Adversarial Self-Testing ━━━━━━━━━━
 	sugar.Info("Initializing Adversarial Self-Testing...")
-	adversarial := agent.NewAdversarialEngine(dataDir, sugar)
+	adversarial := agent.NewAdversarialEngineSimple(dataDir, sugar)
 	adversarial.Start()
 	sugar.Info("✓ Adversarial Engine online (red team + chaos engineering + daily benchmarks)")
 
@@ -582,7 +582,7 @@ func main() {
 			json.NewDecoder(r.Body).Decode(&body)
 			configs := agent.DefaultSubAgentConfigs()
 			for _, cfg := range configs {
-				if cfg.Type.String() == body.Type || cfg.Name == body.Name {
+				if cfg.AgentType.String() == body.Type || cfg.AgentName == body.Name {
 					spawned := hiveMind.SpawnAgent(cfg)
 					w.Header().Set("Content-Type", "application/json")
 					if spawned != nil {

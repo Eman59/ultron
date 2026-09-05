@@ -555,7 +555,6 @@ func (al *AutonomyLoop) tick(ctx context.Context) {
 			al.act(ctx, decision)
 			// Emit to learning system
 			al.learning.EmitDecision(decision)
-		}
 	}
 
 	// ━━━━━━━━━━ IMMORTALITY: Snapshot consciousness every 100 ticks ━━━━━━━━━━
@@ -880,7 +879,7 @@ func (al *AutonomyLoop) act(ctx context.Context, decision *Decision) {
 				ID:        decision.ID,
 				Timestamp: decision.Timestamp,
 				Action:    decision.Action.Type.String(),
-				Context:   al.currentContextVector(),
+				Context:   map[string]interface{}{"state_vector": al.currentContextVector()},
 				Outcome:   0.0, // Updated after execution
 			})
 		}

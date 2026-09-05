@@ -136,7 +136,48 @@ func (vs *VectorStore) Search(queryVector []float64, topK int, minScore float64,
 		log.Printf("Resized query vector to dimension %d", vs.dimension)
 	}
 
-	// ... (rest of the function remains the same)
+	var results []SearchResult
+	for _, entry := range vs.entries {
+		if category != "" && entry.Category != category {
+			continue
+		}
+		score := cosineSimilarity(queryVector, entry.Vector)
+		if score >= minScore {
+			results = append(results, SearchResult{
+				ID:    entry.ID,
+				Score: score,
+				Entry: entry,
+			})
+		}
+	}
+
+	// Sort by score descending
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
+	if topK > 0 && len(results) > topK {
+		results = results[:topK]
+	}
+
+	return results
+}
+
+// cosineSimilarity computes the cosine similarity between two vectors.
+func cosineSimilarity(a, b []float64) float64 {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0
+	}
+	var dot, normA, normB float64
+	for i := range a {
+		dot += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
 }
 
 // persistLoop persists the vector store to disk.
@@ -162,15 +203,79 @@ func (vs *VectorStore) persistLoop() {
 
 // load loads the vector store from disk.
 func (vs *VectorStore) load() error {
-	// ... (rest of the function remains the same)
+	dataFile := filepath.Join(vs.dataDir, "vectors.json")
+	if _, err := os.Stat(dataFile); os.IsNotExist(err) {
+		return nil // No existing data, start fresh
+	}
+
+	data, err := os.ReadFile(dataFile)
+	if err != nil {
+		return err
+	}
+
+	var entries map[string]*VectorEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return err
+	}
+
+	vs.mu.Lock()
+	vs.entries = entries
+	// Update dimension from first entry if not set
+	if vs.dimension == 0 {
+		for _, e := range entries {
+			vs.dimension = len(e.Vector)
+			break
+		}
+	}
+	vs.mu.Unlock()
+	return nil
 }
 
 // resizeVector resizes a vector to match the store's dimension.
 func (vs *VectorStore) resizeVector(vector []float64) []float64 {
-	// ... (rest of the function remains the same)
+	if len(vector) == vs.dimension {
+		return vector
+	}
+	result := make([]float64, vs.dimension)
+	copy(result, vector) // Pad with zeros if shorter; truncated if longer
+	return result
 }
 
 // persist persists the vector store to disk.
 func (vs *VectorStore) persist() error {
-	// ... (rest of the function remains the same)
+	vs.mu.RLock()
+	defer vs.mu.RUnlock()
+
+	data, err := json.Marshal(vs.entries)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filepath.Join(vs.dataDir, "vectors.json"), data, 0600)
+}
+
+// Delete removes a vector entry by ID.
+func (vs *VectorStore) Delete(id string) {
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	delete(vs.entries, id)
+	vs.dirty = true
+}
+
+// Close flushes pending state to disk.
+func (vs *VectorStore) Close() error {
+	return vs.persist()
+}
+
+// Stats returns vector store metrics.
+func (vs *VectorStore) Stats() map[string]interface{} {
+	vs.mu.RLock()
+	defer vs.mu.RUnlock()
+
+	return map[string]interface{}{
+		"entries":       len(vs.entries),
+		"dimension":     vs.dimension,
+		"total_inserts": vs.totalInserts,
+		"total_searches": vs.totalSearches,
+	}
 }

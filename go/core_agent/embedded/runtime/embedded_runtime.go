@@ -264,3 +264,121 @@ func (r *EmbeddedRuntime) GetStatus() map[string]interface{} {
 		"connected":    r.connected,
 	}
 }
+
+// ━━━━ MemorySystem interface method aliases ━━━━
+// These satisfy the memory.MemorySystem interface's method names.
+
+func (r *EmbeddedRuntime) StoreSemanticKnowledge(ctx context.Context, item memory.KnowledgeItem) error {
+	return r.Vector.Insert(
+		item.KnowledgeId,
+		item.VectorEmbedding,
+		map[string]interface{}{
+			"content":    item.Content,
+			"source":     item.Source,
+			"confidence": item.ConfidenceLevel,
+		},
+		item.Category,
+		item.ImportanceLevel,
+	)
+}
+
+func (r *EmbeddedRuntime) QuerySemanticKnowledge(ctx context.Context, query memory.KnowledgeQuery) ([]memory.KnowledgeItem, error) {
+	results := r.Vector.Search(query.QueryVector, query.ResultLimit, query.SimilarityThreshold, query.CategoryFilter)
+	var items []memory.KnowledgeItem
+	for _, res := range results {
+		content, _ := res.Entry.Metadata["content"].(string)
+		source, _ := res.Entry.Metadata["source"].(string)
+		confidence, _ := res.Entry.Metadata["confidence"].(float64)
+		items = append(items, memory.KnowledgeItem{
+			KnowledgeId:     res.Entry.ID,
+			Content:         content,
+			VectorEmbedding: res.Entry.Vector,
+			Category:        res.Entry.Category,
+			ConfidenceLevel: confidence,
+			Source:          source,
+			ImportanceLevel: res.Entry.Importance,
+			CreatedAt:       res.Entry.CreatedAt,
+		})
+	}
+	return items, nil
+}
+
+func (r *EmbeddedRuntime) DeleteSemanticKnowledge(ctx context.Context, id string) error {
+	r.Vector.Delete(id)
+	return nil
+}
+
+func (r *EmbeddedRuntime) StoreExperience(ctx context.Context, experience memory.Experience) error {
+	return r.StoreEpisodic(ctx, memory.EpisodicMemory{
+		ID:        experience.ExperienceId,
+		Timestamp: experience.Timestamp,
+		Action:    experience.ActionType,
+		Outcome:   experience.Outcome,
+	})
+}
+
+func (r *EmbeddedRuntime) QueryExperiences(ctx context.Context, query memory.ExperienceQuery) ([]memory.Experience, error) {
+	episodes, err := r.QueryEpisodic(ctx, memory.EpisodicQuery{
+		ActionType: query.ActionTypeFilter,
+		MinOutcome: query.MinOutcome,
+		Limit:      query.ResultLimit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var experiences []memory.Experience
+	for _, ep := range episodes {
+		experiences = append(experiences, memory.Experience{
+			ExperienceId: ep.ID,
+			ActionType:   ep.Action,
+			Timestamp:    ep.Timestamp,
+			Outcome:      ep.Outcome,
+		})
+	}
+	return experiences, nil
+}
+
+func (r *EmbeddedRuntime) UpdateExperienceOutcome(ctx context.Context, id string, outcome float64) error {
+	return r.UpdateEpisodic(ctx, id, outcome)
+}
+
+func (r *EmbeddedRuntime) StoreStrategy(ctx context.Context, strategy memory.Strategy) error {
+	return r.StoreProcedural(ctx, memory.ProceduralMemory{
+		Strategy:   strategy.Name,
+		Parameters: strategy.Parameters,
+		AvgUtility: strategy.SuccessRate,
+		UsageCount: strategy.UsageCount,
+		UpdatedAt:  strategy.LastUsed,
+	})
+}
+
+func (r *EmbeddedRuntime) QueryStrategy(ctx context.Context, name string) (*memory.Strategy, error) {
+	proc, err := r.QueryProcedural(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return &memory.Strategy{
+		Name:        proc.Strategy,
+		Parameters:  proc.Parameters,
+		SuccessRate: proc.AvgUtility,
+		UsageCount:  proc.UsageCount,
+		LastUsed:    proc.UpdatedAt,
+	}, nil
+}
+
+func (r *EmbeddedRuntime) GetBestStrategyForContext(ctx context.Context, contextData []float64) (*memory.Strategy, error) {
+	proc, err := r.GetBestStrategy(ctx, contextData)
+	if err != nil || proc == nil {
+		return nil, err
+	}
+	return &memory.Strategy{
+		Name:        proc.Strategy,
+		Parameters:  proc.Parameters,
+		SuccessRate: proc.AvgUtility,
+	}, nil
+}
+
+func (r *EmbeddedRuntime) SyncWithPeerNode(ctx context.Context, peerID string) error {
+	return r.SyncWithPeer(ctx, peerID)
+}
+

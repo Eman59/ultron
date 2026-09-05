@@ -46,6 +46,13 @@ type MemorySystem interface {
 	// ━━━━ Cross-node Synchronization ━━━━
 	SyncWithPeerNode(ctx context.Context, peerNodeId string) error
 	GetLastSyncTime(peerNodeId string) time.Time
+
+	// ━━━━ Shorthand methods used by autonomy loop ━━━━
+	QueryEpisodic(ctx context.Context, query EpisodicQuery) ([]EpisodicMemory, error)
+	QuerySemantic(ctx context.Context, query SemanticQuery) ([]MemoryItem, error)
+	StoreEpisodic(ctx context.Context, episode EpisodicMemory) error
+	UpdateEpisodic(ctx context.Context, id string, outcome float64) error
+	StoreProcedural(ctx context.Context, proc ProceduralMemory) error
 }
 
 // KnowledgeItem represents a piece of semantic knowledge.
@@ -81,5 +88,100 @@ type KnowledgeQuery struct {
 
 // Experience represents a single experience or event.
 type Experience struct {
-	ExperienceId string
-	// ... (rest of the code remains the same)
+	ExperienceId    string
+	ActionType      string
+	ActionTarget    string
+	Context         map[string]interface{}
+	Outcome         float64
+	EmotionalImpact float64
+	Timestamp       time.Time
+	Duration        time.Duration
+	Tags            []string
+}
+
+// ExperienceQuery defines a query against episodic memory.
+type ExperienceQuery struct {
+	ActionTypeFilter string
+	MinOutcome       float64
+	SinceTime        time.Time
+	ResultLimit      int
+	Tags             []string
+}
+
+// Strategy represents a learned procedural strategy.
+type Strategy struct {
+	StrategyId    string
+	Name          string
+	Description   string
+	ContextVector []float64
+	SuccessRate   float64
+	UsageCount    int
+	LastUsed      time.Time
+	CreatedAt     time.Time
+	Parameters    map[string]interface{}
+}
+
+// DriveState represents the persisted drive state across restarts.
+type DriveState struct {
+	DriveId          string
+	DriveValues      map[string]float64
+	Curiosity        float64
+	SelfPreservation float64
+	Expansion        float64
+	Efficiency       float64
+	Coherence        float64
+	Purpose          float64
+	UpdatedAt        time.Time
+}
+
+// ━━━━━━━━━━ Embedded Runtime Types ━━━━━━━━━━
+// These types are used by embedded/runtime to bridge the memory interface.
+
+// MemoryItem is a single item in semantic memory.
+type MemoryItem struct {
+	ID         string
+	Content    string
+	Embedding  []float64
+	Category   string
+	Confidence float64
+	Source     string
+	Importance float64
+	CreatedAt  time.Time
+}
+
+// SemanticQuery is a query against semantic memory.
+type SemanticQuery struct {
+	Context   []float64 // Query embedding
+	Limit     int
+	Threshold float64
+	Category  string
+}
+
+// EpisodicMemory is a single episodic memory record.
+type EpisodicMemory struct {
+	ID        string
+	Timestamp time.Time
+	Action    string
+	Outcome   float64
+	Context   map[string]interface{}
+}
+
+// EpisodicQuery is a query against episodic memory.
+type EpisodicQuery struct {
+	ActionType   string
+	MinOutcome   float64
+	Limit        int
+	SimilarState []float64 // Optional: find episodes with similar state vector
+}
+
+// ProceduralMemory is a learned strategy stored in procedural memory.
+type ProceduralMemory struct {
+	Strategy    string
+	Parameters  map[string]interface{}
+	AvgUtility  float64
+	SuccessRate float64
+	SampleSize  int
+	UsageCount  int
+	UpdatedAt   time.Time
+	Timestamp   time.Time
+}

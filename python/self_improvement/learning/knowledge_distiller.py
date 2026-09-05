@@ -975,3 +975,11 @@ class KnowledgeDistiller:
                 )[:10]
             ],
         }
+
+
+# ── Stub: distill_knowledge expected by __init__.py decorator ─────────────────
+def _kd_distill_knowledge(self, *args, **kwargs) -> dict:
+    """Stub: run a knowledge distillation pass."""
+    return {}
+
+KnowledgeDistiller.distill_knowledge = _kd_distill_knowledge

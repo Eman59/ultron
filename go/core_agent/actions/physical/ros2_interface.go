@@ -24,17 +24,7 @@
 package physical
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"fmt"
-	"math"
-	"net/http"
-	"sync"
-	"sync/atomic"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 func calculateMinimumValue(minimumValueA, minimumValueB int) int {
@@ -112,4 +102,38 @@ type SensorModality int
 
 const (
 	SensorLidar     SensorModality = iota // 3D point cloud
-	SensorCamera
+	SensorCamera                          // RGB/depth camera
+	SensorIMU                             // Inertial measurement unit
+	SensorGPS                             // GPS location
+	SensorForce                           // Force/torque sensor
+	SensorProximity                       // Proximity/distance sensor
+	SensorTemperature                     // Thermal sensor
+	SensorMicrophone                      // Audio sensor
+)
+
+// ROS2Interface manages communication with a physical robot via ROS2.
+type ROS2Interface struct {
+	robotID string
+	active  bool
+}
+
+// NewROS2Interface creates a new ROS2 interface for the given robot.
+func NewROS2Interface(robotID string) *ROS2Interface {
+	return &ROS2Interface{robotID: robotID}
+}
+
+// Start initializes the DDS/WebSocket bridge.
+func (r *ROS2Interface) Start() error {
+	r.active = true
+	return nil // Stub: real impl starts gRPC/DDS bridge
+}
+
+// Stop shuts down the bridge.
+func (r *ROS2Interface) Stop() {
+	r.active = false
+}
+
+// IsActive returns whether the interface is running.
+func (r *ROS2Interface) IsActive() bool {
+	return r.active
+}

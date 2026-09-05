@@ -1117,3 +1117,11 @@ class AdaptiveOptimizer:
     def get_current_parameters(self, component: str) -> Dict[str, Any]:
         """Get current optimized parameters for a component."""
         return self._parameter_registry.get(component, {})
+
+
+# ── Stub: optimize expected by __init__.py decorator ──────────────────────────
+def _ao_optimize(self, *args, **kwargs) -> dict:
+    """Stub: run an optimization pass."""
+    return {}
+
+AdaptiveOptimizer.optimize = _ao_optimize

@@ -3,9 +3,7 @@
 package goals
 
 import (
-	"fmt"
 	"log"
-	"math"
 	"sort"
 	"sync"
 	"time"
@@ -212,8 +210,7 @@ func (gm *GoalManager) DeleteGoal(id string) {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 
-	goal, ok := gm.goals[id]
-	if !ok {
+	if _, ok := gm.goals[id]; !ok {
 		log.Println("Goal not found")
 		return
 	}
@@ -280,5 +277,68 @@ func (gm *GoalManager) Timeout() {
 		if goal.Deadline != nil && time.Now().After(*goal.Deadline) {
 			gm.AbandonGoal(goal.ID)
 		}
+	}
+}
+
+// ActiveGoalCount returns the number of active goals.
+func (gm *GoalManager) ActiveGoalCount() int {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+	return len(gm.activeGoals)
+}
+
+// GetTopGoal returns the highest-priority active goal, or nil.
+func (gm *GoalManager) GetTopGoal() *Goal {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+	if len(gm.activeGoals) == 0 {
+		return nil
+	}
+	return gm.activeGoals[0]
+}
+
+// GetTopGoalID returns the ID of the highest-priority goal, or empty string.
+func (gm *GoalManager) GetTopGoalID() string {
+	g := gm.GetTopGoal()
+	if g == nil {
+		return ""
+	}
+	return g.ID
+}
+
+// GetOverallProgress returns the average progress across all active goals.
+func (gm *GoalManager) GetOverallProgress() float64 {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+	if len(gm.activeGoals) == 0 {
+		return 0.0
+	}
+	var total float64
+	for _, g := range gm.activeGoals {
+		total += g.Progress
+	}
+	return total / float64(len(gm.activeGoals))
+}
+
+// GetGoalSummary returns a summary map of the current goal state.
+func (gm *GoalManager) GetGoalSummary() map[string]interface{} {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	active := make([]map[string]interface{}, 0, len(gm.activeGoals))
+	for _, g := range gm.activeGoals {
+		active = append(active, map[string]interface{}{
+			"id":          g.ID,
+			"type":        g.Type,
+			"domain":      g.Domain,
+			"description": g.Description,
+			"priority":    g.Priority,
+			"progress":    g.Progress,
+		})
+	}
+	return map[string]interface{}{
+		"active_count": len(gm.activeGoals),
+		"total_count":  len(gm.goals),
+		"active_goals": active,
 	}
 }

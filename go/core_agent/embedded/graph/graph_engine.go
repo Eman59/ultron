@@ -230,8 +230,7 @@ func (g *GraphEngine) Traverse(startNodeID string, maxDepth int) ([]TraversalRes
 
 				visited[nodeID] = true
 
-				// Get node and its edges
-				node := g.nodes[nodeID]
+				// Get outgoing edges for this node
 				edges := g.outEdges[nodeID]
 
 				// Add edges to result
@@ -333,4 +332,231 @@ func (g *GraphEngine) load() error {
 	}
 
 	inEdgesFile := filepath.Join(g.dataDir, "in_edges.json")
-	if _, err := os.Stat(inEdges
+	if _, err := os.Stat(inEdgesFile); err == nil {
+		data, err := os.ReadFile(inEdgesFile)
+		if err != nil {
+			return err
+		}
+
+		var inEdges map[string][]string
+		err = json.Unmarshal(data, &inEdges)
+		if err != nil {
+			return err
+		}
+
+		g.inEdges = inEdges
+	}
+
+	edgeTypeIndexFile := filepath.Join(g.dataDir, "edge_type_index.json")
+	if _, err := os.Stat(edgeTypeIndexFile); err == nil {
+		data, err := os.ReadFile(edgeTypeIndexFile)
+		if err != nil {
+			return err
+		}
+
+		var edgeTypeIndex map[string][]string
+		err = json.Unmarshal(data, &edgeTypeIndex)
+		if err != nil {
+			return err
+		}
+
+		g.edgeTypeIndex = edgeTypeIndex
+	}
+
+	return nil
+}
+
+// persist saves the graph data to disk.
+func (g *GraphEngine) persist() error {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	writeJSON := func(filename string, v interface{}) error {
+		data, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(g.dataDir, filename), data, 0600)
+	}
+
+	if err := writeJSON("nodes.json", g.nodes); err != nil {
+		return err
+	}
+	if err := writeJSON("edges.json", g.edges); err != nil {
+		return err
+	}
+	if err := writeJSON("label_index.json", g.labelIndex); err != nil {
+		return err
+	}
+	if err := writeJSON("out_edges.json", g.outEdges); err != nil {
+		return err
+	}
+	if err := writeJSON("in_edges.json", g.inEdges); err != nil {
+		return err
+	}
+	if err := writeJSON("edge_type_index.json", g.edgeTypeIndex); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// persistLoop periodically saves dirty state to disk.
+func (g *GraphEngine) persistLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		g.mu.RLock()
+		dirty := g.dirty
+		g.mu.RUnlock()
+
+		if dirty {
+			if err := g.persist(); err == nil {
+				g.mu.Lock()
+				g.dirty = false
+				g.mu.Unlock()
+			}
+		}
+	}
+}
+
+// ShortestPath finds the shortest path between two nodes using BFS.
+func (g *GraphEngine) ShortestPath(fromID, toID string) ([]string, float64, error) {
+	if fromID == "" || toID == "" {
+		return nil, 0, fmt.Errorf("node IDs cannot be empty")
+	}
+
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	if _, exists := g.nodes[fromID]; !exists {
+		return nil, 0, fmt.Errorf("source node does not exist")
+	}
+	if _, exists := g.nodes[toID]; !exists {
+		return nil, 0, fmt.Errorf("target node does not exist")
+	}
+
+	// BFS with path tracking
+	type qEntry struct {
+		nodeID string
+		path   []string
+		cost   float64
+	}
+
+	visited := make(map[string]bool)
+	queue := []qEntry{{nodeID: fromID, path: []string{fromID}, cost: 0}}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		if current.nodeID == toID {
+			return current.path, current.cost, nil
+		}
+
+		if visited[current.nodeID] {
+			continue
+		}
+		visited[current.nodeID] = true
+
+		for _, edgeID := range g.outEdges[current.nodeID] {
+			edge := g.edges[edgeID]
+			if !visited[edge.Target] {
+				newPath := make([]string, len(current.path)+1)
+				copy(newPath, current.path)
+				newPath[len(current.path)] = edge.Target
+				queue = append(queue, qEntry{
+					nodeID: edge.Target,
+					path:   newPath,
+					cost:   current.cost + edge.Weight,
+				})
+			}
+		}
+	}
+
+	return nil, math.MaxFloat64, fmt.Errorf("no path found from %s to %s", fromID, toID)
+}
+
+// GetNode returns a single node by ID.
+func (g *GraphEngine) GetNode(id string) *GraphNode {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.nodes[id]
+}
+
+// DeleteNode removes a node and its edges from the graph.
+func (g *GraphEngine) DeleteNode(id string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	delete(g.nodes, id)
+	for edgeID := range g.outEdges {
+		for i, eid := range g.outEdges[edgeID] {
+			if eid == id {
+				g.outEdges[edgeID] = append(g.outEdges[edgeID][:i], g.outEdges[edgeID][i+1:]...)
+				break
+			}
+		}
+	}
+	for edgeID := range g.inEdges {
+		for i, eid := range g.inEdges[edgeID] {
+			if eid == id {
+				g.inEdges[edgeID] = append(g.inEdges[edgeID][:i], g.inEdges[edgeID][i+1:]...)
+				break
+			}
+		}
+	}
+	g.dirty = true
+}
+
+// AddEpisode stores an episodic memory node.
+func (g *GraphEngine) AddEpisode(id, action string, outcome float64, props map[string]interface{}) *GraphNode {
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+	props["action"] = action
+	props["outcome"] = outcome
+	return g.AddNode(id, []string{"Episode"}, props)
+}
+
+// QueryEpisodes retrieves episodic memory nodes matching filters.
+func (g *GraphEngine) QueryEpisodes(actionType string, minOutcome float64, limit int) []*GraphNode {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	var results []*GraphNode
+	for _, node := range g.nodes {
+		for _, label := range node.Labels {
+			if label != "Episode" {
+				continue
+			}
+			action, _ := node.Properties["action"].(string)
+			outcome, _ := node.Properties["outcome"].(float64)
+			if (actionType == "" || action == actionType) && outcome >= minOutcome {
+				results = append(results, node)
+				if limit > 0 && len(results) >= limit {
+					return results
+				}
+			}
+		}
+	}
+	return results
+}
+
+// Close flushes pending state to disk.
+func (g *GraphEngine) Close() error {
+	return g.persist()
+}
+
+// Stats returns graph engine metrics.
+func (g *GraphEngine) Stats() map[string]interface{} {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return map[string]interface{}{
+		"nodes":   g.nodeCount,
+		"edges":   g.edgeCount,
+		"queries": g.queries,
+	}
+}

@@ -93,3 +93,55 @@ class IntelligentPatch:
 
     # Metrics
     llm_tokens_used: int = field(default=0)
+
+
+class IntelligentPatcher:
+    """
+    LLM-powered code evolution engine.
+    Generates, reviews, and applies patches to improve the codebase.
+    """
+
+    def __init__(
+        self,
+        brain=None,
+        codebase=None,
+        introspector=None,
+        collector=None,
+        auto_apply: bool = True,
+        self_review: bool = True,
+        min_confidence: float = 0.6,
+        max_patches_per_hour: int = 10,
+    ):
+        self.brain = brain
+        self.codebase = codebase
+        self.introspector = introspector
+        self.collector = collector
+        self.auto_apply = auto_apply
+        self.self_review = self_review
+        self.min_confidence = min_confidence
+        self.max_patches_per_hour = max_patches_per_hour
+        self._patches_this_hour: int = 0
+        self._lock = __import__('threading').Lock()
+
+    def generate_patch(self, target_file: str, intent: PatchIntent) -> Optional[IntelligentPatch]:
+        """Generate a patch for the given file."""
+        import hashlib as _h, time as _t
+        pid = _h.sha256(f"{target_file}{_t.time()}".encode()).hexdigest()[:16]
+        return IntelligentPatch(
+            patch_id=pid,
+            patch_intent=intent,
+            target_file_path=target_file,
+        )
+
+    def get_status(self) -> dict:
+        return {
+            "patches_this_hour": self._patches_this_hour,
+            "max_per_hour": self.max_patches_per_hour,
+            "auto_apply": self.auto_apply,
+        }
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass

@@ -85,4 +85,10 @@ class QuantumRandomGenerator:
                     return bits
         return bits
 
-    def random_gauss
+    def random_gauss(self, mean: float = 0.0, std: float = 1.0) -> float:
+        """Generate a Gaussian random number using Box-Muller transform."""
+        u1 = self.generate_random_float()
+        u2 = self.generate_random_float()
+        import math
+        z = math.sqrt(-2 * math.log(max(u1, 1e-10))) * math.cos(2 * math.pi * u2)
+        return mean + std * z

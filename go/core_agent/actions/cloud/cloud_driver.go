@@ -463,3 +463,28 @@ func maxU64(a, b uint64) uint64 {
 type InstanceSpec = actions.InstanceSpec
 type AutoScalePolicy = actions.AutoScalePolicy
 type InstanceInfo = actions.InstanceInfo
+
+// Execute routes an ActionRequest to the appropriate cloud method.
+func (d *AWSCloudDriver) Execute(ctx context.Context, req *actions.ActionRequest) (*actions.ActionResponse, error) {
+	start := time.Now()
+	if req == nil {
+		return nil, fmt.Errorf("nil action request")
+	}
+	var err error
+	switch req.Operation {
+	case "start":
+		err = d.StartInstance(ctx, req.Target)
+	case "stop":
+		err = d.StopInstance(ctx, req.Target)
+	case "terminate":
+		err = d.TerminateInstance(ctx, req.Target)
+	default:
+		err = fmt.Errorf("unknown cloud operation: %s", req.Operation)
+	}
+	return &actions.ActionResponse{
+		RequestID: req.RequestID,
+		Success:   err == nil,
+		Error:     err,
+		Duration:  time.Since(start),
+	}, nil
+}

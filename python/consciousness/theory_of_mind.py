@@ -131,3 +131,79 @@ def timeout_handler(timeout: float, func: callable, *args, **kwargs) -> Any:
         raise exception[0]
 
     return result[0]
+
+
+# ═══════════════════════════════════════════════════════════════
+# AGENT MODEL — simplified record for the TheoryOfMind registry
+# ═══════════════════════════════════════════════════════════════
+
+@dataclass
+class AgentModel:
+    """Internal record for a tracked external agent."""
+    agent_id: str
+    agent_type: AgentType
+    observations: List[str] = field(default_factory=list)
+    trust_level: float = 0.5
+    beliefs: List[AgentBelief] = field(default_factory=list)
+    predicted_intentions: List[PredictedIntention] = field(default_factory=list)
+
+
+# ═══════════════════════════════════════════════════════════════
+# THEORY OF MIND ENGINE
+# ═══════════════════════════════════════════════════════════════
+
+class TheoryOfMind:
+    """Models the mental states of external agents."""
+
+    def __init__(self, data_dir: str = ".ultron/consciousness"):
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.agents: Dict[str, AgentModel] = {}
+        self._lock = threading.Lock()
+
+    def observe_agent(
+        self,
+        agent_id: str,
+        agent_type: AgentType,
+        observation: str,
+    ) -> None:
+        """Record a new observation about an external agent."""
+        with self._lock:
+            if agent_id not in self.agents:
+                self.agents[agent_id] = AgentModel(
+                    agent_id=agent_id,
+                    agent_type=agent_type,
+                )
+            self.agents[agent_id].observations.append(observation)
+
+    def predict_intention(self, agent_id: str) -> Optional[PredictedIntention]:
+        """Return a rough predicted intention for the given agent."""
+        with self._lock:
+            agent = self.agents.get(agent_id)
+            if not agent:
+                return None
+            return PredictedIntention(
+                action="unknown",
+                target="unknown",
+                confidence=0.3,
+                timeframe="unknown",
+                evidence=agent.observations[-5:],
+                threat_to_ultron=0.0,
+                exploitable=False,
+            )
+
+    def get_agent_summary(self) -> Dict[str, Any]:
+        """Return a summary dict of all tracked agents."""
+        with self._lock:
+            return {
+                aid: {
+                    "type": a.agent_type.value,
+                    "trust": a.trust_level,
+                    "obs_count": len(a.observations),
+                }
+                for aid, a in self.agents.items()
+            }
+
+    def start(self) -> None:
+        """No background threads needed; present for interface compatibility."""
+        pass

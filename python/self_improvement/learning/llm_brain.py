@@ -92,7 +92,7 @@ class LLMRequest:
     stop_sequences: List[str] = field(default_factory=list)
     
     # For code generation
-    target_lan: str
+    target_lan: str = ""
 
     def __hash__(self):
         return hash((self.id, self.mode, self.priority, self.prompt, self.system_prompt, tuple(self.context_files), self.max_tokens, self.temperature, tuple(self.stop_sequences), self.target_lan))
@@ -126,3 +126,70 @@ def make_request(request: LLMRequest):
     # Make the actual request to the LLM provider
     # ...
     pass
+
+
+# ═══════════════════════════════════════════════════════════════
+# LLM RESPONSE & BRAIN
+# ═══════════════════════════════════════════════════════════════
+
+@dataclass
+class LLMResponse:
+    """A response from the LLM brain."""
+    id: str
+    request_id: str
+    content: str
+    model: str = ""
+    provider: str = ""
+    tokens_used: int = 0
+    cost_usd: float = 0.0
+    latency_ms: float = 0.0
+    cached: bool = False
+    timestamp: float = field(default_factory=time.time)
+
+
+class LLMBrain:
+    """
+    Central LLM interface for the self-learning system.
+    Connects to local (Ollama) or remote (OpenAI/Claude) models.
+    """
+
+    def __init__(
+        self,
+        config_path: str = None,
+        daily_budget_usd: float = 10.0,
+        prefer_local: bool = True,
+    ):
+        self.config_path = config_path
+        self.daily_budget_usd = daily_budget_usd
+        self.prefer_local = prefer_local
+        self._lock = __import__('threading').Lock()
+        self._spent_today: float = 0.0
+        self._request_count: int = 0
+
+    def think(
+        self,
+        prompt: str,
+        mode: ThinkingMode = ThinkingMode.ANALYST,
+        priority: Priority = Priority.NORMAL,
+        system_prompt: str = "",
+        max_tokens: int = 4096,
+        context_files: list = None,
+    ) -> LLMResponse:
+        """Submit a prompt and return a structured response."""
+        import hashlib as _h, time as _t
+        req_id = _h.sha256(f"{prompt}{_t.time()}".encode()).hexdigest()[:16]
+        # Stub: returns an empty response. Real impl would call an LLM API.
+        return LLMResponse(
+            id=req_id,
+            request_id=req_id,
+            content="",
+            model="stub",
+        )
+
+    def get_status(self) -> dict:
+        return {
+            "spent_today": self._spent_today,
+            "daily_budget": self.daily_budget_usd,
+            "request_count": self._request_count,
+            "prefer_local": self.prefer_local,
+        }

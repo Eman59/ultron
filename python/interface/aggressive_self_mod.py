@@ -158,3 +158,30 @@ class AggressiveSelfMod:
             validated=True,
             committed=True,
         )
+
+    def start(self) -> None:
+        """Start background self-modification loop."""
+        import threading, time
+        def _loop():
+            while True:
+                try:
+                    self._run_modification(None, "optimize")
+                except Exception:
+                    pass
+                time.sleep(600)
+        threading.Thread(target=_loop, daemon=True).start()
+
+
+# ═══════════════════════════════════════════════════════════════
+# SINGLETON ACCESSOR
+# ═══════════════════════════════════════════════════════════════
+
+_self_mod_instance: Optional[AggressiveSelfMod] = None
+
+
+def get_self_mod() -> AggressiveSelfMod:
+    """Returns the singleton AggressiveSelfMod instance."""
+    global _self_mod_instance
+    if _self_mod_instance is None:
+        _self_mod_instance = AggressiveSelfMod()
+    return _self_mod_instance

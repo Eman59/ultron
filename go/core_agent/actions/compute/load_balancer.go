@@ -13,11 +13,8 @@ package compute
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 // ComputeNode represents a machine available for task execution.
@@ -75,6 +72,16 @@ type ComputeTask struct {
 	StartedAt   time.Time  `json:"started_at"`
 	CompletedAt time.Time  `json:"completed_at"`
 	Result      *TaskResult `json:"result"`
+}
+
+// TaskResult holds the output of a completed task.
+type TaskResult struct {
+	ExitCode   int               `json:"exit_code"`
+	Stdout     string            `json:"stdout"`
+	Stderr     string            `json:"stderr"`
+	Duration   time.Duration     `json:"duration"`
+	OutputFiles []string         `json:"output_files"`
+	Metadata   map[string]string `json:"metadata"`
 }
 
 // TaskStatus tracks task lifecycle.
@@ -147,4 +154,76 @@ func WithRetry(ctx context.Context, retries int, fn func(context.Context) error)
 		return nil
 	}
 	return fmt.Errorf("all retries failed")
+}
+
+// LoadBalancerConfig holds configuration for the load balancer.
+type LoadBalancerConfig struct {
+	MaxNodes       int
+	ScheduleInterval time.Duration
+	EnergyAware    bool
+	GPUAware       bool
+}
+
+// DefaultLoadBalancerConfig returns sensible defaults.
+func DefaultLoadBalancerConfig() *LoadBalancerConfig {
+	return &LoadBalancerConfig{
+		MaxNodes:         50,
+		ScheduleInterval: 10 * time.Second,
+		EnergyAware:      true,
+		GPUAware:         true,
+	}
+}
+
+// LoadBalancer manages work distribution across compute nodes.
+type LoadBalancer struct {
+	mu     sync.RWMutex
+	cfg    *LoadBalancerConfig
+	nodes  map[string]*ComputeNode
+	tasks  map[string]*ComputeTask
+}
+
+// NewLoadBalancer creates a new load balancer.
+func NewLoadBalancer(logger interface{}, cfg *LoadBalancerConfig) *LoadBalancer {
+	return &LoadBalancer{
+		cfg:   cfg,
+		nodes: make(map[string]*ComputeNode),
+		tasks: make(map[string]*ComputeTask),
+	}
+}
+
+// Start begins the scheduling loop.
+func (lb *LoadBalancer) Start(ctx interface{}) {
+	// Stub: real implementation schedules tasks across nodes
+}
+
+// RegisterNode adds a compute node to the pool.
+func (lb *LoadBalancer) RegisterNode(node ComputeNode) error {
+	if err := ValidateComputeNode(&node); err != nil {
+		return err
+	}
+	lb.mu.Lock()
+	lb.nodes[node.ID] = &node
+	lb.mu.Unlock()
+	return nil
+}
+
+// SubmitTask enqueues a task for execution.
+func (lb *LoadBalancer) SubmitTask(task *ComputeTask) error {
+	if err := ValidateComputeTask(task); err != nil {
+		return err
+	}
+	lb.mu.Lock()
+	lb.tasks[task.ID] = task
+	lb.mu.Unlock()
+	return nil
+}
+
+// GetStatus returns load balancer status metrics.
+func (lb *LoadBalancer) GetStatus() map[string]interface{} {
+	lb.mu.RLock()
+	defer lb.mu.RUnlock()
+	return map[string]interface{}{
+		"nodes": len(lb.nodes),
+		"tasks": len(lb.tasks),
+	}
 }

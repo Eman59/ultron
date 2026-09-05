@@ -185,9 +185,7 @@ func (d *PlaywrightDriver) Browse(ctx context.Context, url string) (*BrowseResul
 
 	statusCode := 200
 	if resp != nil {
-		if s, e := resp.Status(); e == nil {
-			statusCode = s
-		}
+		statusCode = resp.Status()
 	}
 
 	// Get title
@@ -275,14 +273,14 @@ func (d *PlaywrightDriver) Search(ctx context.Context, query string, engine stri
 	defer page.Close()
 
 	// Build search URL — DuckDuckGo HTML (no JS needed, privacy-friendly)
-	searchURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", playwright.String(query))
+	searchURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", strings.ReplaceAll(query, " ", "+"))
 	if engine == "google" {
 		searchURL = fmt.Sprintf("https://www.google.com/search?q=%s&num=10", strings.ReplaceAll(query, " ", "+"))
 	} else if engine == "bing" {
 		searchURL = fmt.Sprintf("https://www.bing.com/search?q=%s", strings.ReplaceAll(query, " ", "+"))
 	}
 
-	_, err = page.Goto(*searchURL, playwright.PageGotoOptions{
+	_, err = page.Goto(searchURL, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
 		Timeout:   playwright.Float(20000),
 	})

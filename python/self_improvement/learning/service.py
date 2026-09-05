@@ -438,7 +438,7 @@ class UnifiedLearningService:
         self.controller.start()
 
         # Start the continuous learner (brain retraining)
-        self.learner.start()
+        if self.learner: self.learner.start()
 
 
         # Start directive generation thread

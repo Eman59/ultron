@@ -380,3 +380,29 @@ func (d *MQTTDriver) isConnected() bool {
 	defer d.mu.RUnlock()
 	return d.connected
 }
+
+// Execute routes an ActionRequest to the appropriate IoT method.
+func (d *MQTTDriver) Execute(ctx context.Context, req *actions.ActionRequest) (*actions.ActionResponse, error) {
+	start := time.Now()
+	if req == nil {
+		return nil, fmt.Errorf("nil action request")
+	}
+	var err error
+	switch req.Operation {
+	case "publish", "send":
+		payload := []byte(fmt.Sprintf("%v", req.Parameters))
+		err = d.MQTTPublish(ctx, req.Target, payload, 1)
+	case "subscribe":
+		_, err = d.MQTTSubscribe(ctx, req.Target)
+	case "command":
+		err = d.SendCommand(ctx, req.Target, "command", req.Parameters)
+	default:
+		err = fmt.Errorf("unknown IoT operation: %s", req.Operation)
+	}
+	return &actions.ActionResponse{
+		RequestID: req.RequestID,
+		Success:   err == nil,
+		Error:     err,
+		Duration:  time.Since(start),
+	}, nil
+}

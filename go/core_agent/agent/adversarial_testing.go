@@ -10,10 +10,7 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
-	"math/rand"
-	"os"
-	"path/filepath"
+	"errors"
 	"sync"
 	"time"
 
@@ -298,4 +295,28 @@ func (a *AdversarialEngine) getBenchmarkHistory() []BenchmarkResult {
 	defer a.mu.RUnlock()
 
 	return a.benchmarkHistory
+}
+
+// NewAdversarialEngineSimple creates an adversarial engine using background context.
+// This is a convenience wrapper for callers that don't have an explicit context.
+func NewAdversarialEngineSimple(dataDir string, logger *zap.SugaredLogger) *AdversarialEngine {
+	engine, err := NewAdversarialEngine(context.Background(), logger, dataDir)
+	if err != nil {
+		logger.Warnf("[Adversarial] Init failed: %v — running in degraded mode", err)
+		return &AdversarialEngine{logger: logger, dataDir: dataDir}
+	}
+	return engine
+}
+
+// GetStats returns adversarial engine metrics.
+func (ae *AdversarialEngine) GetStats() map[string]interface{} {
+	if ae == nil {
+		return map[string]interface{}{}
+	}
+	ae.mu.RLock()
+	defer ae.mu.RUnlock()
+	return map[string]interface{}{
+		"data_dir": ae.dataDir,
+		"running":  ae.running,
+	}
 }

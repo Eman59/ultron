@@ -5,15 +5,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"ultron/p2p_network/node"
 	"ultron/p2p_network/consciousness"
 	"ultron/p2p_network/network"
+	"ultron/p2p_network/node"
 
 	"go.uber.org/zap"
 )
@@ -53,7 +55,7 @@ func initializeNode(ctx context.Context, nodeConfig *node.Config, logger *zap.Su
 
 // startConsciousnessManager starts the distributed consciousness manager and returns an error.
 func startConsciousnessManager(ctx context.Context, ultronNode *node.UltronNode, logger *zap.SugaredLogger) error {
-	consciousnessManager := consciousness.NewManager(ultronNode, logger)
+	consciousnessManager := consciousness.NewDistributedConsciousnessManager(ultronNode, logger)
 	return consciousnessManager.Start(ctx)
 }
 
@@ -126,11 +128,6 @@ func main() {
 	go startTopologyManager(ctx, ultronNode, sugarLogger)
 
 	// ── HTTP bridge so Python can talk to P2P node ──────────────────
-	import_net_http_mux := func() {
-		// Inline HTTP server — no extra imports needed (net/http is stdlib)
-	}
-	_ = import_net_http_mux
-
 	httpPort := "6001"
 	if hp := os.Getenv("ULTRON_P2P_HTTP_PORT"); hp != "" {
 		httpPort = hp
@@ -142,7 +139,7 @@ func main() {
 			w.Header().Set("Content-Type", "application/json")
 			peers := ultronNode.GetPeers()
 			json.NewEncoder(w).Encode(map[string]interface{}{
-				"node_id":    ultronNode.GetID(),
+				"node_id":    ultronNode.ID(),
 				"peer_count": len(peers),
 				"port":       nodeConfig.ListenPort,
 				"state":      "running",

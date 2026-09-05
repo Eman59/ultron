@@ -18,11 +18,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -124,6 +119,7 @@ func (re *ReplicationEngine) Stop() {
 func (re *ReplicationEngine) Replicate(target ReplicationTarget) error {
 	re.logger.Infof("Replicating to target %s in region %s", target.Provider, target.Region)
 	// ... existing code ...
+	return nil
 }
 
 // MonitorInstances checks the health of known instances.
@@ -136,4 +132,15 @@ func (re *ReplicationEngine) MonitorInstances() {
 func (re *ReplicationEngine) UpdateInstance(instance ReplicaInstance) {
 	re.logger.Infof("Updating instance %s with status %s", instance.ID, instance.Status)
 	// ... existing code ...
+}
+
+// GetStats returns replication engine metrics.
+func (re *ReplicationEngine) GetStats() map[string]interface{} {
+	re.mu.RLock()
+	defer re.mu.RUnlock()
+	return map[string]interface{}{
+		"instance_id": re.instanceID,
+		"generation":  re.generation,
+		"instances":   len(re.instances),
+	}
 }
