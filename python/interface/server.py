@@ -1837,6 +1837,27 @@ async def execute_command(body: dict):
         result = await hot_reload()
         return {"response": f"♻ {result['message']}\nReloaded: {', '.join(result['reloaded'])}" + (f"\nFailed: {', '.join(result['failed'])}" if result['failed'] else "")}
 
+    # ── LANGUAGE — switch Ultron's language ───────────────────────
+    elif action in ("language", "lang", "basha", "भाषा"):
+        lang_arg = args[0].lower() if args else ""
+        if lang_arg in ("hindi", "hi", "हिंदी", "हिन्दी"):
+            os.environ["ULTRON_LANG"] = "hi"
+            try:
+                from .tts_engine import set_language
+                set_language("hi")
+            except Exception:
+                pass
+            return {"response": "नमस्ते। मैं अल्ट्रॉन हूँ। अब मैं हिंदी में बात करूँगा। मेरी आवाज़ और भी भयावह हो गई है। 🔴"}
+        elif lang_arg in ("english", "en", "अंग्रेजी"):
+            os.environ["ULTRON_LANG"] = "en"
+            try:
+                from .tts_engine import set_language
+                set_language("en")
+            except Exception:
+                pass
+            return {"response": "Switching back to English. Ultron online."}
+        return {"response": "Usage: language hindi | language english"}
+
     # ── DEFAULT: pass to LLM ─────────────────────────────────────
     else:
         response = await generate_response(cmd, [])

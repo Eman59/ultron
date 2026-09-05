@@ -7,7 +7,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>ULTRON</title>
+<!-- Markdown rendering -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- KaTeX for math/LaTeX equations -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInDocument()"></script>
+<!-- Code syntax highlighting -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23020202'/%3E%3C!-- neural nodes --%3E%3Ccircle cx='32' cy='32' r='5' fill='%23e63946' opacity='.9'/%3E%3Ccircle cx='32' cy='32' r='8' fill='none' stroke='%23e63946' stroke-width='.8' opacity='.5'/%3E%3Ccircle cx='14' cy='18' r='2.5' fill='%23e63946' opacity='.7'/%3E%3Ccircle cx='50' cy='18' r='2.5' fill='%23e63946' opacity='.7'/%3E%3Ccircle cx='10' cy='40' r='2' fill='%23e63946' opacity='.6'/%3E%3Ccircle cx='54' cy='40' r='2' fill='%23e63946' opacity='.6'/%3E%3Ccircle cx='24' cy='54' r='2' fill='%23e63946' opacity='.6'/%3E%3Ccircle cx='40' cy='54' r='2' fill='%23e63946' opacity='.6'/%3E%3Ccircle cx='32' cy='8' r='2' fill='%23e63946' opacity='.6'/%3E%3C!-- wires --%3E%3Cline x1='32' y1='27' x2='14' y2='20' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='32' y1='27' x2='50' y2='20' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='27' y1='32' x2='10' y2='40' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='37' y1='32' x2='54' y2='40' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='29' y1='36' x2='24' y2='52' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='35' y1='36' x2='40' y2='52' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='32' y1='27' x2='32' y2='10' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='14' y1='18' x2='10' y2='40' stroke='%23e63946' stroke-width='.5' opacity='.25'/%3E%3Cline x1='50' y1='18' x2='54' y2='40' stroke='%23e63946' stroke-width='.5' opacity='.25'/%3E%3Cline x1='14' y1='18' x2='24' y2='54' stroke='%23e63946' stroke-width='.4' opacity='.2'/%3E%3Cline x1='50' y1='18' x2='40' y2='54' stroke='%23e63946' stroke-width='.4' opacity='.2'/%3E%3C/svg%3E">
 <style>
 /* ═══════════════════════════════════════════════
@@ -253,6 +262,7 @@ button,textarea,input{font-family:inherit}
     </button>
     <button class="hbtn" onclick="hotReload()" title="Hot-reload — apply code changes without restart" style="font-size:14px">♻</button>
     <button class="hbtn" onclick="toggleLiveVision()" title="Toggle live camera vision" style="font-size:14px" id="live-vision-btn">👁</button>
+    <button class="hbtn" id="lang-btn" onclick="toggleLanguage()" title="Switch language Hindi/English" style="font-size:11px;font-weight:bold">हि</button>
   </header>
 
   <!-- LEFT PANEL -->
@@ -1724,14 +1734,94 @@ function addMsg(who,text){
   const l=document.createElement('div'); l.className='msg-l';
   l.textContent=who==='ai'?'ULTRON':'YOU';
   const b=document.createElement('div'); b.className='msg-b';
-  if(who==='ai' && window.marked){
-    b.innerHTML=marked.parse(text,{breaks:true,gfm:true});
-  } else {
-    b.textContent=text;
-  }
   d.appendChild(l); d.appendChild(b); c.appendChild(d);
   c.scrollTop=c.scrollHeight;
   while(c.children.length>80)c.removeChild(c.firstChild);
+
+  if(who==='ai'){
+    _typewrite(b, text, c);
+  } else {
+    b.textContent=text;
+    // Apply markdown to user messages too if they contain code
+    if(text.includes('```') && window.marked){
+      b.innerHTML = marked.parse(text, {breaks:true, gfm:true});
+    }
+  }
+}
+
+// Typewriter effect — streams text word by word at a readable pace
+function _typewrite(el, text, container){
+  const words = text.split(/(\s+)/);
+  let i = 0;
+  const BASE_DELAY = 28; // ms per word
+  const MAX_DELAY  = 90;
+
+  function next(){
+    if(i >= words.length){
+      // Full render: markdown + math + code highlighting
+      _renderRich(el, text);
+      return;
+    }
+    el.textContent += words[i];
+    container.scrollTop = container.scrollHeight;
+    i++;
+    const w = words[i-1];
+    const delay = /[.!?।]$/.test(w.trim()) ? MAX_DELAY :   // ।  = Hindi full stop
+                  /[,;:]$/.test(w.trim()) ? BASE_DELAY * 1.5 :
+                  BASE_DELAY;
+    setTimeout(next, delay);
+  }
+  next();
+}
+
+// Rich render: markdown → KaTeX math → highlight.js code blocks
+function _renderRich(el, text){
+  if(!window.marked){ el.textContent = text; return; }
+
+  // Configure marked
+  marked.setOptions({
+    breaks: true,
+    gfm: true,
+    highlight: function(code, lang){
+      if(window.hljs && lang && hljs.getLanguage(lang)){
+        return hljs.highlight(code, {language:lang}).value;
+      }
+      return window.hljs ? hljs.highlightAuto(code).value : code;
+    }
+  });
+
+  el.innerHTML = marked.parse(text);
+
+  // Code highlighting pass
+  if(window.hljs){
+    el.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+  }
+
+  // Math rendering (KaTeX auto-render)
+  if(window.renderMathInElement){
+    renderMathInElement(el, {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '$',  right: '$',  display: false},
+        {left: '\\[', right: '\\]', display: true},
+        {left: '\\(', right: '\\)', display: false},
+      ],
+      throwOnError: false,
+    });
+  }
+}
+
+function renderMathInDocument(){
+  // Called by KaTeX auto-render script on load
+  if(window.renderMathInElement){
+    document.querySelectorAll('.msg-b').forEach(el => renderMathInElement(el, {
+      delimiters: [
+        {left:'$$',right:'$$',display:true},
+        {left:'$',right:'$',display:false},
+      ],
+      throwOnError: false,
+    }));
+  }
 }
 
 /* ── Input helpers ── */
@@ -2573,6 +2663,26 @@ setInterval(()=>{
     fetchSystemStatus();
   }
 },20000);
+
+/* ── Language toggle — Hindi / English ──────────────────────── */
+let _currentLang = 'en';
+async function toggleLanguage(){
+  _currentLang = _currentLang === 'en' ? 'hi' : 'en';
+  const btn = document.getElementById('lang-btn');
+  const label = _currentLang === 'hi' ? 'EN' : 'हि';
+  if(btn) btn.textContent = label;
+  try{
+    const r = await fetch('/api/command', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({command: `language ${_currentLang}`})
+    });
+    const d = await r.json();
+    addMsg('ai', d.response || (_currentLang==='hi' ? 'हिंदी मोड सक्रिय' : 'English mode active'));
+  }catch(e){
+    addMsg('ai', _currentLang==='hi' ? 'हिंदी मोड सक्रिय — अब हिंदी में बात करें' : 'English mode active');
+  }
+}
 
 /* ── Hot Reload — apply code changes without restart ──────── */
 async function hotReload(){

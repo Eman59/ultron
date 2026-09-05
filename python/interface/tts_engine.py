@@ -42,12 +42,39 @@ _SOX_PITCH   = "-600"   # semitone shift (negative = lower/darker)
 _SOX_BASS    = "+5"     # dB bass boost
 _SOX_REVERB  = ["15", "10", "70"]  # reverberance, hf-damping, room-scale
 
-# Fallback
-_EDGE_VOICE  = "en-GB-RyanNeural"
-_EDGE_RATE   = "+5%"
-_EDGE_PITCH  = "-8Hz"
+# ── Language mode ────────────────────────────────────────────────
+# Set ULTRON_LANG=hi for Hindi voice, default is English
+_LANG = os.environ.get("ULTRON_LANG", "en").lower()
+
+# English voice (deep, frightening)
+_EDGE_VOICE_EN = "en-GB-RyanNeural"
+
+# Hindi voice — deep male, frightening — SanjayNeural is the darkest available
+_EDGE_VOICE_HI = "hi-IN-MadhurNeural"   # deep male Hindi voice
+
+# Select active voice based on language
+_EDGE_VOICE  = _EDGE_VOICE_HI if _LANG == "hi" else _EDGE_VOICE_EN
+_EDGE_RATE   = "-15%" if _LANG == "hi" else "+5%"    # slower for Hindi = more ominous
+_EDGE_PITCH  = "-12Hz" if _LANG == "hi" else "-8Hz"  # lower pitch for Hindi
 _MACOS_VOICE = "Daniel"
-_MACOS_RATE  = 150
+_MACOS_RATE  = 130 if _LANG == "hi" else 150
+
+
+def set_language(lang: str):
+    """Switch TTS language at runtime. lang='hi' or lang='en'."""
+    global _LANG, _EDGE_VOICE, _EDGE_RATE, _EDGE_PITCH, _MACOS_RATE, _piper_voice
+    _LANG = lang.lower()
+    if _LANG == "hi":
+        _EDGE_VOICE = _EDGE_VOICE_HI
+        _EDGE_RATE  = "-15%"
+        _EDGE_PITCH = "-12Hz"
+        _MACOS_RATE = 130
+    else:
+        _EDGE_VOICE = _EDGE_VOICE_EN
+        _EDGE_RATE  = "+5%"
+        _EDGE_PITCH = "-8Hz"
+        _MACOS_RATE = 150
+    _piper_voice = None  # force reload
 
 _IS_MACOS = platform.system() == "Darwin"
 
