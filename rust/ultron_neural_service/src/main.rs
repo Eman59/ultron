@@ -142,7 +142,7 @@ impl NeuralMesh {
 #[tokio::main]
 async fn main() {
     let port: u16 = std::env::var("ULTRON_NEURAL_HTTP_PORT")
-        .unwrap_or_else(|_| "50053".into()).parse().unwrap_or(50053);
+        .unwrap_or_else(|_| "50057".into()).parse().unwrap_or(50057);
 
     println!("╔══════════════════════════════════════════╗");
     println!("║  ULTRON DYNAMIC NEURAL MESH — ONLINE     ║");

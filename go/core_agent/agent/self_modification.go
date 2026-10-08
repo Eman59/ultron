@@ -534,6 +534,12 @@ func (sme *SelfModificationEngine) reportAnomaly(anomaly Anomaly) {
 	}
 }
 
+// ReportAnomaly is the exported interface for other packages to report issues.
+// This is called by the autonomy loop's ActionEvolve handler.
+func (sme *SelfModificationEngine) ReportAnomaly(anomaly Anomaly) {
+	sme.reportAnomaly(anomaly)
+}
+
 // ═══════════════════════════════════════════════════════════════
 // STEP 2: PATCH GENERATION (via Learning Service LLM)
 // ═══════════════════════════════════════════════════════════════
@@ -1029,11 +1035,14 @@ func (sme *SelfModificationEngine) getCurrentHealth(ctx context.Context) float64
 }
 
 func (sme *SelfModificationEngine) callLearningService(ctx context.Context, method string, params map[string]interface{}) (map[string]interface{}, error) {
-	// Real JSON-over-TCP to learning service on port 50061
+	// Real JSON-over-TCP to learning service on port 50060
 	learningAddr := os.Getenv("ULTRON_LEARNING_ADDR")
 	if learningAddr == "" {
-		learningAddr = "localhost:50061"
+		learningAddr = "localhost:50060"
 	}
+	// Strip http:// or https:// prefix if present (env var may include scheme)
+	learningAddr = strings.TrimPrefix(learningAddr, "https://")
+	learningAddr = strings.TrimPrefix(learningAddr, "http://")
 	request := map[string]interface{}{
 		"method": method,
 		"params": params,
@@ -1114,8 +1123,10 @@ func (sme *SelfModificationEngine) emitToLearningService(record ModificationReco
 	// Real fire-and-forget TCP send
 	learningAddr := os.Getenv("ULTRON_LEARNING_ADDR")
 	if learningAddr == "" {
-		learningAddr = "localhost:50061"
+		learningAddr = "localhost:50060"
 	}
+	learningAddr = strings.TrimPrefix(learningAddr, "https://")
+	learningAddr = strings.TrimPrefix(learningAddr, "http://")
 	go func() {
 		data, err := json.Marshal(map[string]interface{}{
 			"method": "submit_events",

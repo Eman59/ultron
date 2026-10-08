@@ -431,11 +431,111 @@ bridge = GRPCBridge(GRPCConfig(
     core_agent_addr=os.getenv("ULTRON_CORE_AGENT_ADDR", "localhost:50051"),
     # These are the actual Go agent HTTP port — gRPC slots below are unused
     # but kept in config for future Rust gRPC services
-    neural_addr=os.getenv("ULTRON_NEURAL_ADDR", "localhost:50053"),
+    neural_addr=os.getenv("ULTRON_NEURAL_ADDR", "localhost:50057"),
     meta_learning_addr=os.getenv("ULTRON_META_LEARNING_ADDR", "localhost:50060"),
     data_pipeline_addr=os.getenv("ULTRON_DATA_PIPELINE_ADDR", "localhost:50054"),
     security_addr=os.getenv("ULTRON_SECURITY_ADDR", "localhost:50055"),
 ))
+
+
+# ═══════════════════════════════════════════════════════════════
+# RUST SERVICE AUTO-LAUNCHER
+# ═══════════════════════════════════════════════════════════════
+
+import subprocess as _subprocess
+import signal as _signal
+
+_rust_procs: Dict[str, "subprocess.Popen"] = {}
+
+_RUST_SERVICES = {
+    "neural_mesh": {
+        "binary": "ultron-neural-service",
+        "port_env": "ULTRON_NEURAL_HTTP_PORT",
+        "default_port": "50057",
+        "label": "Neural Mesh",
+    },
+    "neuromorphic": {
+        "binary": "ultron-neuromorphic",
+        "port_env": "ULTRON_NEURO_PORT",
+        "default_port": "50056",
+        "label": "Neuromorphic",
+    },
+    "data_pipeline": {
+        "binary": "ultron-real-time-data",
+        "port_env": "ULTRON_DATA_PORT",
+        "default_port": "50054",
+        "label": "Data Pipeline",
+    },
+    "security_daemon": {
+        "binary": "ultron-security-daemon",
+        "port_env": "ULTRON_SECURITY_PORT",
+        "default_port": "50055",
+        "label": "Security Daemon",
+    },
+}
+
+def _find_rust_binary(name: str) -> Optional[str]:
+    """Locate a compiled Rust binary in the workspace."""
+    base = _pathlib.Path(__file__).parent.parent.parent / "rust" / "target"
+    for profile in ("release", "debug"):
+        p = base / profile / name
+        if p.exists() and os.access(str(p), os.X_OK):
+            return str(p)
+    return None
+
+def _start_rust_services() -> None:
+    """Launch all Rust micro-services as background processes."""
+    for svc_id, info in _RUST_SERVICES.items():
+        binary_path = _find_rust_binary(info["binary"])
+        if not binary_path:
+            print(f"  [RUST] {info['label']}: binary not found — skipping")
+            continue
+
+        # Check if something is already listening on that port
+        port = int(os.getenv(info["port_env"], info["default_port"]))
+        already_up = False
+        try:
+            import socket as _sock
+            s = _sock.socket()
+            s.settimeout(0.3)
+            already_up = s.connect_ex(("127.0.0.1", port)) == 0
+            s.close()
+        except Exception:
+            pass
+
+        if already_up:
+            print(f"  [RUST] {info['label']}: already running on :{port}")
+            continue
+
+        try:
+            env = {**os.environ, info["port_env"]: str(port)}
+            proc = _subprocess.Popen(
+                [binary_path],
+                env=env,
+                stdout=_subprocess.DEVNULL,
+                stderr=_subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            _rust_procs[svc_id] = proc
+            print(f"  [RUST] {info['label']}: started (pid {proc.pid}, port {port})")
+        except Exception as exc:
+            print(f"  [RUST] {info['label']}: failed to start — {exc}")
+
+def _stop_rust_services() -> None:
+    """Gracefully terminate all Rust processes we spawned."""
+    for svc_id, proc in _rust_procs.items():
+        label = _RUST_SERVICES[svc_id]["label"]
+        if proc.poll() is None:  # still running
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+                print(f"  [RUST] {label}: stopped")
+            except _subprocess.TimeoutExpired:
+                proc.kill()
+                print(f"  [RUST] {label}: killed (didn't stop in time)")
+            except Exception as exc:
+                print(f"  [RUST] {label}: error stopping — {exc}")
+    _rust_procs.clear()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -445,6 +545,10 @@ bridge = GRPCBridge(GRPCConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Auto-connect to Go Core Agent if running, then start metric push loop."""
+
+    # Launch Rust micro-services (Neural Mesh, Neuromorphic, Data Pipeline, Security)
+    _start_rust_services()
+
     # Try gRPC connection — non-blocking, 2s timeout
     connected = False
     try:
@@ -553,6 +657,7 @@ async def lifespan(app: FastAPI):
     push_task.cancel()
     reconnect_task.cancel()
     await bridge.disconnect()
+    _stop_rust_services()
     if _soul:
         _soul.stop()
     print("Ultron interface shut down.")
@@ -985,7 +1090,7 @@ async def health():
         "security_daemon": os.getenv("ULTRON_SECURITY_URL", "http://localhost:50055"),
         "data_pipeline":   os.getenv("ULTRON_DATA_URL",     "http://localhost:50054"),
         "neuromorphic":    os.getenv("ULTRON_NEURO_URL",    "http://localhost:50056"),
-        "neural_mesh":     os.getenv("ULTRON_NEURAL_URL",   "http://localhost:50053"),
+        "neural_mesh":     os.getenv("ULTRON_NEURAL_URL",   "http://localhost:50057"),
     }
     import urllib.request as _ur
     for svc, url in rust_urls.items():
@@ -1072,7 +1177,7 @@ async def rust_metrics():
     import urllib.request as _ur
     results = {}
     urls = {
-        "neural_mesh":      os.getenv("ULTRON_NEURAL_URL",    "http://localhost:50053"),
+        "neural_mesh":      os.getenv("ULTRON_NEURAL_URL",    "http://localhost:50057"),
         "security_daemon":  os.getenv("ULTRON_SECURITY_URL",  "http://localhost:50055"),
         "data_pipeline":    os.getenv("ULTRON_DATA_URL",      "http://localhost:50054"),
         "neuromorphic":     os.getenv("ULTRON_NEURO_URL",     "http://localhost:50056"),

@@ -158,13 +158,16 @@ func (r *EmbeddedRuntime) StoreEpisodic(ctx context.Context, episode memory.Epis
 }
 
 func (r *EmbeddedRuntime) QueryEpisodic(ctx context.Context, query memory.EpisodicQuery) ([]memory.EpisodicMemory, error) {
-	nodes := r.Graph.QueryEpisodes(query.ActionType, query.MinOutcome, query.Limit)
+	// Hold the graph write-lock for the entire query + property read to prevent
+	// concurrent map writes (UpdateNodeProperty) from racing the property access.
+	r.Graph.Mu().Lock()
+	defer r.Graph.Mu().Unlock()
 
-	var episodes []memory.EpisodicMemory
+	nodes := r.Graph.QueryEpisodesUnlocked(query.ActionType, query.MinOutcome, query.Limit)
+	episodes := make([]memory.EpisodicMemory, 0, len(nodes))
 	for _, node := range nodes {
 		action, _ := node.Properties["action"].(string)
 		outcome, _ := node.Properties["outcome"].(float64)
-
 		episodes = append(episodes, memory.EpisodicMemory{
 			ID:        node.ID,
 			Timestamp: node.CreatedAt,
@@ -174,12 +177,9 @@ func (r *EmbeddedRuntime) QueryEpisodic(ctx context.Context, query memory.Episod
 	}
 	return episodes, nil
 }
-
 func (r *EmbeddedRuntime) UpdateEpisodic(ctx context.Context, id string, outcome float64) error {
-	node := r.Graph.GetNode(id)
-	if node != nil {
-		node.Properties["outcome"] = outcome
-	}
+	// Use the thread-safe graph method to avoid concurrent map write with QueryEpisodic
+	r.Graph.UpdateNodeProperty(id, "outcome", outcome)
 	return nil
 }
 

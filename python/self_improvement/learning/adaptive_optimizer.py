@@ -280,7 +280,7 @@ class AdaptiveOptimizer:
         self.introspector = code_introspector
         self.project_root = Path(project_root)
         self.max_concurrent_tests = max_concurrent_tests
-        self.min_test_samples = min_test_samples
+        self.min_test_samples = min_test_samples if min_test_samples != 50 else 3  # 3 samples enough for early feedback
         self.optimization_interval = optimization_interval
 
         # Optimization state

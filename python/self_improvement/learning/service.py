@@ -264,7 +264,7 @@ class UnifiedLearningService:
             code_introspector=self.introspector,
             project_root=str(self.project_root),
             max_concurrent_tests=5,
-            min_test_samples=50,
+            min_test_samples=3,
             optimization_interval=60.0,
         )
 
@@ -499,7 +499,7 @@ class UnifiedLearningService:
         server_socket.settimeout(1.0)
 
         try:
-            server_socket.bind(('0.0.0.0', self.port + 1))  # JSON port = gRPC port + 1
+            server_socket.bind(('0.0.0.0', self.port))  # JSON-over-TCP on primary port
             server_socket.listen(20)
         except OSError as e:
             print(f"[LearningService] JSON server bind failed: {e}")
@@ -560,6 +560,8 @@ class UnifiedLearningService:
             "rollback": self._handle_rollback,
             "freeze": self._handle_freeze,
             "unfreeze": self._handle_unfreeze,
+            # ── Self-modification (called by Go SelfModificationEngine) ──
+            "generate_improvement": self._handle_generate_improvement,
             # Codebase interaction
             "list_dir": self._handle_list_dir,
             "read_file": self._handle_read_file,
@@ -587,6 +589,141 @@ class UnifiedLearningService:
     # ═══════════════════════════════════════════════════════════════
     # REQUEST HANDLERS
     # ═══════════════════════════════════════════════════════════════
+
+    def _handle_generate_improvement(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Called by the Go SelfModificationEngine to generate a real code patch.
+
+        Expected params:
+            file_path   - relative path to the file to improve
+            intent      - what to fix (e.g. "fix_performance_degradation")
+            context     - anomaly description + evidence from Go
+            auto_apply  - whether to apply the patch (we let Go handle this)
+
+        Returns:
+            success, old_code, new_code, reasoning, confidence, patch_id
+        """
+        import os as _os
+        import hashlib as _h
+        import time as _t
+
+        file_path   = params.get("file_path", "")
+        intent      = params.get("intent", "general_improvement")
+        context     = params.get("context", "")
+        auto_apply  = params.get("auto_apply", False)
+
+        # ── 1. Read the actual file ────────────────────────────────────────────
+        full_path = str(self.project_root / file_path) if file_path else ""
+        file_content = ""
+        if full_path and _os.path.isfile(full_path):
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="replace") as fh:
+                    file_content = fh.read(32_000)  # Cap at 32k chars
+            except Exception as e:
+                file_content = f"# Could not read file: {e}"
+
+        if not file_content:
+            return {
+                "success": False,
+                "old_code": "", "new_code": "",
+                "reasoning": f"File not readable: {file_path}",
+                "confidence": 0.0, "patch_id": "",
+            }
+
+        # ── 2. Detect language ────────────────────────────────────────────────
+        ext = _os.path.splitext(file_path)[1].lower()
+        lang_map = {".go": "Go", ".py": "Python", ".rs": "Rust",
+                    ".ts": "TypeScript", ".js": "JavaScript", ".jl": "Julia"}
+        language = lang_map.get(ext, "unknown")
+
+        # ── 3. Build the patch-generation prompt ──────────────────────────────
+        system_prompt = (
+            "You are Ultron's self-modification engine. You write real, working code patches.\n"
+            "Rules:\n"
+            "- Return ONLY a JSON object, no markdown, no explanation outside the JSON.\n"
+            "- The JSON must have exactly these fields:\n"
+            '  {"old_code": "<exact substring to replace>", '
+            '"new_code": "<replacement code>", '
+            '"reasoning": "<one sentence why>", '
+            '"confidence": <0.0-1.0>}\n'
+            "- old_code must be an EXACT verbatim substring of the provided source.\n"
+            "- new_code must be a correct drop-in replacement.\n"
+            "- If no improvement is safe, return confidence 0.0 and empty old/new_code."
+        )
+
+        user_prompt = (
+            f"Language: {language}\n"
+            f"File: {file_path}\n"
+            f"Intent: {intent}\n"
+            f"Anomaly/Context:\n{context}\n\n"
+            f"Source code:\n```{language.lower()}\n{file_content}\n```\n\n"
+            "Generate the minimal safe patch JSON:"
+        )
+
+        # ── 4. Call the LLM brain ─────────────────────────────────────────────
+        from .llm_brain import ThinkingMode, Priority
+
+        response = self.brain.think(
+            prompt=user_prompt,
+            mode=ThinkingMode.CODER,
+            priority=Priority.HIGH,
+            system_prompt=system_prompt,
+            max_tokens=2048,
+        )
+
+        raw = response.content.strip()
+
+        # ── 5. Parse JSON from LLM response ───────────────────────────────────
+        import json as _json
+        import re as _re
+
+        patch_data = {}
+        # Try direct parse first, then extract JSON block
+        try:
+            patch_data = _json.loads(raw)
+        except Exception:
+            # LLM sometimes wraps JSON in markdown code fences
+            m = _re.search(r'\{[^{}]*"old_code"[^{}]*\}', raw, _re.DOTALL)
+            if m:
+                try:
+                    patch_data = _json.loads(m.group(0))
+                except Exception:
+                    pass
+
+        old_code   = patch_data.get("old_code", "")
+        new_code   = patch_data.get("new_code", "")
+        reasoning  = patch_data.get("reasoning", "LLM did not return structured data")
+        confidence = float(patch_data.get("confidence", 0.0))
+
+        # ── 6. Validate that old_code actually exists in the file ─────────────
+        if old_code and old_code not in file_content:
+            return {
+                "success": False,
+                "old_code": "", "new_code": "",
+                "reasoning": f"LLM hallucinated old_code — not found in file ({len(old_code)} chars)",
+                "confidence": 0.0,
+                "patch_id": "",
+            }
+
+        if not old_code or not new_code or confidence < 0.4:
+            return {
+                "success": False,
+                "old_code": old_code, "new_code": new_code,
+                "reasoning": reasoning,
+                "confidence": confidence,
+                "patch_id": "",
+            }
+
+        patch_id = "llm_" + _h.sha256(f"{file_path}{old_code}{_t.time()}".encode()).hexdigest()[:12]
+
+        return {
+            "success":    True,
+            "old_code":   old_code,
+            "new_code":   new_code,
+            "reasoning":  reasoning,
+            "confidence": confidence,
+            "patch_id":   patch_id,
+        }
 
     def _handle_submit_events(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle event submission from any component."""

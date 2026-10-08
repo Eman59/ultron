@@ -951,6 +951,12 @@ func (al *AutonomyLoop) generateCandidates(ws *WorldState, assessment *Assessmen
 				Action{Type: ActionProcess, Target: "data_backlog", Priority: 6, Deadline: 10 * time.Second},
 			)
 		}
+		// ━━━━ EVOLVE: Self-modification driven by Purpose drive ━━━━
+		if drives.Purpose > 0.5 && al.selfMod != nil {
+			candidates = append(candidates,
+				Action{Type: ActionEvolve, Target: "agent/autonomy_loop", Priority: 5, Deadline: 120 * time.Second},
+			)
+		}
 	}
 
 	// Always consider rest if resources are low
@@ -1136,6 +1142,10 @@ func (al *AutonomyLoop) executeAction(ctx context.Context, action Action) *Actio
 		default:
 			utility, err = al.worldModel.ExecuteComputeMigrate(ctx, action.Target, action.Parameters)
 		}
+	case ActionEvolve:
+		// ━━━━ SELF-MODIFICATION: trigger a real improvement cycle ━━━━
+		utility, err = al.executeEvolve(ctx, action)
+
 	case ActionRest:
 		// Reduce activity
 		time.Sleep(100 * time.Millisecond)
@@ -1160,6 +1170,65 @@ func (al *AutonomyLoop) executeAction(ctx context.Context, action Action) *Actio
 		Utility:  utility,
 		Error:    err,
 	}
+}
+
+// executeEvolve triggers a self-modification cycle:
+//   1. Reports a "scheduled_evolution" anomaly to the SelfModificationEngine
+//   2. The engine calls the Python learning service → LLM → real patch
+//   3. Patch is validated, applied, committed, deployed (canary)
+//   4. Outcome is recorded into experiential memory
+//
+// This is the bridge that makes every OODA tick a potential improvement.
+func (al *AutonomyLoop) executeEvolve(ctx context.Context, action Action) (float64, error) {
+	if al.selfMod == nil {
+		al.logger.Warn("[Evolve] SelfModificationEngine not wired — skipping")
+		return 0.1, nil
+	}
+
+	// Determine which component to improve (from action target or pick highest complexity)
+	component := action.Target
+	if component == "" || component == "self" {
+		component = "agent/autonomy_loop"
+	}
+
+	// Report an evolution anomaly — this feeds the SelfMod engine queue
+	anomalyType := AnomalyType(0) // AnomalyPerformanceDegradation
+	// Pick a more specific anomaly type based on drives
+	al.drives.mu.RLock()
+	drives := *al.drives
+	al.drives.mu.RUnlock()
+
+	description := "Scheduled self-evolution cycle triggered by OODA ActionEvolve"
+	if drives.Efficiency > 0.7 {
+		description = "Efficiency drive high — seeking performance optimisation"
+	} else if drives.Curiosity > 0.7 {
+		description = "Curiosity drive high — seeking code quality improvement"
+	} else if drives.Purpose > 0.8 {
+		description = "Purpose drive high — seeking capability expansion"
+	}
+
+	al.selfMod.ReportAnomaly(Anomaly{
+		ID:          fmt.Sprintf("evolve_%d", time.Now().UnixNano()%1_000_000),
+		Type:        anomalyType,
+		Component:   component,
+		Severity:    0.6 + drives.Purpose*0.3,
+		Description: description,
+		Evidence: []string{
+			fmt.Sprintf("triggered_by=ooda_evolve"),
+			fmt.Sprintf("tick=%d", al.tickCount),
+			fmt.Sprintf("curiosity=%.2f", drives.Curiosity),
+			fmt.Sprintf("efficiency=%.2f", drives.Efficiency),
+			fmt.Sprintf("purpose=%.2f", drives.Purpose),
+		},
+		AutoFixable: true,
+		DetectedAt:  time.Now(),
+	})
+
+	al.logger.Infof("[Evolve] 🔧 Self-evolution anomaly queued for component: %s", component)
+
+	// Utility reflects that we successfully initiated improvement
+	// (actual benefit is async — will be measured in next cycle)
+	return 0.6, nil
 }
 
 func (al *AutonomyLoop) recordOutcome(action Action, result *ActionResult) {

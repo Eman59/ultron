@@ -270,10 +270,11 @@ class EvolutionController:
         self._evolution_path = Path(evolution_path) if evolution_path else self.project_root / "data" / "evolution"
         self._evolution_path.mkdir(parents=True, exist_ok=True)
 
-        # Performance baseline
-        self._baseline_performance: float = 0.5
-        self._current_performance: float = 0.5
+        # Performance baseline — seeded from code health if available, not stuck at 0.5
+        self._baseline_performance: float = self._measure_initial_performance()
+        self._current_performance: float = self._baseline_performance
         self._performance_window: deque = deque(maxlen=100)
+        self._performance_window.append(self._baseline_performance)
 
         # Speed control
         self._speed_limits = {
@@ -293,6 +294,59 @@ class EvolutionController:
 
         # Load history
         self._load_history()
+
+    # ═══════════════════════════════════════════════════════════════
+    # PERFORMANCE SEEDING — Real baseline, not hardcoded 0.5
+    # ═══════════════════════════════════════════════════════════════
+
+    def _measure_initial_performance(self) -> float:
+        """
+        Seed the performance baseline from real signals instead of a fixed 0.5.
+        Checks: code health from introspector, evolution history, knowledge base size.
+        Returns a float in [0.1, 0.9].
+        """
+        scores = []
+
+        # 1. Code health from introspector (if available)
+        try:
+            overview = self.introspector.get_project_overview()
+            health = overview.get("overall_health", None)
+            if health is not None:
+                scores.append(float(health))
+        except Exception:
+            pass
+
+        # 2. Knowledge base size (more rules = more accumulated learning)
+        try:
+            kb_size = self.distiller.kb.size
+            # Normalize: 0 rules → 0.3, 100 rules → 0.6, 1000 rules → 0.8
+            import math as _math
+            kb_score = 0.3 + 0.5 * min(1.0, _math.log1p(kb_size) / _math.log1p(1000))
+            scores.append(kb_score)
+        except Exception:
+            pass
+
+        # 3. Previous generation history
+        try:
+            hist_path = self._evolution_path / "evolution_history.json"
+            if hist_path.exists():
+                import json as _json
+                with open(hist_path) as f:
+                    hist = _json.load(f)
+                last_perf = hist.get("lifetime", {}).get("best_performance", None)
+                if last_perf is not None and last_perf > 0:
+                    scores.append(float(last_perf))
+        except Exception:
+            pass
+
+        if scores:
+            baseline = sum(scores) / len(scores)
+            baseline = max(0.1, min(0.9, baseline))
+        else:
+            baseline = 0.5
+
+        print(f"[EvolutionController] Performance baseline seeded: {baseline:.4f} (from {len(scores)} signal(s))")
+        return baseline
 
     # ═══════════════════════════════════════════════════════════════
     # LIFECYCLE

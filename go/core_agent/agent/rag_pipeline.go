@@ -108,62 +108,113 @@ func (r *RAGPipeline) BuildIndex(ctx context.Context) error {
 
 	// Walk chunks directory
 	fileCount := 0
-	entries, err := os.ReadDir(r.chunkFilesDirectory)
-	if err != nil {
-		r.logger.Warnf("[RAG] Could not read chunks directory %s: %v", r.chunkFilesDirectory, err)
-		return nil // Non-fatal: no chunks yet
+	indexDir := func(dirPath string) {
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt") {
+				continue
+			}
+			path := filepath.Join(dirPath, entry.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			content := string(data)
+			docIndex := len(r.indexedDocuments)
+
+			words := strings.Fields(strings.ToLower(content))
+			termFreq := make(map[string]int)
+			for _, word := range words {
+				if len(word) >= 3 {
+					termFreq[word]++
+				}
+			}
+
+			info, _ := entry.Info()
+			var modTime time.Time
+			if info != nil {
+				modTime = info.ModTime()
+			}
+
+			doc := IndexedDocument{
+				DocumentID:       entry.Name(),
+				DocumentPath:     path,
+				DocumentContent:  content,
+				DocumentTerms:    termFreq,
+				DocumentLength:   len(words),
+				ModificationTime: modTime,
+			}
+			r.indexedDocuments = append(r.indexedDocuments, doc)
+
+			seen := make(map[string]bool)
+			for word, freq := range termFreq {
+				r.invertedIndex[word] = append(r.invertedIndex[word], DocumentReference{
+					DocumentIndex: docIndex,
+					TermFrequency: freq,
+				})
+				if !seen[word] {
+					r.documentFrequency[word]++
+					seen[word] = true
+				}
+			}
+			fileCount++
+		}
 	}
 
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt") {
-			continue
-		}
-		path := filepath.Join(r.chunkFilesDirectory, entry.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		content := string(data)
-		docIndex := len(r.indexedDocuments)
+	// Primary chunks directory (.ultron/chunks/)
+	indexDir(r.chunkFilesDirectory)
 
-		// Build term frequency map for this document
-		words := strings.Fields(strings.ToLower(content))
-		termFreq := make(map[string]int)
-		for _, word := range words {
-			if len(word) >= 3 {
-				termFreq[word]++
+	// Also index root-level chunk_*_16k.txt files (newer large chunks not yet moved)
+	projectRoot := filepath.Dir(filepath.Dir(r.chunkFilesDirectory)) // project root = 2 levels up from .ultron/chunks
+	rootEntries, _ := os.ReadDir(projectRoot)
+	for _, entry := range rootEntries {
+		name := entry.Name()
+		if !entry.IsDir() && strings.HasSuffix(name, ".txt") &&
+			(strings.HasPrefix(name, "chunk_") || strings.Contains(name, "_16k")) {
+			path := filepath.Join(projectRoot, name)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
 			}
-		}
-
-		info, _ := entry.Info()
-		var modTime time.Time
-		if info != nil {
-			modTime = info.ModTime()
-		}
-
-		doc := IndexedDocument{
-			DocumentID:      entry.Name(),
-			DocumentPath:    path,
-			DocumentContent: content,
-			DocumentTerms:   termFreq,
-			DocumentLength:  len(words),
-			ModificationTime: modTime,
-		}
-		r.indexedDocuments = append(r.indexedDocuments, doc)
-
-		// Build inverted index
-		seen := make(map[string]bool)
-		for word, freq := range termFreq {
-			r.invertedIndex[word] = append(r.invertedIndex[word], DocumentReference{
-				DocumentIndex: docIndex,
-				TermFrequency: freq,
-			})
-			if !seen[word] {
-				r.documentFrequency[word]++
-				seen[word] = true
+			content := string(data)
+			docIndex := len(r.indexedDocuments)
+			words := strings.Fields(strings.ToLower(content))
+			termFreq := make(map[string]int)
+			for _, word := range words {
+				if len(word) >= 3 {
+					termFreq[word]++
+				}
 			}
+			info, _ := entry.Info()
+			var modTime time.Time
+			if info != nil {
+				modTime = info.ModTime()
+			}
+			doc := IndexedDocument{
+				DocumentID:       name,
+				DocumentPath:     path,
+				DocumentContent:  content,
+				DocumentTerms:    termFreq,
+				DocumentLength:   len(words),
+				ModificationTime: modTime,
+			}
+			r.indexedDocuments = append(r.indexedDocuments, doc)
+			seen := make(map[string]bool)
+			for word, freq := range termFreq {
+				r.invertedIndex[word] = append(r.invertedIndex[word], DocumentReference{
+					DocumentIndex: docIndex,
+					TermFrequency: freq,
+				})
+				if !seen[word] {
+					r.documentFrequency[word]++
+					seen[word] = true
+				}
+			}
+			fileCount++
 		}
-		fileCount++
 	}
 
 	r.totalIndexedDocs = fileCount

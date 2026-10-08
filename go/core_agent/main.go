@@ -148,11 +148,13 @@ func main() {
 		projectRoot = "."
 	}
 	sugar.Info("Initializing Self-Modification Engine...")
-	// agent.SelfModificationEngine disabled — selfmod.SelfModEngine (HTTP-exposed) is the active one.
-	// selfMod := agent.NewSelfModificationEngine(sugar, projectRoot)
-	// selfMod.Start(ctx)
-	// coreAgent.SetSelfModEngine(selfMod)
-	sugar.Info("✓ Self-Modification Engine: using selfmod.SelfModEngine (HTTP /mutate endpoint)")
+	// Both engines run in tandem:
+	//   selfmod.SelfModEngine  — HTTP-exposed /mutate endpoint (Python-driven patches)
+	//   agent.SelfModificationEngine — OODA-driven autonomous anomaly→patch→deploy loop
+	selfMod := agent.NewSelfModificationEngine(sugar, projectRoot)
+	selfMod.Start(ctx)
+	coreAgent.SetSelfModEngine(selfMod)
+	sugar.Info("✓ Self-Modification Engine: OODA-driven LLM patch loop ONLINE")
 
 	// ━━━━━━━━━━ Start Action Interface (Web/Cloud/Mesh/Compute drivers) ━━━━━━━━━━
 	sugar.Info("Initializing Action Interface...")

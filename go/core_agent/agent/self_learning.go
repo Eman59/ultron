@@ -31,6 +31,8 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"net"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -796,21 +798,65 @@ func (sls *SelfLearningState) sendBatch(events []LearningEvent) {
 		return
 	}
 
-	// In production, this would be a gRPC stream call to the Python service.
-	// For now, we serialize to JSON for the gRPC bridge.
-	// The actual transport is implemented in the service.go file.
+	// Build the JSON-over-TCP request that the Python learning service understands.
+	eventsData := make([]map[string]interface{}, 0, len(events))
+	for _, e := range events {
+		m := map[string]interface{}{
+			"event_type": string(e.Type),
+			"component":  e.Component,
+			"data":       e.Data,
+			"tags":       e.Tags,
+		}
+		if e.Outcome != nil {
+			m["outcome"] = *e.Outcome
+		}
+		if e.DurationUS > 0 {
+			m["duration_us"] = e.DurationUS
+		}
+		eventsData = append(eventsData, m)
+	}
 
-	// Marshal the batch
-	_, err := json.Marshal(events)
+	payload, err := json.Marshal(map[string]interface{}{
+		"method": "submit_events",
+		"params": map[string]interface{}{"events": eventsData},
+	})
 	if err != nil {
-		sls.logger.Warnf("Failed to marshal learning events: %v", err)
 		return
 	}
 
-	// TODO: Send via gRPC to learning service
-	// This would call: learningClient.SubmitEvents(ctx, &pb.EventBatch{Events: data})
-	// For now, mark as connected if we can serialize successfully
+	// Resolve address: env var takes priority, then stored addr
+	addr := os.Getenv("ULTRON_LEARNING_ADDR")
+	if addr == "" {
+		addr = sls.serviceAddr
+	}
+	// Strip http:// scheme if present
+	if len(addr) > 7 && addr[:7] == "http://" {
+		addr = addr[7:]
+	}
+	if len(addr) > 8 && addr[:8] == "https://" {
+		addr = addr[8:]
+	}
+
+	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	if err != nil {
+		sls.connected.Store(false)
+		// silently drop — OODA loop must not block
+		return
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+
+	if _, err := conn.Write(append(payload, '\n')); err != nil {
+		sls.connected.Store(false)
+		return
+	}
+
+	// Read ack (small response)
+	buf := make([]byte, 512)
+	conn.Read(buf) // ignore errors — fire-and-forget semantics
+
 	sls.connected.Store(true)
+	sls.eventsSent.Add(int64(len(events)))
 }
 
 func (sls *SelfLearningState) directivePoller(ctx context.Context) {
@@ -829,16 +875,69 @@ func (sls *SelfLearningState) directivePoller(ctx context.Context) {
 }
 
 func (sls *SelfLearningState) fetchDirectives(ctx context.Context) {
-	// In production: call learningClient.GetDirectives(ctx, &pb.DirectiveRequest{})
-	// The response would contain pending directives.
-	// For now, this is a placeholder for the gRPC integration.
+	addr := os.Getenv("ULTRON_LEARNING_ADDR")
+	if addr == "" {
+		addr = sls.serviceAddr
+	}
+	if len(addr) > 7 && addr[:7] == "http://" {
+		addr = addr[7:]
+	}
+	if len(addr) > 8 && addr[:8] == "https://" {
+		addr = addr[8:]
+	}
 
-	// TODO: Implement actual gRPC call
-	// directives, err := learningClient.GetDirectives(ctx, req)
-	// if err != nil { return }
-	// for _, d := range directives {
-	//     sls.EnqueueDirective(d)
-	// }
+	payload, _ := json.Marshal(map[string]interface{}{
+		"method": "get_directives",
+		"params": map[string]interface{}{"component": "core_agent"},
+	})
+
+	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+
+	if _, err := conn.Write(append(payload, '\n')); err != nil {
+		return
+	}
+
+	buf := make([]byte, 65536)
+	n, err := conn.Read(buf)
+	if err != nil || n == 0 {
+		return
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(buf[:n], &resp); err != nil {
+		return
+	}
+
+	directives, _ := resp["directives"].([]interface{})
+	for _, raw := range directives {
+		d, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		id, _ := d["id"].(string)
+		dtype, _ := d["directive_type"].(string)
+		priority, _ := d["priority"].(float64)
+		confidence, _ := d["confidence"].(float64)
+		source, _ := d["source"].(string)
+		payload, _ := d["payload"].(map[string]interface{})
+		if payload == nil {
+			payload = make(map[string]interface{})
+		}
+
+		sls.EnqueueDirective(LearningDirective{
+			ID:         id,
+			Type:       DirectiveType(dtype),
+			Priority:   int(priority),
+			Payload:    payload,
+			Source:     source,
+			Confidence: confidence,
+		})
+	}
 }
 
 // EnqueueDirective adds a directive to the processing queue.

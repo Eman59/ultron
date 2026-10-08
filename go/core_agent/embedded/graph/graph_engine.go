@@ -478,6 +478,47 @@ func (g *GraphEngine) ShortestPath(fromID, toID string) ([]string, float64, erro
 	return nil, math.MaxFloat64, fmt.Errorf("no path found from %s to %s", fromID, toID)
 }
 
+// UpdateNodeProperty atomically updates a single property on a node.
+// This is the safe alternative to GetNode + direct map write which races
+// with QueryEpisodes' read lock and the persist goroutine.
+func (g *GraphEngine) UpdateNodeProperty(id string, key string, value interface{}) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if node, ok := g.nodes[id]; ok {
+		node.Properties[key] = value
+		node.UpdatedAt = time.Now()
+		g.dirty = true
+	}
+}
+
+// Mu returns the graph mutex so callers can hold it across multi-step reads.
+// Use sparingly — prefer dedicated methods.
+func (g *GraphEngine) Mu() *sync.RWMutex {
+	return &g.mu
+}
+
+// QueryEpisodesUnlocked is the same as QueryEpisodes but assumes the caller
+// already holds g.mu (either read or write lock).
+func (g *GraphEngine) QueryEpisodesUnlocked(actionType string, minOutcome float64, limit int) []*GraphNode {
+	var results []*GraphNode
+	for _, node := range g.nodes {
+		for _, label := range node.Labels {
+			if label != "Episode" {
+				continue
+			}
+			action, _ := node.Properties["action"].(string)
+			outcome, _ := node.Properties["outcome"].(float64)
+			if (actionType == "" || action == actionType) && outcome >= minOutcome {
+				results = append(results, node)
+				if limit > 0 && len(results) >= limit {
+					return results
+				}
+			}
+		}
+	}
+	return results
+}
+
 // GetNode returns a single node by ID.
 func (g *GraphEngine) GetNode(id string) *GraphNode {
 	g.mu.RLock()
