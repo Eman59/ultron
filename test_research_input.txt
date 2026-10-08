@@ -1,0 +1,10 @@
+AI Response Patterns Under Different Prompting Strategies
+1
+Analysis of how AI systems handle controversial topics
+2
+How transformer architecture affects AI decision-making
+3
+Ethical considerations in autonomous AI systems
+4
+research-ai,qwen2.5:14b
+5
