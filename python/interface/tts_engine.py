@@ -62,6 +62,76 @@ _speech_queue: "queue.Queue[Optional[str]]" = queue.Queue()
 _speech_worker: Optional[threading.Thread] = None
 _speech_worker_lock = threading.Lock()
 
+import re as _re
+
+def _split_sentences(text: str):
+    """Break text into sentence-sized chunks for low-latency streaming."""
+    parts = _re.split(r'(?<=[.!?。？！])\s+', (text or "").strip())
+    return [p.strip() for p in parts if p.strip()]
+
+def _speak_sentence(sentence: str, lang: str = "en") -> None:
+    """Synthesize one sentence, preferring the neural pipeline, else macOS say."""
+    cached = _cache_get(sentence, lang)
+    try:
+        if cached is None:
+            # macOS streaming fallback — speaks immediately, blocks per sentence.
+            if platform.system() == "Darwin":
+                subprocess.run(["say", sentence], check=False)
+            else:
+                subprocess.run(
+                    ["espeak", sentence], check=False,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+        else:
+            # Play cached audio bytes via afplay/temp file.
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as _tf:
+                _tf.write(cached)
+                _tmp = _tf.name
+            player = "afplay" if platform.system() == "Darwin" else "aplay"
+            subprocess.run([player, _tmp], check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                os.unlink(_tmp)
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+def _speech_worker_loop() -> None:
+    """Drain the speech queue, speaking one sentence chunk at a time."""
+    while True:
+        item = _speech_queue.get()
+        try:
+            if item is None:          # sentinel → shut down worker
+                return
+            _speak_sentence(item)
+        finally:
+            _speech_queue.task_done()
+
+def _ensure_speech_worker() -> None:
+    """Lazily start the background speech worker thread (singleton)."""
+    global _speech_worker
+    with _speech_worker_lock:
+        if _speech_worker is None or not _speech_worker.is_alive():
+            _speech_worker = threading.Thread(
+                target=_speech_worker_loop, daemon=True
+            )
+            _speech_worker.start()
+
+def speak(text: str, lang: str = "en") -> None:
+    """
+    Speak a response aloud in real time.
+
+    Buffers output into sentence-sized chunks and enqueues each one so audio
+    begins while later text is still being produced. Call this automatically
+    from the response pipeline for every generated reply.
+    """
+    if not text or not text.strip():
+        return
+    _ensure_speech_worker()
+    for sentence in _split_sentences(text):
+        _speech_queue.put(sentence)
+
 # Primary engine stall timeout — if synthesis exceeds this, fall back.
 _PRIMARY_TIMEOUT = float(os.environ.get("TTS_PRIMARY_TIMEOUT", "2.5"))
 
