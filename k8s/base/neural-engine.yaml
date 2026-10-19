@@ -25,7 +25,7 @@ spec:
             - containerPort: 50052
               name: grpc
           env:
-            - name: ULTRON_GRPC_PORT
+            - name: ULTRON_NEURAL_HTTP_PORT    # matches dynamic_neural/main.rs env var name
               value: "50052"
             - name: ULTRON_REDIS_ADDR
               value: "ultron-redis:6379"

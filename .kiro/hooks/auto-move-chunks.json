@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Auto-move chunk files out of root",
+      "trigger": "PostFileCreate",
+      "description": "Moves chunk_*_16k.txt files from project root to data/voice/chunks/ the moment they're created",
+      "matcher": "chunk_.*\\.txt$",
+      "action": {
+        "type": "command",
+        "command": "DEST=\"/Users/IMSAYYED2401/Code/ultron/data/voice/chunks\"; mkdir -p \"$DEST\"; find \"/Users/IMSAYYED2401/Code/ultron\" -maxdepth 1 -name \"chunk_*.txt\" -exec mv {} \"$DEST/\" \\; 2>/dev/null; echo \"chunks moved\""
+      }
+    }
+  ]
+}

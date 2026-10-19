@@ -29,6 +29,7 @@ type CoreAgentService struct {
 	worldModel *world.WorldModel
 	memorySys  memory.MemorySystem
 	logger     *zap.SugaredLogger
+	startTime  time.Time
 }
 
 // RegisterCoreAgentServer registers the service with a gRPC server.
@@ -130,7 +131,7 @@ func (s *CoreAgentService) handleGetSystemStatus(srv interface{}, ctx context.Co
 
 	status := map[string]interface{}{
 		"mode":           metrics["state"],
-		"uptime_ms":      time.Since(time.Now()).Milliseconds(), // Placeholder
+		"uptime_ms":      time.Since(s.startTime).Milliseconds(),
 		"tick_count":     metrics["tick_count"],
 		"decisions_made": metrics["decision_count"],
 		"active_goals":   goalSummary["active"],

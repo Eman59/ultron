@@ -43,14 +43,25 @@ fn http_get(url: &str, timeout_secs: u64) -> Result<String, String> {
     use std::io::{Read, Write};
     use std::time::Duration;
 
-    // Parse URL
-    let url = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://"))
-        .ok_or("bad scheme")?;
-    let (host_path, port) = if let Some(h) = url.strip_prefix("") { (h, 443u16) } else { (url, 80u16) };
-    let _ = port; // we use port below
-    let (host, path) = host_path.split_once('/').unwrap_or((host_path, ""));
-    let path = format!("/{}", path);
-    let port: u16 = 80;
+    // Parse scheme — this impl uses plain TCP only (no TLS)
+    let (stripped, default_port) = if let Some(s) = url.strip_prefix("http://") {
+        (s, 80u16)
+    } else if let Some(s) = url.strip_prefix("https://") {
+        // Note: HTTPS without TLS will likely fail on real servers.
+        // All current feed URLs use http:// so this is a safety fallback only.
+        (s, 443u16)
+    } else {
+        return Err("bad scheme".to_string());
+    };
+
+    // Split host[:port] from path
+    let (host_port, path_rest) = stripped.split_once('/').unwrap_or((stripped, ""));
+    let path = format!("/{}", path_rest);
+    let (host, port) = if let Some((h, p)) = host_port.split_once(':') {
+        (h, p.parse::<u16>().unwrap_or(default_port))
+    } else {
+        (host_port, default_port)
+    };
 
     let addr = format!("{}:{}", host, port);
     let mut stream = TcpStream::connect(&addr)
@@ -100,9 +111,11 @@ fn fetch_crypto() -> Option<(f64, f64)> {
     Some((btc, eth))
 }
 
-// ─── wttr.in weather (London, JSON) ───────────────────────────
+// ─── wttr.in weather — city configurable via ULTRON_WEATHER_CITY ─────
 fn fetch_weather() -> Option<FeedEvent> {
-    let body = http_get("http://wttr.in/London?format=j1", 8).ok()?;
+    let city = std::env::var("ULTRON_WEATHER_CITY").unwrap_or_else(|_| "London".to_string());
+    let url = format!("http://wttr.in/{}?format=j1", city);
+    let body = http_get(&url, 8).ok()?;
     let v: serde_json::Value = serde_json::from_str(body.trim()).ok()?;
     let temp_c: f64 = v["current_condition"][0]["temp_C"]
         .as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
@@ -110,7 +123,7 @@ fn fetch_weather() -> Option<FeedEvent> {
         .as_str().unwrap_or("unknown").to_string();
     Some(FeedEvent {
         source: "weather".into(),
-        headline: format!("London: {}°C  {}", temp_c, desc),
+        headline: format!("{}: {}°C  {}", city, temp_c, desc),
         value: temp_c,
         ts: now_secs(),
     })

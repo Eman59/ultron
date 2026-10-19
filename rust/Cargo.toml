@@ -4,7 +4,7 @@ members = [
     "real_time_data",
     "security_daemon",
     "neuromorphic",
-    "ultron_neural_service"
+    # ultron_neural_service removed — duplicate dead crate, never deployed
 ]
 
 [profile.release]

@@ -10,12 +10,12 @@ COPY rust/real_time_data/ ./real_time_data/
 COPY rust/security_daemon/ ./security_daemon/
 COPY rust/neuromorphic/ ./neuromorphic/
 
-RUN cargo build --release --package ultron-dynamic-neural
+RUN cargo build --release --package dynamic_neural
 
 # Runtime
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates
-COPY --from=builder /app/target/release/ultron-dynamic-neural /usr/local/bin/ultron-neural
+COPY --from=builder /app/target/release/dynamic_neural /usr/local/bin/ultron-neural
 
 EXPOSE 50052
 ENTRYPOINT ["/usr/local/bin/ultron-neural"]

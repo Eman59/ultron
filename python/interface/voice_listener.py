@@ -111,12 +111,14 @@ def _transcribe_whisper_cli(audio_path: str) -> str:
         )
         target = converted_path if (conv.returncode == 0 and
                                      os.path.exists(converted_path)) else audio_path
+        output_dir = os.path.dirname(os.path.abspath(target))
         result = subprocess.run(
             ["whisper", target, "--model", "base",
-             "--output_format", "txt", "--language", "en"],
+             "--output_format", "txt", "--language", "en",
+             "--output_dir", output_dir],
             capture_output=True, text=True, timeout=30
         )
-        txt_path = target.rsplit(".", 1)[0] + ".txt"
+        txt_path = os.path.join(output_dir, os.path.basename(target).rsplit(".", 1)[0] + ".txt")
         if os.path.exists(txt_path):
             text = open(txt_path).read().strip()
             os.unlink(txt_path)

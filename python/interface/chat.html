@@ -20,26 +20,89 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23020202'/%3E%3C!-- neural nodes --%3E%3Ccircle cx='32' cy='32' r='5' fill='%23e63946' opacity='.9'/%3E%3Ccircle cx='32' cy='32' r='8' fill='none' stroke='%23e63946' stroke-width='.8' opacity='.5'/%3E%3Ccircle cx='14' cy='18' r='2.5' fill='%23e63946' opacity='.7'/%3E%3Ccircle cx='50' cy='18' r='2.5' fill='%23e63946' opacity='.7'/%3E%3Ccircle cx='10' cy='40' r='2' fill='%23e63946' opacity='.6'/%3E%3Ccircle cx='54' cy='40' r='2' fill='%23e63946' opacity='.6'/%3E%3Ccircle cx='24' cy='54' r='2' fill='%23e63946' opacity='.6'/%3E%3Ccircle cx='40' cy='54' r='2' fill='%23e63946' opacity='.6'/%3E%3Ccircle cx='32' cy='8' r='2' fill='%23e63946' opacity='.6'/%3E%3C!-- wires --%3E%3Cline x1='32' y1='27' x2='14' y2='20' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='32' y1='27' x2='50' y2='20' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='27' y1='32' x2='10' y2='40' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='37' y1='32' x2='54' y2='40' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='29' y1='36' x2='24' y2='52' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='35' y1='36' x2='40' y2='52' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='32' y1='27' x2='32' y2='10' stroke='%23e63946' stroke-width='.8' opacity='.4'/%3E%3Cline x1='14' y1='18' x2='10' y2='40' stroke='%23e63946' stroke-width='.5' opacity='.25'/%3E%3Cline x1='50' y1='18' x2='54' y2='40' stroke='%23e63946' stroke-width='.5' opacity='.25'/%3E%3Cline x1='14' y1='18' x2='24' y2='54' stroke='%23e63946' stroke-width='.4' opacity='.2'/%3E%3Cline x1='50' y1='18' x2='40' y2='54' stroke='%23e63946' stroke-width='.4' opacity='.2'/%3E%3C/svg%3E">
 <style>
 /* ═══════════════════════════════════════════════
-   TOKENS
+   TOKENS — AWS Bedrock Edition
 ═══════════════════════════════════════════════ */
 :root{
   --R:#e63946; --Rg:rgba(230,57,70,.6); --Rd:rgba(230,57,70,.12); --Rm:rgba(230,57,70,.06);
   --T:#4ecdc4; --P:#a855f7; --O:#f97316; --G:#22c55e;
-  --bg:#020202; --bg2:rgba(5,5,8,.92); --bg3:rgba(10,10,14,.85);
-  --fg:rgba(255,255,255,.9); --dim:rgba(255,255,255,.35); --faint:rgba(255,255,255,.07);
-  --border:rgba(255,255,255,.07); --borderR:rgba(230,57,70,.18);
+  --AWS:#FF9900; --AWSd:rgba(255,153,0,.15); --AWSg:rgba(255,153,0,.6);
+  --CL:#5B8BFF; --CLd:rgba(91,139,255,.12);
+  --bg:#000000; --bg2:rgba(4,4,8,.96); --bg3:rgba(8,8,14,.92);
+  --fg:rgba(255,255,255,.92); --dim:rgba(255,255,255,.38); --faint:rgba(255,255,255,.06);
+  --border:rgba(255,255,255,.06); --borderR:rgba(230,57,70,.2);
   --font:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  --mono:'SF Mono','Fira Code',monospace;
-  --r:10px; --r2:14px;
-  --sh: 0 8px 32px rgba(0,0,0,.6);
+  --mono:'SF Mono','JetBrains Mono','Fira Code',monospace;
+  --r:8px; --r2:12px;
+  --sh: 0 8px 40px rgba(0,0,0,.8);
+  --glow-r: 0 0 20px rgba(230,57,70,.3);
+  --glow-aws: 0 0 20px rgba(255,153,0,.2);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);
   font-family:var(--font);color:var(--fg);-webkit-font-smoothing:antialiased}
 button,textarea,input{font-family:inherit}
-::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar{width:2px;height:2px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--Rd);border-radius:2px}
+</style>
+<style>
+/* ── AWS Bedrock Badge ── */
+.bedrock-badge{
+  display:flex;align-items:center;gap:5px;
+  background:rgba(255,153,0,.08);
+  border:1px solid rgba(255,153,0,.25);
+  border-radius:6px;padding:3px 8px;margin-left:10px;
+  cursor:default;
+}
+.bedrock-badge svg{flex-shrink:0}
+.bedrock-model{
+  font-size:8.5px;font-weight:700;letter-spacing:1.2px;
+  color:var(--AWS);text-transform:uppercase;font-family:var(--mono);
+}
+/* ── Upgraded header brand row ── */
+.brand{display:flex;align-items:center;gap:10px}
+/* ── Upgraded messages ── */
+.msg.user .mbubble{
+  background:rgba(230,57,70,.07);
+  border:1px solid rgba(230,57,70,.18);
+  border-radius:var(--r) var(--r) 0 var(--r);
+}
+.msg.bot .mbubble{
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:var(--r) var(--r) var(--r) 0;
+  border-left:2px solid var(--R);
+}
+/* ── AWS accent on active tab ── */
+.rpt.active{
+  color:var(--AWS);
+  border-bottom:2px solid var(--AWS);
+}
+/* ── Upgraded module LEDs ── */
+.led.on{box-shadow:0 0 8px var(--R),0 0 14px rgba(230,57,70,.3)}
+/* ── Better drive bars ── */
+.drv-f[data-b]{
+  transition:width .6s cubic-bezier(.23,1,.32,1);
+  box-shadow:2px 0 8px rgba(230,57,70,.3);
+}
+/* ── Status: bedrock indicator ── */
+.bedrock-status{
+  display:flex;align-items:center;gap:6px;
+  padding:8px;margin:4px 0;
+  background:var(--AWSd);border:1px solid rgba(255,153,0,.2);
+  border-radius:6px;
+}
+.bedrock-dot{width:7px;height:7px;border-radius:50%;background:var(--AWS);
+  box-shadow:0 0 8px var(--AWS);animation:blink 2s infinite}
+.bedrock-info{font-size:9px;font-family:var(--mono);color:var(--AWS);letter-spacing:.5px}
+/* ── Polly voice badge ── */
+.polly-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:8px;font-family:var(--mono);
+  color:var(--CL);letter-spacing:.8px;
+  background:var(--CLd);border:1px solid rgba(91,139,255,.2);
+  border-radius:4px;padding:2px 6px;margin-top:4px;
+}
 </style>
 </head>
 <body class="idle">
@@ -167,9 +230,9 @@ button,textarea,input{font-family:inherit}
     <div id="boot-lines">
       <div class="boot-line">&#x25B6; INITIALIZING CORE AGENT</div>
       <div class="boot-line">&#x25B6; LOADING CONSCIOUSNESS MODULES</div>
-      <div class="boot-line">&#x25B6; CONNECTING NEURAL MESH</div>
-      <div class="boot-line">&#x25B6; ENGAGING WORLD INTELLIGENCE</div>
-      <div class="boot-line">&#x25B6; ARMING VOICE SYSTEMS</div>
+      <div class="boot-line">&#x25B6; CONNECTING TO AWS BEDROCK</div>
+      <div class="boot-line">&#x25B6; CLAUDE ONLINE — NEURAL MESH LIVE</div>
+      <div class="boot-line">&#x25B6; AMAZON POLLY VOICE ENGINE ARMED</div>
       <div class="boot-line">&#x25B6; AUTONOMY LOOP ONLINE · 50MS TICK</div>
     </div>
 
@@ -245,6 +308,10 @@ button,textarea,input{font-family:inherit}
         <div class="bname">ULTRON</div>
         <div class="bsub">AUTONOMOUS · SELF-AWARE · ALWAYS ON</div>
       </div>
+      <div class="bedrock-badge">
+        <svg viewBox="0 0 20 20" fill="none" width="14" height="14"><rect width="20" height="20" rx="4" fill="#FF9900" opacity=".9"/><path d="M10 4l4 3v6l-4 3-4-3V7z" fill="#000" opacity=".8"/></svg>
+        <span class="bedrock-model" id="bedrock-model-label">CLAUDE · BEDROCK</span>
+      </div>
     </div>
     <div class="hstats">
       <div class="hs"><div class="hs-v" id="h-ticks">0</div><div class="hs-l">TICKS</div></div>
@@ -289,6 +356,7 @@ button,textarea,input{font-family:inherit}
         <div class="mod"><div class="led" id="led-world"></div><span class="mod-n">World Intel</span><span class="mod-s" id="st-world">—</span></div>
         <div class="mod"><div class="led" id="led-daemon"></div><span class="mod-n">Daemon</span><span class="mod-s" id="st-daemon">—</span></div>
         <div class="mod"><div class="led" id="led-voice"></div><span class="mod-n">Voice</span><span class="mod-s" id="st-voice">—</span></div>
+        <div class="mod" style="margin-top:4px"><div style="width:7px"></div><span class="polly-badge">AMAZON POLLY NEURAL</span></div>
       </div>
     </div>
     <div class="panel-sec">
@@ -427,6 +495,10 @@ button,textarea,input{font-family:inherit}
       <!-- Module count from /system/status -->
       <div class="panel-sec">
         <div class="sec">Module Status <button class="sec-btn" onclick="fetchSystemStatus()">↻</button></div>
+        <div class="bedrock-status">
+          <div class="bedrock-dot"></div>
+          <div class="bedrock-info" id="bedrock-status-label">AWS BEDROCK · CLAUDE ONLINE</div>
+        </div>
         <div id="module-status-bar">
           <div class="nstat"><span class="nstat-l">Online</span><span class="nstat-v" id="ms-online">—</span></div>
           <div class="nstat"><span class="nstat-l">Total</span><span class="nstat-v" id="ms-total">—</span></div>
@@ -1286,7 +1358,20 @@ function buildRecog(){
   const r=new SR();
   r.continuous=true; r.interimResults=true; r.lang='en-US'; r.maxAlternatives=3;
   r.onresult=e=>{
-    if(isSpeaking||ST==='thinking'||ST==='speaking')return;
+    // ── BARGE-IN: user speaks while Ultron is talking → interrupt immediately ──
+    if(isSpeaking){
+      let interimNow='';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        if(!e.results[i].isFinal) interimNow+=e.results[i][0].transcript;
+      }
+      if(interimNow.trim().length>2){
+        stopSpeaking();
+        // fall through — let the speech be processed normally
+      } else { return; }
+    }
+
+    if(ST==='thinking')return;  // still block while awaiting AI response
+
     let interim='',final='';
     for(let i=e.resultIndex;i<e.results.length;i++){
       if(e.results[i].isFinal){
@@ -1302,21 +1387,26 @@ function buildRecog(){
         silT=null;
         if(txt.split(/\s+/).filter(w=>w).length>=1&&txt.length>=2&&!_pending&&!isSpeaking) send(txt);
         else{setTrans('');setState('listening');}
-      },1800);
+      },1500);
     }
   };
   r.onend=()=>{
-    // Only restart if mic is on AND we're not in the middle of speaking or processing
-    if(micOn && ST!=='thinking' && ST!=='speaking' && !isSpeaking && !_pending){
+    // Restart if mic is on — even after speaking ends (barge-in re-arm)
+    if(micOn && ST!=='thinking' && !_pending){
       try{r.start();}catch(e){}
     }
-  };  r.onerror=e=>{
+  };
+  r.onerror=e=>{
     if(e.error==='not-allowed'){micOn=false;setState('idle');setTrans('Microphone access denied.');return;}
     if(e.error==='no-speech'){try{r.start();}catch(err){}return;}
     if(e.error!=='aborted'){setTimeout(()=>{if(micOn)try{r.start();}catch(err){}},300);}
   };
-  r.onspeechstart=()=>{if(silT){clearTimeout(silT);silT=null;}};
-  r.onsoundstart=()=>setState('hearing');
+  r.onspeechstart=()=>{
+    if(silT){clearTimeout(silT);silT=null;}
+    // Barge-in via speech-start event (faster than waiting for transcript)
+    if(isSpeaking) stopSpeaking();
+  };
+  r.onsoundstart=()=>{if(!isSpeaking) setState('hearing');};
   return r;
 }
 
@@ -1395,18 +1485,66 @@ async function _transcribeBlob(blob){
 }
 
 /* ── Mic control ── */
+/* ── Web Audio VAD: detects voice even while speakers play (bypasses echo-cancel) ── */
+let _vadCtx=null,_vadAnalyser=null,_vadStream=null,_vadRaf=null;
+async function _startVAD(){
+  try{
+    // Request mic WITHOUT echo-cancellation so it picks up voice even during playback
+    _vadStream=await navigator.mediaDevices.getUserMedia({
+      audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+    });
+    _vadCtx=new AudioContext();
+    const src=_vadCtx.createMediaStreamSource(_vadStream);
+    _vadAnalyser=_vadCtx.createAnalyser();
+    _vadAnalyser.fftSize=512;
+    _vadAnalyser.smoothingTimeConstant=0.4;
+    src.connect(_vadAnalyser);
+    const buf=new Uint8Array(_vadAnalyser.frequencyBinCount);
+    let _bargeFrames=0;
+    function _vadTick(){
+      if(!_vadAnalyser){return;}
+      _vadAnalyser.getByteFrequencyData(buf);
+      // Focus on speech frequencies (300–3400 Hz) — filter out rumble/hiss
+      const lo=Math.floor(300/_vadCtx.sampleRate*_vadAnalyser.fftSize);
+      const hi=Math.ceil(3400/_vadCtx.sampleRate*_vadAnalyser.fftSize);
+      let sum=0; for(let i=lo;i<hi;i++)sum+=buf[i];
+      const avg=sum/(hi-lo);
+      if(isSpeaking&&avg>28){  // voice detected while Ultron is speaking
+        _bargeFrames++;
+        if(_bargeFrames>=3){  // 3 consecutive frames = definite voice, not noise
+          _bargeFrames=0;
+          stopSpeaking();     // ← BARGE-IN
+        }
+      } else { _bargeFrames=0; }
+      _vadRaf=requestAnimationFrame(_vadTick);
+    }
+    _vadTick();
+  }catch(e){console.warn('[VAD] Could not start:',e);}
+}
+function _stopVAD(){
+  if(_vadRaf){cancelAnimationFrame(_vadRaf);_vadRaf=null;}
+  if(_vadAnalyser){_vadAnalyser.disconnect();_vadAnalyser=null;}
+  if(_vadCtx){_vadCtx.close();_vadCtx=null;}
+  if(_vadStream){_vadStream.getTracks().forEach(t=>t.stop());_vadStream=null;}
+}
+
 async function startMic(){
   micOn=true; document.getElementById('mic-btn').classList.add('on');
   if(_wsrSupported()){
     if(!recog)recog=buildRecog();
-    if(recog){try{recog.start();}catch(e){} setState('listening'); return true;}
+    if(recog){try{recog.start();}catch(e){} setState('listening');}
+  } else {
+    await _startMediaRecorder();
   }
-  await _startMediaRecorder(); return true;
+  // Start VAD for barge-in detection (runs independently of SpeechRecognition)
+  if(!_vadStream) _startVAD();
+  return true;
 }
 function stopMic(){
   micOn=false; document.getElementById('mic-btn').classList.remove('on');
   if(recog)try{recog.stop();}catch(e){}
   _stopMediaRecorder();
+  _stopVAD();
   if(silT){clearTimeout(silT);silT=null;} accum='';
 }
 function toggleMic(){if(micOn){stopMic();setState('idle');}else startMic();}
@@ -1449,58 +1587,52 @@ async function speak(raw){
   if(_spoken.has(text))return;
   _spoken.add(text); if(_spoken.size>20){const f=_spoken.values().next().value;_spoken.delete(f);}
   isSpeaking=true; setState('speaking');
-  // Stop recognition BEFORE stopping the recorder
-  // so the recorder's onstop doesn't fire with stale audio
-  if(recog)try{recog.stop();}catch(e){}
-  // Discard recorder chunks WITHOUT triggering onstop processing
-  // We do this by clearing chunks first, then stopping
+  // ── Keep SpeechRecognition RUNNING for barge-in ──
+  // Only flush stale recorder chunks so they don't fire a send() mid-speech
   _mrChunks=[];
   if(_mrSilT){clearTimeout(_mrSilT);_mrSilT=null;}
-  if(_mrRec&&_mrRec.state==='recording'){
-    // Detach the stop handler temporarily so it doesn't fire send()
-    _mrRec.onstop=null;
-    try{_mrRec.stop();}catch(e){}
-    _mrRec.onstop=_onMediaRecorderStop; // re-attach after stop
-  }
+  // Stream from server; browser synth fires immediately as zero-latency backup
+  _browserSynthSpeak(text);            // starts instantly in browser
   const done=await _streamAudioSpeak(text);
-  if(!done)_browserSynthSpeak(text);
+  if(done&&synth)synth.cancel();       // server audio won — silence browser synth
 }
 async function _streamAudioSpeak(text){
   try{
     const url='/tts/stream?text='+encodeURIComponent(text);
     const audio=new Audio(url); audio.preload='auto'; _curAudio=audio;
     return await new Promise(resolve=>{
-      let resolved=false;
-      let playStarted=false;
+      let resolved=false,playStarted=false;
       function done(ok){if(!resolved){resolved=true;resolve(ok);}}
-      audio.oncanplaythrough=()=>{
+      // Start on loadeddata (first frame ready) — faster than canplaythrough
+      audio.onloadeddata=()=>{
         playStarted=true;
-        audio.play().then(()=>setState('speaking')).catch(()=>{
-          // play() blocked (autoplay policy) — fall through to browser synth
-          done(false);
-        });
+        // Server audio loaded — cancel browser synth immediately
+        if(synth)synth.cancel();
+        audio.play().then(()=>setState('speaking')).catch(()=>done(false));
       };
       audio.onended=()=>{_afterSpeak();done(true);};
-      audio.onerror=()=>{
-        // Only fall through if playback never started
-        done(false);
-      };
-      // Timeout: only reject if audio never started loading
-      // Piper needs up to 10s on first call (model cold load)
-      // After warmup it's ~1-2s
-      setTimeout(()=>{
-        if(!playStarted) done(false);
-        // If playStarted but not ended yet — keep waiting, don't time out
-      },12000);
+      audio.onerror=()=>done(false);
+      // If server hasn't responded in 2.5s, let browser synth handle it
+      setTimeout(()=>{if(!playStarted)done(false);},2500);
       audio.load();
     });
   }catch(e){return false;}
 }
 function _browserSynthSpeak(text){
-  // Browser synth disabled — Piper+SoX is the only voice for Ultron.
-  // If /tts/stream failed, stay silent rather than play the robotic browser voice.
-  _afterSpeak();
-  console.warn('[TTS] stream failed — staying silent (Piper unavailable?)');
+  if(!synth||!text)return;
+  synth.cancel();
+  const utt=new SpeechSynthesisUtterance(text);
+  // Pick a deep male voice if available
+  const voices=synth.getVoices();
+  const deep=voices.find(v=>/(daniel|alex|fred|bruce|ralph)/i.test(v.name)&&v.lang.startsWith('en'))
+            ||voices.find(v=>v.lang.startsWith('en')&&!v.name.includes('Female'));
+  if(deep)utt.voice=deep;
+  utt.rate=0.88; utt.pitch=0.75; utt.volume=1.0;
+  utt.onend=()=>{
+    // Server audio may have taken over — only call _afterSpeak if still speaking
+    if(isSpeaking&&!_curAudio) _afterSpeak();
+  };
+  synth.speak(utt);
 }
 function stopSpeaking(){
   if(_curAudio){try{_curAudio.pause();_curAudio.src='';}catch(e){}_curAudio=null;}
@@ -1572,9 +1704,24 @@ function retakePhoto(){
 
 async function sendSnap(){
   if(!_snapBlob)return;
-  const file=new File([_snapBlob],'snapshot.jpg',{type:'image/jpeg'});
   closeCam();
-  await _uploadAndSend(file,'What do you see in this image? Analyse it fully.');
+  setState('thinking'); _pending=true;
+  addMsg('user','[Camera snapshot — recognise me]');
+  try{
+    const fd=new FormData();
+    fd.append('file',new File([_snapBlob],'snapshot.jpg',{type:'image/jpeg'}),'snapshot.jpg');
+    const res=await fetch('/upload',{method:'POST',body:fd,signal:AbortSignal.timeout(30000)});
+    if(!res.ok){onResp('Camera upload failed.');return;}
+    const data=await res.json();
+    const analysis=data.response||data.analysis||'Photo received.';
+    // Feed the vision result + recognition request back through the brain
+    const prompt='I just took this photo. Here is what you see:\n\n'+analysis+
+      '\n\nNow tell me: do you recognise who this is? Is this Imran (your owner)?';
+    if(ws&&ws.readyState===WebSocket.OPEN){
+      ws.send(JSON.stringify({cmd:prompt}));
+      _wsT=setTimeout(()=>{if(_pending){_pending=false;httpSend(prompt);}},60000);
+    }else httpSend(prompt);
+  }catch(e){_pending=false;onResp('Camera error: '+e.message);}
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -2354,6 +2501,14 @@ async function fetchSystemStatus(){
     if(el('ms-uptime'))el('ms-uptime').textContent=fmtUp(d.uptime||0);
     if(el('ms-cf'))el('ms-cf').textContent=d.modules?.cf_ai?'YES':'NO';
     if(el('ms-grpc'))el('ms-grpc').textContent=d.modules?.grpc_bridge?'YES':'NO';
+    // Update Bedrock label with active provider from /status
+    const providerLabel = document.getElementById('bedrock-model-label');
+    const brainLabel = document.getElementById('bedrock-status-label');
+    if(d.brain_provider){
+      const p = d.brain_provider.toUpperCase();
+      if(providerLabel) providerLabel.textContent = p.includes('BEDROCK') ? 'CLAUDE · BEDROCK' : p;
+      if(brainLabel) brainLabel.textContent = `AWS BEDROCK · ${p}`;
+    }
   }catch(e){}
 }
 

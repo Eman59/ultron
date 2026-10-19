@@ -31,7 +31,7 @@ services:
       - "7474:7474"   # HTTP browser
       - "7687:7687"   # Bolt protocol
     environment:
-      NEO4J_AUTH: neo4j/ultron_memory_2024
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-ultron_memory_2024}
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_server_memory_heap_max__size: 1G
     volumes:
@@ -89,13 +89,23 @@ services:
       ULTRON_REDIS_ADDR: redis:6379
       ULTRON_NEO4J_URI: bolt://neo4j:7687
       ULTRON_NEO4J_USER: neo4j
-      ULTRON_NEO4J_PASS: ultron_memory_2024
+      ULTRON_NEO4J_PASS: ${NEO4J_PASSWORD:-ultron_memory_2024}
       ULTRON_QDRANT_HOST: qdrant
       ULTRON_QDRANT_PORT: 6334
       ULTRON_MQTT_BROKER: tcp://mosquitto:1883
       ULTRON_TICK_RATE_MS: 50
       ULTRON_LOG_LEVEL: info
       ULTRON_LEARNING_SERVICE_ADDR: learning-service:50060
+      ULTRON_HTTP_PORT: 8080
+      ULTRON_SIGNING_SECRET: ${ULTRON_SIGNING_SECRET:-}
+      # AWS — pass through profile/region hints only.
+      # Actual credentials come from the mounted ~/.aws volume (see below).
+      # This means Amazon Q SSO tokens, IAM keys, or instance roles all just work.
+      AWS_PROFILE: ${AWS_PROFILE:-default}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    volumes:
+      # Mount host AWS credentials read-only — SSO tokens, IAM keys, config
+      - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -164,6 +174,7 @@ services:
       ULTRON_GRPC_PORT: 50054
       ULTRON_REDIS_ADDR: redis:6379
       ULTRON_CORE_AGENT_ADDR: core-agent:50051
+      ULTRON_WEATHER_CITY: ${ULTRON_WEATHER_CITY:-London}
       RUST_LOG: info
     depends_on:
       redis:
@@ -202,30 +213,33 @@ services:
       - "50061:50061"   # JSON fallback API
       - "8090:8090"     # Health/status HTTP
     environment:
-      # Service config
       ULTRON_LEARNING_GRPC_PORT: 50060
       ULTRON_LEARNING_JSON_PORT: 50061
       ULTRON_PROJECT_ROOT: /ultron
-      # LLM providers (set your keys here or in .env file)
+      # Optional third-party keys — leave empty to use Bedrock via ~/.aws mount
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      # Local LLM (Ollama running in sibling container)
+      # Local LLM (optional — Bedrock is primary)
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: deepseek-coder-v2:latest
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-deepseek-coder-v2:latest}
       # Evolution settings
       ULTRON_EVOLUTION_SPEED: normal
       ULTRON_DAILY_BUDGET_USD: "10.0"
-      ULTRON_PREFER_LOCAL_LLM: "true"
-      # Connections to other services
+      ULTRON_PREFER_LOCAL_LLM: "false"
+      # Connections
       ULTRON_CORE_AGENT_ADDR: core-agent:50051
       ULTRON_NEURAL_ADDR: neural-engine:50052
       ULTRON_REDIS_ADDR: redis:6379
+      # AWS passthrough
+      AWS_PROFILE: ${AWS_PROFILE:-default}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
     volumes:
-      - ../:/ultron:rw                           # Full project access for code reading/writing
-      - learning_knowledge:/ultron/data/knowledge  # Persistent knowledge base
-      - learning_evolution:/ultron/data/evolution   # Evolution history
+      - ../:/ultron:rw
+      - learning_knowledge:/ultron/data/knowledge
+      - learning_evolution:/ultron/data/evolution
+      - ${HOME}/.aws:/root/.aws:ro   # host credentials — Bedrock + Polly auto-work
     depends_on:
       redis:
         condition: service_healthy
@@ -311,9 +325,12 @@ services:
       OLLAMA_HOST: http://ollama:11434
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
-      NEO4J_PASS: ultron_memory_2024
+      NEO4J_PASS: ${NEO4J_PASSWORD:-ultron_memory_2024}
+      AWS_PROFILE: ${AWS_PROFILE:-default}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
     volumes:
       - ../data/consciousness:/ultron/data/consciousness
+      - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       neo4j:
         condition: service_healthy
@@ -361,7 +378,7 @@ services:
     image: ros:humble-ros-base
     container_name: ultron-ros2-bridge
     ports:
-      - "9090:9090"     # WebSocket bridge for ROS2
+      - "9091:9090"     # WebSocket bridge for ROS2 (9091 on host to avoid prometheus conflict)
       - "50072:50072"   # gRPC physical embodiment service
     environment:
       ROS_DOMAIN_ID: 42
@@ -392,7 +409,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ultron_admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-ultron_admin}
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:

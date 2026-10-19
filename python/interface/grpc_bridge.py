@@ -42,10 +42,12 @@ class ConnectionState(Enum):
 
 @dataclass
 class GRPCConfig:
-    """Configuration for the gRPC bridge."""
+    """Configuration for the gRPC bridge — only core_agent_addr is actively used."""
     core_agent_addr: str = "localhost:50051"
-    neural_addr: str = "localhost:50052"
-    meta_learning_addr: str = "localhost:50053"
+
+    # Future Rust gRPC service addresses (unused, reserved for expansion)
+    neural_addr: str = "localhost:50057"
+    meta_learning_addr: str = "localhost:50060"
     data_pipeline_addr: str = "localhost:50054"
     security_addr: str = "localhost:50055"
 
@@ -68,14 +70,6 @@ class GRPCConfig:
     def __post_init__(self):
         if not self.core_agent_addr:
             raise ValueError("core_agent_addr cannot be empty")
-        if not self.neural_addr:
-            raise ValueError("neural_addr cannot be empty")
-        if not self.meta_learning_addr:
-            raise ValueError("meta_learning_addr cannot be empty")
-        if not self.data_pipeline_addr:
-            raise ValueError("data_pipeline_addr cannot be empty")
-        if not self.security_addr:
-            raise ValueError("security_addr cannot be empty")
         if self.connect_timeout <= 0:
             raise ValueError("connect_timeout must be greater than 0")
         if self.call_timeout <= 0:
@@ -102,10 +96,6 @@ class GRPCBridge:
         if config is None:
             config = GRPCConfig(
                 core_agent_addr=os.getenv("ULTRON_CORE_AGENT_ADDR", "localhost:50051"),
-                neural_addr=os.getenv("ULTRON_NEURAL_ADDR", "localhost:50052"),
-                meta_learning_addr=os.getenv("ULTRON_META_LEARNING_ADDR", "localhost:50053"),
-                data_pipeline_addr=os.getenv("ULTRON_DATA_PIPELINE_ADDR", "localhost:50054"),
-                security_addr=os.getenv("ULTRON_SECURITY_ADDR", "localhost:50055"),
             )
         self.config = config
 
@@ -171,10 +161,9 @@ class GRPCBridge:
             raise
 
     async def _connect(self):
-        for addr in [self.config.core_agent_addr, self.config.neural_addr, self.config.meta_learning_addr, self.config.data_pipeline_addr, self.config.security_addr]:
-            channel = grpc.aio.insecure_channel(addr)
-            self._channels[addr] = channel
-            self._connected_services[addr] = True
+        channel = grpc.aio.insecure_channel(self.config.core_agent_addr)
+        self._channels[self.config.core_agent_addr] = channel
+        self._connected_services[self.config.core_agent_addr] = True
 
     async def disconnect(self):
         if self.state != ConnectionState.CONNECTED:

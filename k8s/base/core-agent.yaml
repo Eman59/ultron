@@ -31,6 +31,13 @@ spec:
               value: "ultron-redis:6379"
             - name: ULTRON_NEO4J_URI
               value: "bolt://ultron-neo4j:7687"
+            - name: ULTRON_NEO4J_USER
+              value: "neo4j"
+            - name: ULTRON_NEO4J_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: ultron-secrets
+                  key: neo4j-auth
             - name: ULTRON_QDRANT_HOST
               value: "ultron-qdrant"
             - name: ULTRON_QDRANT_PORT
@@ -39,10 +46,24 @@ spec:
               value: "tcp://ultron-mqtt:1883"
             - name: ULTRON_TICK_RATE_MS
               value: "50"
+            - name: ULTRON_HTTP_PORT
+              value: "8080"
+            - name: ULTRON_LEARNING_SERVICE_ADDR
+              value: "learning-service:50060"
+            - name: ULTRON_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ultron-secrets
+                  key: ultron-signing-secret
+                  optional: true
             - name: ULTRON_NODE_ID
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            # AWS: on EKS, boto3 resolves credentials from IRSA token automatically.
+            # No credential env vars needed here — just set the region.
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
           resources:
             requests:
               cpu: "500m"

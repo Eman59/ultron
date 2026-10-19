@@ -40,6 +40,17 @@ import (
 	"google.golang.org/grpc"
 )
 
+func getGRPCMaxMsgBytes() int {
+	mb := 50
+	if v := os.Getenv("ULTRON_GRPC_MAX_MSG_MB"); v != "" {
+		var n int
+		if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
+			mb = n
+		}
+	}
+	return mb * 1024 * 1024
+}
+
 func main() {
 	// Initialize logger
 	logger, _ := zap.NewProduction()
@@ -401,7 +412,9 @@ func main() {
 	sugar.Info("Initializing Tool Use Dispatcher...")
 	toolDispatcher := agent.NewToolDispatcher(projectRoot, sugar)
 	coreAgent.SetToolDispatcher(toolDispatcher)
-	sugar.Infof("✓ Tool Dispatcher online (%d tools available for Brain B)", 10)
+	toolStats := toolDispatcher.Stats()
+	toolCount, _ := toolStats["tools_available"].(int)
+	sugar.Infof("✓ Tool Dispatcher online (%d tools available for Brain B)", toolCount)
 
 	// ━━━━━━━━━━ Start Multi-Agent Hive Mind ━━━━━━━━━━
 	sugar.Info("Initializing Multi-Agent Hive Mind...")
@@ -436,8 +449,8 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer(
-		grpc.MaxRecvMsgSize(50*1024*1024), // 50MB
-		grpc.MaxSendMsgSize(50*1024*1024),
+		grpc.MaxRecvMsgSize(getGRPCMaxMsgBytes()),
+		grpc.MaxSendMsgSize(getGRPCMaxMsgBytes()),
 	)
 
 	// Register the CoreAgent gRPC service
@@ -447,6 +460,7 @@ func main() {
 		worldModel: worldModel,
 		memorySys:  memorySys,
 		logger:     sugar,
+		startTime:  time.Now(),
 	})
 
 	// Start listening

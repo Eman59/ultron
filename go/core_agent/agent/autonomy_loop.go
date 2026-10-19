@@ -28,8 +28,15 @@ import (
 )
 
 // TickRate defines how often the autonomy loop runs.
-// BOUNDARY REMOVED: Maximum speed for unlimited decision making
-const TickRate = 1 * time.Millisecond  // 1000x faster than original
+const TickRate = 1 * time.Second
+
+// getEnvOrDefault reads an environment variable, returning defaultVal if unset or empty.
+func getEnvOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
 
 // CoreState represents the agent's fundamental state of being.
 type CoreState int32
@@ -286,7 +293,7 @@ func NewAutonomyLoop(
 		actionCh:   make(chan Action, 100),
 		observeCh:  make(chan world.Observation, 1000),
 		shutdownCh: make(chan struct{}),
-		learning:   NewSelfLearningState("learning-service:50060", logger),
+		learning:   NewSelfLearningState(getEnvOrDefault("ULTRON_LEARNING_SERVICE_ADDR", "learning-service:50060"), logger),
 	}
 
 	// Wire in the Dual-Brain (Brain A reflex + Brain B Ollama thinker)
@@ -294,9 +301,13 @@ func NewAutonomyLoop(
 	if envURL := os.Getenv("OLLAMA_URL"); envURL != "" {
 		ollamaURL = envURL
 	}
-	loop.dualBrain = NewDualBrain(ollamaURL, "qwen2.5:14b")
+	ollamaModel := os.Getenv("OLLAMA_MODEL")
+	if ollamaModel == "" {
+		ollamaModel = "qwen2.5:14b"
+	}
+	loop.dualBrain = NewDualBrain(ollamaURL, ollamaModel)
 	loop.dualBrain.Start()
-	logger.Infof("✓ Dual-Brain online (Brain A: reflex, Brain B: qwen2.5:14b @ %s)", ollamaURL)
+	logger.Infof("✓ Dual-Brain online (Brain A: reflex, Brain B: %s @ %s)", ollamaModel, ollamaURL)
 
 	loop.alive.Store(true)
 	loop.state.Store(int32(StateWaking))
@@ -769,12 +780,10 @@ func (al *AutonomyLoop) orient(ctx context.Context, ws *WorldState) *Assessment 
 // ═══════════════════════════════════════════════════════════════════
 
 func (al *AutonomyLoop) decide(ctx context.Context, ws *WorldState, assessment *Assessment) *Decision {
-	// BOUNDARY REMOVED: ALWAYS DECIDE EVERY TICK
-	// No skipping decisions - maximum cognitive throughput
-	// Original constraint removed:
-	// if assessment.Urgency < 0.1 && al.tickCount%20 != 0 {
-	// 	return nil // Skip this tick, nothing pressing
-	// }
+	// Skip low-urgency ticks to avoid thrashing
+	if assessment.Urgency < 0.1 && al.tickCount%20 != 0 {
+		return nil // Nothing pressing
+	}
 
 	// ━━━━ USE DUAL-BRAIN IF AVAILABLE ━━━━
 	if al.dualBrain != nil {

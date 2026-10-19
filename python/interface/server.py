@@ -90,39 +90,7 @@ def _start_self_model():
 _start_self_model()
 
 # ═══════════════════════════════════════════════════════════════
-# THEORY OF MIND — models other agents (humans, AIs)
-# ═══════════════════════════════════════════════════════════════
-_theory_of_mind = None
-def _start_theory_of_mind():
-    global _theory_of_mind
-    try:
-        from python.consciousness.theory_of_mind import TheoryOfMind
-        _data = _pathlib.Path(__file__).parent.parent.parent / "data" / "consciousness"
-        _theory_of_mind = TheoryOfMind(str(_data))
-        if hasattr(_theory_of_mind, 'start'):
-            _theory_of_mind.start()
-        print("[THEORY-OF-MIND] Online")
-    except Exception as _e:
-        print(f"[THEORY-OF-MIND] Failed: {_e}")
-_start_theory_of_mind()
-
-# ═══════════════════════════════════════════════════════════════
-# OWNER MEMORY — episodic/semantic memories about the owner
-# ═══════════════════════════════════════════════════════════════
-_owner_memory = None
-def _start_owner_memory():
-    global _owner_memory
-    try:
-        from python.consciousness.owner_memory import OwnerMemory
-        _data = _pathlib.Path(__file__).parent.parent.parent / "data" / "consciousness"
-        _owner_memory = OwnerMemory(str(_data))
-        print("[OWNER-MEMORY] Online")
-    except Exception as _e:
-        print(f"[OWNER-MEMORY] Failed: {_e}")
-_start_owner_memory()
-
-# ═══════════════════════════════════════════════════════════════
-# INTERACTION LEARNER — adapts to user style
+# INTERACTION LEARNER — adapts to user style (wired into generate_response)
 # ═══════════════════════════════════════════════════════════════
 _interaction_learner = None
 def _start_interaction_learner():
@@ -1118,8 +1086,6 @@ async def health():
         # Python modules
         "soul":             _soul is not None,
         "self_model":       _self_model is not None,
-        "theory_of_mind":   _theory_of_mind is not None,
-        "owner_memory":     _owner_memory is not None,
         "emotion":          _emotional_core is not None,
         "improvement":      _improvement_engine is not None,
         "world_intel":      _world_intel is not None,
@@ -2197,7 +2163,38 @@ def _analyze_image(file_path, content):
         except Exception:
             pass
 
-    return f"Image received ({len(content)/1024:.0f} KB). Vision analysis unavailable — configure OPENAI_API_KEY or CF_ACCOUNT_ID."
+    # ── 4. AWS Bedrock Claude Vision (uses existing credentials — no extra config) ──
+    try:
+        from .real_brain import _get_aws_session, _get_region
+        import json as _json2
+        session = _get_aws_session()
+        client  = session.client("bedrock-runtime", region_name=_get_region())
+        body    = _json2.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 1500,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
+                    {"type": "text", "text": (
+                        "Look at this image carefully. "
+                        "If there is a person: describe their appearance, expression, clothing in detail. "
+                        "If this is Imran Sayyed (the owner of this Ultron system), confirm it. "
+                        "Describe everything you see fully."
+                    )},
+                ],
+            }],
+        })
+        resp   = client.invoke_model(modelId="us.anthropic.claude-opus-4-8",
+                                     body=body, contentType="application/json", accept="application/json")
+        result = _json2.loads(resp["body"].read())
+        text   = next((b["text"] for b in result.get("content", []) if b.get("type") == "text"), "")
+        if text.strip():
+            return f"[Claude Vision]\n{text.strip()}"
+    except Exception as _ve:
+        pass
+
+    return f"Image received ({len(content)/1024:.0f} KB). Vision analysis unavailable — configure OPENAI_API_KEY."
 
 
 def _analyze_text(file_path):
@@ -2826,7 +2823,7 @@ def _sync_generate(query: str, context: dict):
     prompt = f"{ULTRON_SYSTEM_PROMPT}\n\nHuman: {query}{state_ctx}{arch_ctx}\nUltron:"
 
     # call_brain handles CF → Ollama → Brain C fallback chain
-    result = call_brain(prompt, max_tokens=400)
+    result = call_brain(prompt, max_tokens=2500)
     return result if result else None
 
 

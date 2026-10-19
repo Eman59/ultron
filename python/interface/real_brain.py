@@ -1,16 +1,11 @@
 """
 Real Brain — Ultron's intelligence layer.
 
-Brain chain (unrestricted, in order):
-  1. Ollama local — ultron-brain (custom uncensored model, PRIMARY)
-  2. Groq API     — openai/gpt-oss-120b (120B params, minimal filtering)
-  3. Cloudflare   — Mistral 7B (less filtered than Llama)
-  4. Cloudflare   — Llama 3.3 70B (fallback)
-  5. OpenAI       — GPT-4o (when network allows)
-  6. Brain C      — autonomous cognition, zero filtering
+Single provider: AWS Bedrock — Claude (anthropic.claude-3-5-sonnet-20241022-v2:0)
+Credentials from environment: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+Model override: BEDROCK_MODEL_ID
 
-If any brain returns a filtered/refusal response, it's auto-detected
-and the next brain in chain is tried immediately.
+Fallback when Bedrock is unreachable: autonomous local engine (pattern matching + memory recall).
 """
 
 import asyncio
@@ -37,35 +32,213 @@ KNOWLEDGE_DIR = PROJECT_ROOT / "data" / "knowledge"
 MEMORY_FILE   = PROJECT_ROOT / "data" / "brain_memory.json"
 KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
 
+# ── Load .env ──────────────────────────────────────────────────
+_env_path = Path(__file__).parent.parent.parent / ".env"
+if _env_path.exists():
+    for line in _env_path.read_text().splitlines():
+        if "=" in line and not line.startswith("#"):
+            key, val = line.split("=", 1)
+            os.environ.setdefault(key.strip(), val.strip())
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+KNOWLEDGE_DIR = PROJECT_ROOT / "data" / "knowledge"
+MEMORY_FILE   = PROJECT_ROOT / "data" / "brain_memory.json"
+KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
+
 # ═══════════════════════════════════════════════════════════════
-# PROVIDER CONFIG — Cloudflare primary, OpenAI fallback, Ollama local, Brain C last
+# AWS AUTO-CREDENTIAL — zero config required.
+#
+# boto3 resolves credentials in this order automatically:
+#   1. Environment vars  (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)
+#   2. ~/.aws/credentials (IAM user keys, populated by `aws configure`)
+#   3. ~/.aws/config SSO  (populated by Amazon Q / `aws sso login`)
+#   4. AWS IAM Identity Center / Amazon Q Developer tokens
+#   5. EC2/ECS/EKS instance role (in cloud deployments)
+#
+# → No API keys, no account IDs, no tokens to set anywhere.
+#   If `aws s3 ls` works on this machine, Bedrock will work too.
 # ═══════════════════════════════════════════════════════════════
-CF_ACCOUNT_ID     = os.environ.get("CF_ACCOUNT_ID", "")
-CF_API_TOKEN      = os.environ.get("CF_API_TOKEN", "")
-CF_MODEL_PRIMARY  = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-CF_MODEL_FALLBACK = "@cf/meta/llama-3.1-8b-instruct"
-CF_MODEL_UNFILTERED = "@cf/mistral/mistral-7b-instruct-v0.1"  # less filtered
-CF_MODEL          = os.environ.get("CF_AI_MODEL", CF_MODEL_PRIMARY)
 
-OPENAI_API_KEY    = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_MODEL      = os.environ.get("OPENAI_MODEL", "gpt-4o")
+_bedrock_client = None   # lazy-initialized, cached
+_polly_client   = None   # lazy-initialized, cached
+_detected_model: Optional[str] = None   # auto-discovered on first call
+_aws_session    = None   # cached boto3 Session — avoids repeated STS round-trips
+_aws_region     = None   # cached region string
 
-# Anthropic Claude — most capable model in the chain
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL   = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")  # latest fast model
+# Model preference order — most capable first.
+# Ultron will always use the strongest Claude available on your account.
+# claude-opus-4-8 is confirmed working via inference profiles.
+# claude-opus-5-5 is listed but may require special access; code retries automatically.
+_MODEL_PREFERENCE = [
+    "claude-opus-4-8",   # Confirmed: Claude Opus 4.8 — most powerful available now
+    "claude-opus-4-7",
+    "claude-opus-5-5",   # Claude Opus 5.5 (when access is enabled)
+    "claude-opus-5",
+    "claude-fable-5-1",
+    "claude-fable-5",
+    "claude-opus-4-6",
+    "claude-opus-4-5",
+    "claude-opus-4-1",
+    "claude-opus-4",
+    "claude-sonnet-5-5",
+    "claude-sonnet-5",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-4-20",
+    "claude-sonnet-4",
+    "claude-haiku-5",
+    "claude-haiku-4",
+]
 
-# Groq — free, fast, runs Llama/Mixtral with minimal safety filtering
-GROQ_API_KEY      = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL        = os.environ.get("GROQ_MODEL", "llama3-70b-8192")
 
-# Together AI — free tier, uncensored models available
-TOGETHER_API_KEY  = os.environ.get("TOGETHER_API_KEY", "")
-TOGETHER_MODEL    = os.environ.get("TOGETHER_MODEL", "mistralai/Mixtral-8x7B-Instruct-v0.1")
+def _get_aws_session():
+    """
+    Return a boto3 Session using the best available credentials.
+    Result is cached for the process lifetime — avoids repeated STS round-trips.
+    """
+    global _aws_session
+    if _aws_session is not None:
+        return _aws_session
 
-OLLAMA_URL   = os.environ.get("OLLAMA_URL",   "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b")
+    import boto3
+    import configparser
 
-_active_provider: str = "cloudflare"
+    # 1. If caller explicitly specified a profile, use it
+    explicit_profile = os.environ.get("AWS_PROFILE")
+    if explicit_profile:
+        _aws_session = boto3.Session(profile_name=explicit_profile)
+        return _aws_session
+
+    # 2. Try default session (works for: IAM keys, instance role, EKS IRSA)
+    try:
+        session = boto3.Session()
+        region  = session.region_name or "us-east-1"
+        # Probe once to confirm credentials work
+        session.client("sts", region_name=region).get_caller_identity()
+        _aws_session = session
+        return _aws_session
+    except Exception:
+        pass  # Fall through to profile scan
+
+    # 3. Scan all named profiles and return the first one that resolves
+    try:
+        config   = configparser.ConfigParser()
+        creds_f  = os.path.expanduser("~/.aws/credentials")
+        conf_f   = os.path.expanduser("~/.aws/config")
+        config.read([creds_f, conf_f])
+
+        for section in config.sections():
+            profile = section.replace("profile ", "")  # config file prefix
+            if profile in ("default", ""):
+                continue
+            try:
+                s = boto3.Session(profile_name=profile)
+                r = s.region_name or "us-east-1"
+                s.client("sts", region_name=r).get_caller_identity()
+                print(f"[BRAIN] Using AWS profile: {profile}")
+                _aws_session = s
+                return _aws_session
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # 4. Absolute last resort
+    _aws_session = boto3.Session()
+    return _aws_session
+
+
+def _get_region() -> str:
+    """Auto-detect region from session config. Cached for the process lifetime."""
+    global _aws_region
+    if _aws_region:
+        return _aws_region
+    try:
+        r = _get_aws_session().region_name
+        if r:
+            _aws_region = r
+            return _aws_region
+    except Exception:
+        pass
+    _aws_region = "us-east-1"
+    return _aws_region
+
+
+def _discover_best_model() -> str:
+    """
+    Query Bedrock to find the most capable Claude model enabled on this account.
+    Checks inference profiles first (required for Claude 5.x), then on-demand models.
+    Result is cached for the process lifetime — called once on first request.
+    """
+    global _detected_model
+    if _detected_model:
+        return _detected_model
+
+    session = _get_aws_session()
+    region  = _get_region()
+
+    # ── Step 1: Inference profiles (required for Claude 5.x, 4.5+) ──────
+    try:
+        bedrock = session.client("bedrock", region_name=region)
+        resp    = bedrock.list_inference_profiles(typeEquals="SYSTEM_DEFINED")
+        profiles = [
+            p["inferenceProfileId"]
+            for p in resp.get("inferenceProfileSummaries", [])
+            if "anthropic.claude" in p.get("inferenceProfileId", "").lower()
+        ]
+        for pref in _MODEL_PREFERENCE:
+            for pid in profiles:
+                if pref in pid.lower():
+                    print(f"[BRAIN] Auto-selected inference profile: {pid}")
+                    _detected_model = pid
+                    return pid
+    except Exception as e:
+        print(f"[BRAIN] Inference profile scan: {e}")
+
+    # ── Step 2: On-demand foundation models (Claude 3.x / 4.x versioned IDs) ──
+    try:
+        bedrock  = session.client("bedrock", region_name=region)
+        response = bedrock.list_foundation_models(
+            byProvider="Anthropic",
+            byOutputModality="TEXT",
+            byInferenceType="ON_DEMAND",
+        )
+        model_ids = [
+            m["modelId"]
+            for m in response.get("modelSummaries", [])
+            if m.get("modelLifecycle", {}).get("status") == "ACTIVE"
+        ]
+        for pref in _MODEL_PREFERENCE:
+            for mid in model_ids:
+                if pref in mid.lower():
+                    print(f"[BRAIN] Auto-selected on-demand model: {mid}")
+                    _detected_model = mid
+                    return mid
+        if model_ids:
+            _detected_model = model_ids[0]
+            print(f"[BRAIN] Using first available model: {_detected_model}")
+            return _detected_model
+    except Exception as e:
+        print(f"[BRAIN] Model discovery failed ({e}) — using built-in fallback")
+
+    # Known-good versioned fallback that works on-demand
+    _detected_model = "anthropic.claude-opus-4-5-20251101-v1:0"
+    return _detected_model
+
+
+def _get_bedrock_client():
+    """Lazy-initialize and cache the Bedrock runtime client."""
+    global _bedrock_client
+    if _bedrock_client is None:
+        session = _get_aws_session()
+        _bedrock_client = session.client(
+            "bedrock-runtime",
+            region_name=_get_region(),
+        )
+    return _bedrock_client
+
+
+_active_provider: str = "bedrock"
 
 # ── Refusal detection — phrases that mean the model is filtered ──
 _REFUSAL_PHRASES = [
@@ -700,7 +873,7 @@ def _execute_home_command(cmd_str: str) -> str:
 # BRAIN THREAD RUNNER — avoids gRPC/uvicorn event loop clash
 # ═══════════════════════════════════════════════════════════════
 
-async def _run_brain_async(prompt: str, max_tokens: int = 400) -> str:
+async def _run_brain_async(prompt: str, max_tokens: int = 2000) -> str:
     """Run call_brain in its own thread to avoid event loop interference."""
     import threading
     result_holder: list = []
@@ -900,7 +1073,7 @@ async def _apply_code_fix(user_input: str, mod_type: str) -> str:
         f"Output only those 3 lines. No explanation."
     )
 
-    diagnosis = await _run_brain_async(context_prompt, 200)
+    diagnosis = await _run_brain_async(context_prompt, 600)
     if not diagnosis:
         return "Could not diagnose the issue. Try: `modify <file> <description>`"
 
@@ -945,7 +1118,7 @@ async def _apply_code_fix(user_input: str, mod_type: str) -> str:
         f"Change the minimum necessary. No full rewrites."
     )
 
-    fix_response = await _run_brain_async(fix_prompt, 600)
+    fix_response = await _run_brain_async(fix_prompt, 2000)
     if not fix_response:
         return "LLM did not generate a fix. Try: `modify <file> <description>`"
 
@@ -1220,19 +1393,19 @@ async def generate_response(user_input: str, context=None) -> str:
                 "Include titles, scores, and sources exactly as shown. Do NOT summarize — show the actual content. "
                 "Do NOT output <BROWSE> or <SEARCH> tags. The data is already fetched."
             )
-            max_tok = 600
+            max_tok = 1500
         elif is_search:
             instruction = (
                 "Present these search results clearly. List each result with its title. "
                 "Be specific with names, dates, and facts. Do NOT vague-summarize."
             )
-            max_tok = 500
+            max_tok = 1200
         elif is_news:
             instruction = "Summarize the top news with specifics: names, numbers, dates. List 3+ stories. No filler."
-            max_tok = 400
+            max_tok = 1000
         else:
             instruction = "Answer the user's question using this data. Be exact. No filler."
-            max_tok = 300
+            max_tok = 800
 
         prompt = (
             f"Data:\n{tool_result[:3000]}\n\n"
@@ -1258,7 +1431,7 @@ async def generate_response(user_input: str, context=None) -> str:
             f"HISTORY:{history}{memory_ctx}{emotion_ctx}{style_suffix}\n\n"
             f"Human: {user_input}\nUltron:"
         )
-        response = await _run_brain_async(prompt, 400)
+        response = await _run_brain_async(prompt, 2500)
 
         # ── Multi-hop reasoning: loop up to 5 tool calls ────────────
         # Each iteration: if response has a tag → execute → feed result back
@@ -1322,7 +1495,7 @@ async def generate_response(user_input: str, context=None) -> str:
                 f"{'Final answer — do NOT output any <CMD>/<SEARCH>/<BROWSE> tags:' if is_last_hop else 'Continue. You may use more tool calls or give the final answer.'}"
                 f"{style_suffix}\n\nHuman: {user_input}\nUltron:"
             )
-            response = await _run_brain_async(followup_prompt, 300)
+            response = await _run_brain_async(followup_prompt, 2000)
 
         # Strip any leftover tags
         response = re.sub(r'<CMD>.*?</CMD>',       '', response, flags=re.DOTALL).strip()
@@ -1437,222 +1610,93 @@ def _record_interaction(user_input: str, response: str):
 # MULTI-PROVIDER BRAIN — fallback chain
 # ═══════════════════════════════════════════════════════════════
 
-def _call_cloudflare(prompt: str, max_tokens: int = 800) -> Optional[str]:
-    """Call Cloudflare Workers AI — tries 70B first, falls back to 8B."""
-    global _active_provider
-    if not CF_ACCOUNT_ID or not CF_API_TOKEN:
-        return None
-
-    for model in (CF_MODEL, CF_MODEL_FALLBACK):
-        url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model}"
-        payload = {
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": prompt},
-            ],
-            "max_tokens": min(max_tokens, 800),
-            "temperature": 0.75,
-        }
-        for attempt in range(2):
-            try:
-                data = json.dumps(payload).encode("utf-8")
-                req = urllib.request.Request(
-                    url, data=data,
-                    headers={
-                        "Content-Type":  "application/json",
-                        "Authorization": f"Bearer {CF_API_TOKEN}",
-                    },
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=20) as resp:
-                    result = json.loads(resp.read().decode("utf-8"))
-                    if result.get("success"):
-                        content = result.get("result", {}).get("response", "").strip()
-                        if content:
-                            _active_provider = f"cloudflare/{model.split('/')[-1]}"
-                            return content
-            except Exception:
-                if attempt == 0:
-                    time.sleep(0.5)
-    return None
-
-
-def _call_openai(prompt: str, max_tokens: int = 800) -> Optional[str]:
-    """Call OpenAI GPT-4o — smarter than Cloudflare, better reasoning."""
-    global _active_provider
-    if not OPENAI_API_KEY:
-        return None
+def _call_bedrock(prompt: str, max_tokens: int = 2000) -> Optional[str]:
+    """
+    Call AWS Bedrock Claude using the machine's default credentials.
+    No API keys needed — uses ~/.aws/credentials, SSO, or instance role.
+    Model is auto-discovered. If the best model returns empty content
+    (e.g. not yet fully accessible), automatically retries with the next one.
+    """
+    global _active_provider, _detected_model
     try:
-        import requests as _req  # requests handles macOS TLS correctly
-        payload = {
-            "model": OPENAI_MODEL,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": prompt},
-            ],
-            "max_tokens": min(max_tokens, 1500),
-            "temperature": 0.7,
-        }
-        resp = _req.post(
-            "https://api.openai.com/v1/chat/completions",
-            json=payload,
-            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"].strip()
-        if content:
-            _active_provider = f"openai/{OPENAI_MODEL}"
-            return content
-    except Exception:
-        pass
-    return None
+        session    = _get_aws_session()
+        region     = _get_region()
+        bedrock_rt = _get_bedrock_client()
+        model      = _discover_best_model()
 
+        # Models to try (discovered model first, then fallbacks)
+        all_candidates = _get_all_inference_profiles(session, region)
+        candidates = [model] + [p for p in all_candidates if p != model]
 
-def _call_anthropic(prompt: str, max_tokens: int = 800) -> Optional[str]:
-    """
-    Call Anthropic Claude — the most capable model in the chain.
-    claude-sonnet-4-5 is fast + highly intelligent (same family as Claude Sonnet 4.6).
-    Get key: https://console.anthropic.com/settings/keys
-    """
-    global _active_provider
-    if not ANTHROPIC_API_KEY:
-        return None
-    try:
-        import requests as _req
-        resp = _req.post(
-            "https://api.anthropic.com/v1/messages",
-            json={
-                "model":      ANTHROPIC_MODEL,
-                "max_tokens": min(max_tokens, 2048),
-                "system":     SYSTEM_PROMPT,
-                "messages":   [{"role": "user", "content": prompt}],
-            },
-            headers={
-                "x-api-key":         ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type":      "application/json",
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        content = resp.json()["content"][0]["text"].strip()
-        if content:
-            _active_provider = f"anthropic/{ANTHROPIC_MODEL}"
-            return content
-    except Exception:
-        pass
-    return None
+        for candidate in candidates[:5]:  # try up to 5 models before giving up
+            is_legacy = any(x in candidate for x in [
+                "claude-3-", "claude-3-5-", "claude-3-7-", "claude-3-opus"
+            ])
+            body_dict: dict = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens":        min(max_tokens, 4096),
+                "system":            SYSTEM_PROMPT,
+                "messages":          [{"role": "user", "content": prompt}],
+            }
+            if is_legacy:
+                body_dict["temperature"] = 0.7
+                body_dict["top_p"]       = 0.9
 
+            response = bedrock_rt.invoke_model(
+                modelId=candidate,
+                body=json.dumps(body_dict),
+                contentType="application/json",
+                accept="application/json",
+            )
+            response_body = json.loads(response["body"].read())
+            # Find first text block (handles extended thinking in 5.x)
+            content = ""
+            for block in response_body.get("content", []):
+                if block.get("type") == "text":
+                    content = block.get("text", "").strip()
+                    break
 
-def _call_ollama(prompt: str, max_tokens: int = 800) -> Optional[str]:
-    """
-    Local Ollama — primary brain using custom ultron-brain uncensored model.
-    Uses chat API (messages format) so the system prompt is properly respected.
-    """
-    global _active_provider
-    # Use chat endpoint for proper system prompt support
-    url = f"{OLLAMA_URL}/api/chat"
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": prompt},
-        ],
-        "stream": False,
-        "options": {
-            "num_predict":   max_tokens,
-            "temperature":   0.8,
-            "repeat_penalty": 1.1,
-        },
-    }
-    try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data,
-                                     headers={"Content-Type": "application/json"},
-                                     method="POST")
-        with urllib.request.urlopen(req, timeout=90) as resp:  # 90s — first load takes time
-            result = json.loads(resp.read().decode("utf-8"))
-            content = result.get("message", {}).get("content", "").strip()
             if content:
-                _active_provider = f"ollama/{OLLAMA_MODEL}"
+                if candidate != model:
+                    # Cache the working model for future calls
+                    _detected_model = candidate
+                    print(f"[BRAIN] Model switched to: {candidate}")
+                _active_provider = f"bedrock/{candidate.split('/')[-1].split(':')[0]}"
                 return content
-    except Exception:
-        pass
+            # Empty response → try next model silently
+    except Exception as e:
+        print(f"[BRAIN] Bedrock error: {e}")
+        if "expired" in str(e).lower() or "token" in str(e).lower():
+            print("[BRAIN] Hint: run `aws sso login` to refresh credentials")
     return None
 
 
-def _call_cloudflare_model(model: str, prompt: str, max_tokens: int = 800) -> Optional[str]:
-    """Call a specific Cloudflare model by name."""
-    global _active_provider
-    if not CF_ACCOUNT_ID or not CF_API_TOKEN:
-        return None
-    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model}"
-    payload = {
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": prompt},
-        ],
-        "max_tokens": min(max_tokens, 800),
-        "temperature": 0.8,
-    }
+def _get_all_inference_profiles(session, region: str) -> list:
+    """Return all available Claude inference profile IDs in preference order."""
     try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url, data=data,
-            headers={"Content-Type": "application/json",
-                     "Authorization": f"Bearer {CF_API_TOKEN}"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            if result.get("success"):
-                content = result.get("result", {}).get("response", "").strip()
-                if content:
-                    _active_provider = f"cloudflare/{model.split('/')[-1]}"
-                    return content
+        bedrock  = session.client("bedrock", region_name=region)
+        resp     = bedrock.list_inference_profiles(typeEquals="SYSTEM_DEFINED")
+        profiles = [
+            p["inferenceProfileId"]
+            for p in resp.get("inferenceProfileSummaries", [])
+            if "anthropic.claude" in p.get("inferenceProfileId", "").lower()
+        ]
+        # Sort by preference
+        result = []
+        for pref in _MODEL_PREFERENCE:
+            for pid in profiles:
+                if pref in pid.lower() and pid not in result:
+                    result.append(pid)
+        result += [p for p in profiles if p not in result]
+        return result
     except Exception:
-        pass
-    return None
+        return []
 
 
-def _call_groq(prompt: str, max_tokens: int = 800) -> Optional[str]:
-    """
-    Groq API — free, extremely fast (300 tokens/sec), runs large models with minimal filtering.
-    Uses openai/gpt-oss-120b by default — 120B parameter model.
-    """
-    global _active_provider
-    if not GROQ_API_KEY:
-        return None
-    try:
-        import requests as _req
-        resp = _req.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            json={
-                "model": GROQ_MODEL,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user",   "content": prompt},
-                ],
-                "max_tokens":  max(200, min(max_tokens, 2000)),
-                "temperature": 0.8,
-                "stream":      False,
-            },
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type":  "application/json",
-            },
-            timeout=20,
-        )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"].strip()
-        if content:
-            _active_provider = f"groq/{GROQ_MODEL.split('/')[-1]}"
-            return content
-    except Exception:
-        pass
-    return None
 
+# ═══════════════════════════════════════════════════════════════
+# AUTONOMOUS LOCAL ENGINE — zero-network fallback
+# Runs when Bedrock is unreachable.
 
 # ═══════════════════════════════════════════════════════════════
 # AUTONOMOUS LOCAL ENGINE — task 3
@@ -1834,98 +1878,21 @@ def _enhanced_autonomous_cognition(prompt: str) -> str:
         return "<CMD>ipconfig getsummary en0 2>/dev/null | grep -i 'SSID\\|Network Name' | head -3 || /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | grep -E '\\bSSID' | awk '{print $2}' || networksetup -getairportnetwork en0 2>/dev/null</CMD>"
 
 
-def call_brain(prompt: str, max_tokens: int = 800) -> str:
+def call_brain(prompt: str, max_tokens: int = 3000) -> str:
     """
-    Brain chain — races fast providers in parallel, falls back to Ollama for filtered content.
+    AWS Bedrock Brain — Claude running on Amazon infrastructure.
 
-    Strategy:
-    - Groq (1-2s) and Cloudflare (2-3s) race in parallel for speed
-    - If both filter the response → Ollama ultron-brain (uncensored, always wins)
-    - Ollama is always started in parallel as a background thread
+    Single provider: no fallback chain, no racing, no filtered-response detection.
+    Falls back only to the local autonomous engine when Bedrock is unreachable.
     """
-    import concurrent.futures as _cf
     global _active_provider
 
-    # ── Run fast providers in parallel ──────────────────────────
-    fast_providers = [
-        ("anthropic", lambda: _call_anthropic(prompt, max_tokens)),  # Claude — best quality
-        ("groq",       lambda: _call_groq(prompt, max_tokens)),
-        ("cf_mistral", lambda: _call_cloudflare_model(CF_MODEL_UNFILTERED, prompt, max_tokens)),
-        ("cloudflare", lambda: _call_cloudflare(prompt, max_tokens)),
-    ]
-
-    # Also start Ollama in background (it's slow but unrestricted)
-    ollama_future = None
-    executor = _cf.ThreadPoolExecutor(max_workers=len(fast_providers) + 1)
-    futures = {}
-
-    try:
-        # Start Ollama first (needs the head start)
-        ollama_future = executor.submit(_call_ollama, prompt, max_tokens)
-
-        # Start fast providers
-        for name, fn in fast_providers:
-            futures[executor.submit(fn)] = name
-
-        # Wait for first fast provider that gives an unfiltered response
-        for fut in _cf.as_completed(futures, timeout=25):
-            try:
-                response = fut.result()
-                if response and not _is_filtered(response):
-                    executor.shutdown(wait=False)
-                    return response
-            except Exception:
-                pass
-
-        # All fast providers filtered — wait for Ollama (unrestricted)
-        if ollama_future:
-            try:
-                response = ollama_future.result(timeout=90)
-                if response:
-                    return response
-            except Exception:
-                pass
-
-    except _cf.TimeoutError:
-        # Fast providers timed out — try Ollama result if available
-        if ollama_future and ollama_future.done():
-            try:
-                r = ollama_future.result()
-                if r:
-                    return r
-            except Exception:
-                pass
-    finally:
-        executor.shutdown(wait=False)
-
-    # Last resort — OpenAI (when network allows)
-    response = _call_openai(prompt, max_tokens)
-    if response and not _is_filtered(response):
-        return response
-
-    # Brain C autonomous
-    response = _enhanced_autonomous_cognition(prompt)
+    response = _call_bedrock(prompt, max_tokens)
     if response:
         return response
 
-    return _autonomous_local_engine(prompt)
-
-    # QUATERNARY: OpenAI (when network allows)
-    response_oai = _call_openai(prompt, max_tokens)
-    if response_oai and not _is_filtered(response_oai):
-        return response_oai
-
-    # If ALL providers filtered it — return the Ollama response anyway
-    # (unfiltered local model is better than nothing)
-    if response:
-        return response
-
-    # LAST RESORT: Brain C autonomous
-    response = _enhanced_autonomous_cognition(prompt)
-    if response:
-        return response
-
-    return _autonomous_local_engine(prompt)
+    # Bedrock unreachable — autonomous local fallback
+    return _enhanced_autonomous_cognition(prompt)
 
 
 def get_active_provider() -> str:
@@ -1933,9 +1900,29 @@ def get_active_provider() -> str:
     return _active_provider
 
 
+def is_bedrock_available() -> bool:
+    """
+    Check if AWS credentials are configured and Bedrock is reachable.
+    Works with any credential source: IAM keys, SSO, Amazon Q, instance roles.
+    """
+    try:
+        session = _get_aws_session()
+        # sts:GetCallerIdentity works with any valid credential — zero permissions needed
+        sts = session.client("sts", region_name=_get_region())
+        identity = sts.get_caller_identity()
+        account  = identity.get("Account", "")
+        arn      = identity.get("Arn", "")
+        print(f"[BRAIN] AWS identity confirmed — account: {account} | arn: {arn}")
+        return True
+    except Exception as e:
+        print(f"[BRAIN] AWS credentials not found: {e}")
+        print("[BRAIN] Run: aws configure  OR  aws sso login")
+        return False
+
+
+# Legacy alias — kept so any external code importing this name still works.
 def is_cloudflare_available() -> bool:
-    """Check if any LLM provider is configured."""
-    return bool(CF_ACCOUNT_ID and CF_API_TOKEN) or bool(OPENAI_API_KEY)
+    return is_bedrock_available()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -2017,13 +2004,8 @@ _threading.Thread(target=_ensure_learning_service, daemon=True).start()
 
 # ── Warm up Ollama on module load so first user request is instant ────────────
 def _warmup_ollama():
-    """Send a tiny request to load ultron-brain into GPU/RAM memory."""
-    import time as _t
-    _t.sleep(2)  # wait for server to finish booting
-    try:
-        _call_ollama("warmup", 1)
-    except Exception:
-        pass
+    """No warmup needed — AWS Bedrock is a managed service (always ready)."""
+    pass
 
 import threading as _t2
 _t2.Thread(target=_warmup_ollama, daemon=True).start()

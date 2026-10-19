@@ -251,19 +251,19 @@ func NewSelfModificationEngine(logger *zap.SugaredLogger, projectRoot string) *S
 	return &SelfModificationEngine{
 		logger:             logger,
 		projectRoot:        projectRoot,
-		gitRemote:          "origin",
-		gitBranch:          "main",
-		signingSecret:      "ultron-self-modify-v1", // In production: from secrets manager
-		k8sNamespace:       "ultron",
-		dockerRegistry:     "ultron",
+		gitRemote:          getEnvOrDefault("ULTRON_GIT_REMOTE", "origin"),
+		gitBranch:          getEnvOrDefault("ULTRON_GIT_BRANCH", "main"),
+		signingSecret:      getEnvOrDefault("ULTRON_SIGNING_SECRET", "ultron-self-modify-v1"),
+		k8sNamespace:       getEnvOrDefault("ULTRON_K8S_NAMESPACE", "ultron"),
+		dockerRegistry:     getEnvOrDefault("ULTRON_DOCKER_REGISTRY", "ultron"),
 		modifications:      make([]ModificationRecord, 0, 1000),
 		maxHistory:         1000,
 		pendingAnomalies:   make([]Anomaly, 0, 50),
 		pendingPatches:     make([]Patch, 0, 20),
 		hourStart:          time.Now(),
-		learningServiceAddr: "learning-service:50060",
-		securityAddr:        "security-daemon:50055",
-		prometheusAddr:      "prometheus:9090",
+		learningServiceAddr: getEnvOrDefault("ULTRON_LEARNING_SERVICE_ADDR", "learning-service:50060"),
+		securityAddr:        getEnvOrDefault("ULTRON_SECURITY_ADDR", "security-daemon:50055"),
+		prometheusAddr:      getEnvOrDefault("PROMETHEUS_URL", "prometheus:9090"),
 	}
 }
 

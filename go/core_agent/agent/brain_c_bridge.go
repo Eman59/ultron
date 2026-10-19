@@ -197,7 +197,7 @@ func (b *BrainC) Start() {
 
 	// Try to start brain_c.py sidecar
 	go func() {
-		brainCPath := filepath.Join(os.Getenv("ULTRON_ROOT"), "python", "brain_c.py")
+		brainCPath := filepath.Join(os.Getenv("ULTRON_PROJECT_ROOT"), "python", "brain_c.py")
 		if _, err := os.Stat(brainCPath); err != nil {
 			b.logger.Info("[BrainC] Sidecar not found — operating in HTTP-only mode")
 			return
